@@ -217,10 +217,9 @@
         <div class="row-label">Varian</div>
         <select id="varianSelect"></select>
       </div>
-      <div class="row">
+      <div class="row" style="position:relative;">
         <div class="row-label">Warna</div>
-        <input type="text" id="warnaInput" list="warnaDatalist">
-        <datalist id="warnaDatalist"></datalist>
+        <input type="text" id="warnaInput" autocomplete="off">
       </div>
       <div class="row">
         <div class="row-label">Kg Kain Terpakai</div>
@@ -425,7 +424,9 @@ varianSelect.addEventListener('change', function(){
   state.kodeItem = varianSelect.value || null;
   validate();
 });
-warnaInput.addEventListener('input', function(){ state.warna = warnaInput.value; validate(); });
+warnaInput.addEventListener('input', function(){ state.warna = warnaInput.value; validate(); tampilkanSaranWarna(); });
+warnaInput.addEventListener('focus', function(){ tampilkanSaranWarna(); });
+warnaInput.addEventListener('blur', function(){ setTimeout(function(){ warnaDropdown.style.display = 'none'; }, 150); });
 kgInput.addEventListener('input', function(){ state.kg = kgInput.value; validate(); });
 rollInput.addEventListener('input', function(){ state.roll = rollInput.value; });
 
@@ -589,17 +590,55 @@ function fetchFresh(isBackground){
 
 if (tg){ tg.ready(); tg.expand(); }
 
-// ---- Daftar warna buat autocomplete - JALAN TERPISAH dari kategori/varian, tidak menahan
-// loading screen (murni saran, form tetap bisa diisi manual walau ini masih/gagal memuat) ----
-function renderWarnaDatalist(list){
-  const dl = document.getElementById('warnaDatalist');
-  dl.innerHTML = list.map(function(w){ return '<option value="'+w+'">'; }).join('');
+// ---- Dropdown saran Warna CUSTOM (bukan <datalist> bawaan browser - itu berantakan &
+// gak konsisten posisinya di WebView Android). Ini murni div biasa yang kita kontrol sendiri
+// posisi & tampilannya, nempel PERSIS di bawah kolom Warna, gak nimpa kolom lain. ----
+let WARNA_LIST = [];
+const warnaDropdown = document.createElement('div');
+warnaDropdown.id = 'warnaDropdown';
+warnaDropdown.style.cssText = 'position:fixed;z-index:999;background:#fff;border-radius:12px;' +
+  'box-shadow:0 8px 24px rgba(0,0,0,.18);max-height:200px;overflow-y:auto;display:none;';
+document.body.appendChild(warnaDropdown);
+window.addEventListener('scroll', function(){
+  if (warnaDropdown.style.display === 'block') posisikanDropdownWarna();
+}, true);
+
+function posisikanDropdownWarna(){
+  const r = warnaInput.getBoundingClientRect();
+  warnaDropdown.style.left = r.left + 'px';
+  warnaDropdown.style.top = (r.bottom + 6) + 'px';
+  warnaDropdown.style.width = r.width + 'px';
 }
+
+function tampilkanSaranWarna(){
+  if (WARNA_LIST.length === 0) { warnaDropdown.style.display = 'none'; return; }
+  const q = warnaInput.value.trim().toUpperCase();
+  const cocok = q ? WARNA_LIST.filter(function(w){ return w.toUpperCase().indexOf(q) !== -1; }) : WARNA_LIST;
+  if (cocok.length === 0) { warnaDropdown.style.display = 'none'; return; }
+  warnaDropdown.innerHTML = cocok.slice(0,8).map(function(w){
+    return '<div class="warna-opt" style="padding:12px 14px;font-size:15px;font-weight:500;' +
+      'border-bottom:0.5px solid #E5E5EA;">' + w + '</div>';
+  }).join('');
+  const opts = warnaDropdown.querySelectorAll('.warna-opt');
+  opts[opts.length-1].style.borderBottom = 'none';
+  opts.forEach(function(el){
+    el.addEventListener('mousedown', function(ev){ ev.preventDefault(); }); // biar blur gak duluan sebelum sempat ke-tap
+    el.addEventListener('click', function(){
+      warnaInput.value = el.textContent;
+      state.warna = el.textContent;
+      warnaDropdown.style.display = 'none';
+      validate();
+    });
+  });
+  posisikanDropdownWarna();
+  warnaDropdown.style.display = 'block';
+}
+
 function fetchWarnaFresh(){
   fetch(WEBAPP_URL + '?action=warna')
     .then(function(r){ return r.json(); })
     .then(function(list){
-      renderWarnaDatalist(list);
+      WARNA_LIST = list;
       try { localStorage.setItem(WARNA_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: list })); } catch(e){}
     })
     .catch(function(){ /* diamkan - autocomplete cuma bonus, gak boleh ganggu form kalau gagal */ });
@@ -608,7 +647,7 @@ function fetchWarnaFresh(){
   try {
     const cached = JSON.parse(localStorage.getItem(WARNA_CACHE_KEY) || 'null');
     if (cached && cached.data && (Date.now() - cached.ts) < WARNA_CACHE_TTL_MS){
-      renderWarnaDatalist(cached.data);
+      WARNA_LIST = cached.data;
     }
   } catch(e){}
   fetchWarnaFresh(); // selalu refresh diam-diam juga, biar ikutan warna baru dari stok masuk
