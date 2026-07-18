@@ -40,6 +40,11 @@
     text-transform:uppercase;margin-bottom:2px;transition:color .4s;
   }
   .topbar-title{font-size:30px;font-weight:750;letter-spacing:-.4px;line-height:1.1;}
+  .version-badge{
+    display:inline-block;margin-top:6px;font-size:11px;font-weight:700;color:#fff;
+    background:var(--theme-accent-deep);padding:2px 9px;border-radius:20px;letter-spacing:.3px;
+    transition:background .4s;
+  }
 
   .loading-screen{text-align:center;padding:60px 30px;color:var(--ink-2);font-size:14px;line-height:1.7;}
 
@@ -111,7 +116,7 @@
     box-shadow:0 10px 22px -6px var(--tab-shadow, rgba(0,0,0,.25));
   }
   .tab-card.tab-anak.active{ background:linear-gradient(160deg,#4FC7D6,#217F8D); --tab-shadow:rgba(33,127,141,.4); }
-  .tab-card.tab-dewasa.active{ background:linear-gradient(160deg,#3D5C87,#16283F); --tab-shadow:rgba(22,40,63,.4); }
+  .tab-card.tab-dewasa.active{ background:linear-gradient(160deg,#24405F,#0B1826); --tab-shadow:rgba(11,24,38,.45); }
   .tab-card.tab-lain.active{ background:linear-gradient(160deg,#9C8EE0,#6B5BC4); --tab-shadow:rgba(107,91,196,.4); }
   .tab-card.active .tab-icon-badge{ background:rgba(255,255,255,.22); }
   .tab-card.active .tab-label{ color:#fff; }
@@ -181,6 +186,39 @@
     font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;text-align:left;color:var(--ink);
   }
   .copied-flash{color:var(--success);font-size:13.5px;font-weight:650;margin-top:10px;display:none;}
+
+  /* ---- Kombinasi 3 Warna ---- */
+  .combo-picker-btn{
+    width:100%;text-align:left;background:var(--theme-accent-soft);border:1.5px dashed var(--theme-accent);
+    border-radius:12px;padding:13px 14px;font-size:15px;font-weight:600;color:var(--theme-accent-deep);
+    cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:all .4s;
+  }
+  .combo-picker-btn .chev{font-size:13px;opacity:.7;}
+  .combo-dropdown{
+    position:absolute;left:16px;right:16px;top:100%;margin-top:6px;background:#fff;border-radius:14px;
+    box-shadow:0 10px 30px rgba(0,0,0,.18);max-height:260px;overflow-y:auto;z-index:50;display:none;
+  }
+  .combo-opt{padding:13px 15px;font-size:15px;font-weight:600;border-bottom:0.5px solid var(--sep);cursor:pointer;
+    display:flex;justify-content:space-between;align-items:center;}
+  .combo-opt:last-child{border-bottom:none;}
+  .combo-opt .opt-sub{font-size:12px;color:var(--ink-2);font-weight:500;}
+  .warna-chips{display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;}
+  .warna-chip{
+    flex:1;min-width:80px;background:var(--canvas);border:1.5px solid var(--sep);border-radius:12px;
+    padding:10px 8px;text-align:center;position:relative;
+  }
+  .warna-chip .chip-order{
+    position:absolute;top:-8px;left:8px;background:var(--theme-accent-deep);color:#fff;
+    font-size:10px;font-weight:800;width:18px;height:18px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;transition:background .4s;
+  }
+  .warna-chip .chip-text{font-size:12.5px;font-weight:700;letter-spacing:.2px;}
+  .ganti-link{font-size:12.5px;color:var(--theme-accent-deep);font-weight:600;margin-top:10px;display:inline-block;cursor:pointer;transition:color .4s;}
+  .combo-kgroll-row{display:flex;gap:8px;margin-top:8px;}
+  .combo-kgroll-row input{
+    flex:1;border:1px solid var(--sep);border-radius:8px;padding:9px 8px;font-size:14px;background:var(--canvas);
+  }
+  .combo-kgroll-label{font-size:11.5px;color:var(--ink-2);font-weight:650;margin-top:12px;margin-bottom:2px;}
 </style>
 </head>
 <body>
@@ -188,6 +226,7 @@
 <div class="topbar">
   <div class="topbar-eyebrow" id="topbarEyebrow">Tim Potong</div>
   <div class="topbar-title">Input Produksi</div>
+  <div class="version-badge">ver.01</div>
   <div id="refreshLink" style="margin-top:8px;font-size:13px;font-weight:600;color:var(--theme-accent-deep);cursor:pointer;">🔄 Refresh Data Kategori/Varian</div>
 </div>
 
@@ -218,17 +257,40 @@
         <div class="row-label">Varian</div>
         <select id="varianSelect"></select>
       </div>
-      <div class="row" style="position:relative;">
-        <div class="row-label">Warna</div>
-        <input type="text" id="warnaInput" autocomplete="off">
+
+      <div id="biasaRows">
+        <div class="row" style="position:relative;">
+          <div class="row-label">Warna</div>
+          <input type="text" id="warnaInput" autocomplete="off">
+        </div>
+        <div class="row">
+          <div class="row-label">Kg Kain Terpakai</div>
+          <input type="number" id="kgInput" step="0.01">
+        </div>
+        <div class="row">
+          <div class="row-label">Kode Roll <span class="badge">opsional</span></div>
+          <input type="text" id="rollInput">
+        </div>
       </div>
-      <div class="row">
-        <div class="row-label">Kg Kain Terpakai</div>
-        <input type="number" id="kgInput" step="0.01">
-      </div>
-      <div class="row">
-        <div class="row-label">Kode Roll <span class="badge">opsional</span></div>
-        <input type="text" id="rollInput">
+
+      <div id="kombinasiRows" style="display:none;">
+        <div class="row" style="position:relative;">
+          <div class="row-label">Warna <span class="badge">Kombinasi 3 Warna</span></div>
+          <div id="comboPickerWrap">
+            <div class="combo-picker-btn" id="comboPickerBtn">
+              <span id="comboPickerLabel">Pilih kombinasi warna...</span>
+              <span class="chev">▾</span>
+            </div>
+            <div class="combo-dropdown" id="comboDropdown"></div>
+          </div>
+          <div id="comboHasil" style="display:none;">
+            <div class="warna-chips" id="warnaChips"></div>
+            <span class="ganti-link" id="gantiKombinasi">Ganti kombinasi</span>
+          </div>
+        </div>
+        <div class="row" id="kgRollComboRow" style="display:none;">
+          <div id="kgRollComboWrap"></div>
+        </div>
       </div>
     </div>
 
@@ -282,12 +344,14 @@ const CACHE_KEY = 'timpotong_kategori_varian_cache_v1';
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const WARNA_CACHE_KEY = 'timpotong_warna_cache_v1';
 const WARNA_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 1 hari - stok kain bergerak tiap hari, beda dari kategori/varian yang jarang berubah
+const KOMBINASI_CACHE_KEY = 'timpotong_kombinasi_warna_cache_v1';
+const KOMBINASI_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 hari - kombinasi warna jarang ganti tapi gak sejarang kategori/varian
 
 const tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
 
 const THEME = {
   anak: { key:'anak', accent:'#2FA8BA', accentDeep:'#1B7684', accentSoft:'#D8F1F3', canvas:'#D9F1F3', bgImage:'none' },
-  dewasa: { key:'dewasa', accent:'#2C4870', accentDeep:'#16283F', accentSoft:'#DCE6F0', canvas:'#D3DFEC', bgImage:'none' },
+  dewasa: { key:'dewasa', accent:'#1D3454', accentDeep:'#0B1826', accentSoft:'#B9C7DA', canvas:'#A6B8CE', bgImage:'none' },
   lain: { key:'lain', accent:'#6B5BC4', accentDeep:'#4E3FA0', accentSoft:'#E4E0F7', canvas:'#E4E0F7', bgImage:'none' }
 };
 const ICONS = {
@@ -311,8 +375,15 @@ function terapkanTema(theme){
 }
 
 let KATEGORI_VARIAN = {};
-let daftarItem = []; // {kategori, kodeItem, varianLabel, warna, kg, roll, qty}
-let state = { kategori: null, kodeItem: null, warna: '', kg: '', roll: '', qty: {} };
+let KOMBINASI_WARNA = [];
+let daftarItem = []; // item biasa: {mode:'biasa', kategori, kodeItem, varianLabel, warna, kg, roll, qty}
+                      // item kombinasi: {mode:'kombinasi', kategori, varianLabel, warnaTiga:[w1,w2,w3], kgTiga:[k1,k2,k3], rollTiga:[r1,r2,r3], adaPanjang, qty}
+let state = {
+  kategori: null, kodeItem: null, varianLabel: null, mode: 'biasa',
+  warna: '', kg: '', roll: '',
+  comboWarna: null, comboKg: ['','',''], comboRoll: ['','',''],
+  qty: {}
+};
 
 const varianSelect = document.getElementById('varianSelect');
 const warnaInput = document.getElementById('warnaInput');
@@ -331,6 +402,17 @@ const btnBuatTeks = document.getElementById('btnBuatTeks');
 const btnKembali = document.getElementById('btnKembali');
 const btnSalin = document.getElementById('btnSalin');
 const btnKirimChat = document.getElementById('btnKirimChat');
+const biasaRows = document.getElementById('biasaRows');
+const kombinasiRows = document.getElementById('kombinasiRows');
+const comboPickerWrap = document.getElementById('comboPickerWrap');
+const comboPickerBtn = document.getElementById('comboPickerBtn');
+const comboPickerLabel = document.getElementById('comboPickerLabel');
+const comboDropdown = document.getElementById('comboDropdown');
+const comboHasil = document.getElementById('comboHasil');
+const warnaChips = document.getElementById('warnaChips');
+const gantiKombinasi = document.getElementById('gantiKombinasi');
+const kgRollComboRow = document.getElementById('kgRollComboRow');
+const kgRollComboWrap = document.getElementById('kgRollComboWrap');
 
 function showError(msg){
   errorBanner.textContent = '⚠ ' + msg;
@@ -375,6 +457,10 @@ function renderKategori(){
       btn.classList.add('active');
       state.kategori = k;
       state.kodeItem = null;
+      state.varianLabel = null;
+      state.mode = 'biasa';
+      biasaRows.style.display = 'block';
+      kombinasiRows.style.display = 'none';
       terapkanTema(theme);
       renderVarian();
       validate();
@@ -389,7 +475,7 @@ function renderKategori(){
 function renderVarian(){
   const list = KATEGORI_VARIAN[state.kategori] || [];
   varianSelect.innerHTML = '<option value="">— pilih —</option>' +
-    list.map(function(v){ return '<option value="'+v.kode+'">'+v.label+'</option>'; }).join('');
+    list.map(function(v, idx){ return '<option value="'+idx+'">'+v.label+'</option>'; }).join('');
 }
 
 function renderQtyGrid(container, sizes){
@@ -421,8 +507,43 @@ document.getElementById('toggleLain').addEventListener('click', function(){
   this.textContent = showing ? 'Tampilkan ukuran lain (3XL-6XL)' : 'Sembunyikan ukuran lain';
 });
 
+function isKombinasi(label){
+  const l = (label || '').toLowerCase();
+  return l.indexOf('kombinasi') !== -1 || l.indexOf('trico') !== -1;
+}
+
+function resetComboUI(){
+  comboPickerWrap.style.display = 'block';
+  comboHasil.style.display = 'none';
+  kgRollComboRow.style.display = 'none';
+  comboPickerLabel.textContent = 'Pilih kombinasi warna...';
+  state.comboWarna = null;
+  state.comboKg = ['','',''];
+  state.comboRoll = ['','',''];
+}
+
 varianSelect.addEventListener('change', function(){
-  state.kodeItem = varianSelect.value || null;
+  const idx = varianSelect.value;
+  if (idx === '') {
+    state.kodeItem = null; state.varianLabel = null; state.mode = 'biasa';
+    biasaRows.style.display = 'block'; kombinasiRows.style.display = 'none';
+    validate();
+    return;
+  }
+  const v = (KATEGORI_VARIAN[state.kategori] || [])[parseInt(idx, 10)];
+  // state.kodeItem BISA jadi string kosong '' - itu VALID (artinya varian ini SENGAJA tanpa
+  // kode/awalan, nama akhir cuma warna doang), beda dari null (belum pilih apa-apa).
+  state.kodeItem = v ? v.kode : null;
+  state.varianLabel = v ? v.label : null;
+  state.mode = (v && isKombinasi(v.label)) ? 'kombinasi' : 'biasa';
+  if (state.mode === 'kombinasi') {
+    biasaRows.style.display = 'none';
+    kombinasiRows.style.display = 'block';
+    resetComboUI();
+  } else {
+    biasaRows.style.display = 'block';
+    kombinasiRows.style.display = 'none';
+  }
   validate();
 });
 warnaInput.addEventListener('input', function(){ state.warna = warnaInput.value; validate(); tampilkanSaranWarna(); });
@@ -431,10 +552,73 @@ warnaInput.addEventListener('blur', function(){ setTimeout(function(){ warnaDrop
 kgInput.addEventListener('input', function(){ state.kg = kgInput.value; validate(); });
 rollInput.addEventListener('input', function(){ state.roll = rollInput.value; });
 
+comboPickerBtn.addEventListener('click', function(){
+  const showing = comboDropdown.style.display === 'block';
+  if (showing){ comboDropdown.style.display = 'none'; return; }
+  if (KOMBINASI_WARNA.length === 0){
+    showError('Sheet KOMBINASI WARNA masih kosong atau belum termuat. Coba Refresh Data.');
+    return;
+  }
+  comboDropdown.innerHTML = KOMBINASI_WARNA.map(function(c, idx){
+    return '<div class="combo-opt" data-idx="'+idx+'"><span>'+c.nama+'</span><span class="opt-sub">+ '+c.ketiga+'</span></div>';
+  }).join('');
+  comboDropdown.querySelectorAll('.combo-opt').forEach(function(el){
+    el.addEventListener('click', function(){
+      const c = KOMBINASI_WARNA[parseInt(el.dataset.idx,10)];
+      pilihKombinasi(c);
+      comboDropdown.style.display = 'none';
+    });
+  });
+  comboDropdown.style.display = 'block';
+});
+
+function pilihKombinasi(c){
+  const dua = c.nama.split(' ');
+  const tiga = [dua[0], dua[1], c.ketiga];
+  state.comboWarna = tiga;
+  warnaChips.innerHTML = tiga.map(function(w, i){
+    return '<div class="warna-chip"><div class="chip-order">'+(i+1)+'</div><div class="chip-text">'+w+'</div></div>';
+  }).join('');
+  comboPickerWrap.style.display = 'none';
+  comboHasil.style.display = 'block';
+
+  kgRollComboWrap.innerHTML = tiga.map(function(w, i){
+    return '<div class="combo-kgroll-label">Kg + Kode Roll - ' + w + '</div>' +
+      '<div class="combo-kgroll-row">' +
+        '<input type="number" step="0.01" class="comboKgInput" data-idx="'+i+'" placeholder="kg">' +
+        '<input type="text" class="comboRollInput" data-idx="'+i+'" placeholder="kode roll (opsional)">' +
+      '</div>';
+  }).join('');
+  kgRollComboRow.style.display = 'block';
+
+  document.querySelectorAll('.comboKgInput').forEach(function(inp){
+    inp.addEventListener('input', function(){ state.comboKg[parseInt(inp.dataset.idx,10)] = inp.value; validate(); });
+  });
+  document.querySelectorAll('.comboRollInput').forEach(function(inp){
+    inp.addEventListener('input', function(){ state.comboRoll[parseInt(inp.dataset.idx,10)] = inp.value; });
+  });
+  validate();
+}
+
+gantiKombinasi.addEventListener('click', function(){
+  resetComboUI();
+  validate();
+});
+
+document.addEventListener('click', function(e){
+  if (!comboPickerWrap.contains(e.target)) comboDropdown.style.display = 'none';
+});
+
 function validate(){
   const total = updateTotal();
-  const ok = state.kategori && state.kodeItem && state.warna.trim() &&
-    state.kg && parseFloat(state.kg) > 0 && total > 0;
+  let ok;
+  if (state.mode === 'kombinasi') {
+    ok = state.kategori && state.kodeItem !== null && state.comboWarna &&
+      state.comboKg.every(function(k){ return k && parseFloat(k) > 0; }) && total > 0;
+  } else {
+    ok = state.kategori && state.kodeItem !== null && state.warna.trim() &&
+      state.kg && parseFloat(state.kg) > 0 && total > 0;
+  }
   btnTambah.disabled = !ok;
 }
 
@@ -451,11 +635,22 @@ function renderItemList(){
   daftarItem.forEach(function(item, idx){
     const qtyLines = Object.keys(item.qty).filter(function(s){return item.qty[s]>0;})
       .map(function(s){ return s+item.qty[s]; }).join(' ');
+    let namaItem, subInfo;
+    if (item.mode === 'kombinasi') {
+      namaItem = item.kategori.toUpperCase() + ' ' + (item.adaPanjang ? 'PANJANG KOMBINASI ' : 'KOMBINASI ') +
+        item.warnaTiga[0].toUpperCase() + ' ' + item.warnaTiga[1].toUpperCase();
+      subInfo = item.warnaTiga.map(function(w,i){ return w+' '+item.kgTiga[i]+'kg'; }).join(', ');
+    } else {
+      namaItem = (item.kodeItem === '')
+        ? (item.kategori.toUpperCase() + ' ' + item.warna.toUpperCase())
+        : (item.kategori.toUpperCase() + ' ' + item.varianLabel.toUpperCase() + ' ' + item.warna.toUpperCase());
+      subInfo = item.kg + 'kg' + (item.roll ? ' (roll ' + item.roll + ')' : '');
+    }
     const row = document.createElement('div');
     row.className = 'item-row';
     row.innerHTML =
-      '<div class="item-row-text"><span class="item-row-tag">'+item.kategori+'</span><b>' + item.varianLabel.toUpperCase() + ' ' + item.warna.toUpperCase() + '</b> - ' +
-      item.kg + 'kg' + (item.roll ? ' (roll ' + item.roll + ')' : '') + '<br>' + qtyLines + '</div>' +
+      '<div class="item-row-text"><span class="item-row-tag">'+item.kategori+'</span><b>' + namaItem + '</b> - ' +
+      subInfo + '<br>' + qtyLines + '</div>' +
       '<div class="item-row-del" data-idx="' + idx + '">✕</div>';
     itemList.appendChild(row);
   });
@@ -469,22 +664,44 @@ function renderItemList(){
 
 btnTambah.addEventListener('click', function(){
   hideError();
-  const labelTerpilih = varianSelect.options[varianSelect.selectedIndex].text;
-  daftarItem.push({
-    kategori: state.kategori,
-    kodeItem: state.kodeItem,
-    varianLabel: labelTerpilih,
-    warna: state.warna,
-    kg: state.kg,
-    roll: state.roll,
-    qty: Object.assign({}, state.qty)
-  });
+  const labelTerpilih = state.varianLabel;
+  if (state.mode === 'kombinasi') {
+    const adaPanjang = labelTerpilih.toLowerCase().indexOf('panjang') !== -1;
+    daftarItem.push({
+      mode: 'kombinasi',
+      kategori: state.kategori,
+      varianLabel: labelTerpilih,
+      adaPanjang: adaPanjang,
+      warnaTiga: state.comboWarna.slice(),
+      kgTiga: state.comboKg.slice(),
+      rollTiga: state.comboRoll.slice(),
+      qty: Object.assign({}, state.qty)
+    });
+  } else {
+    daftarItem.push({
+      mode: 'biasa',
+      kategori: state.kategori,
+      kodeItem: state.kodeItem,
+      varianLabel: labelTerpilih,
+      warna: state.warna,
+      kg: state.kg,
+      roll: state.roll,
+      qty: Object.assign({}, state.qty)
+    });
+  }
   renderItemList();
 
-  state.kodeItem = null; state.warna = ''; state.kg = ''; state.roll = ''; state.qty = {};
+  // Reset field DETAIL ITEM (kategori TETAP, biar cepat isi item berikutnya kategori sama)
+  state.kodeItem = null; state.varianLabel = null; state.mode = 'biasa';
+  state.warna = ''; state.kg = ''; state.roll = '';
+  state.comboWarna = null; state.comboKg = ['','','']; state.comboRoll = ['','',''];
   varianSelect.value = '';
   warnaInput.value = ''; kgInput.value = ''; rollInput.value = '';
+  biasaRows.style.display = 'block';
+  kombinasiRows.style.display = 'none';
+  resetComboUI();
   resetQtyInputs();
+  state.qty = {};
   validate();
   window.scrollTo(0,0);
 });
@@ -495,16 +712,42 @@ function escapeHtml_(s){
 
 function generateTeksHtmlPreview_(){
   return daftarItem.map(function(item){
-    let line1Text;
-    if (item.roll) {
-      line1Text = item.varianLabel.toUpperCase() + ' ' + item.warna.toUpperCase() + ' ' + item.kg + ' / ' + item.roll;
-    } else {
-      line1Text = item.varianLabel.toUpperCase() + ' ' + item.warna.toUpperCase() + ' ' + item.kg + 'kg';
-    }
     const daftarSize = Object.keys(item.qty).filter(function(s){ return item.qty[s] > 0; });
     const totalQtyItem = daftarSize.reduce(function(sum,s){ return sum + item.qty[s]; }, 0);
     const qtyHtml = daftarSize.map(function(s){ return escapeHtml_(s) + '<b>' + item.qty[s] + '</b>'; }).join(' ') +
       ' = <b>' + totalQtyItem + '</b>';
+
+    if (item.mode === 'kombinasi') {
+      // Format khusus KOMBINASI 3 warna - memanfaatkan mekanisme "RefStok"/breakdown yang
+      // SUDAH ADA di sistem lama: baris pertama = item utama (warna 1+2, kg warna pertama),
+      // 2 baris berikutnya = breakdown pemakaian kain warna ke-2 & ke-3 secara terpisah,
+      // baris terakhir = qty (berlaku buat 1 item gabungan ini).
+      const kataDepan = item.kategori.toUpperCase() + ' ' + (item.adaPanjang ? 'PANJANG KOMBINASI' : 'KOMBINASI');
+      const w = item.warnaTiga, kg = item.kgTiga, roll = item.rollTiga;
+      const line1 = escapeHtml_(kataDepan + ' ' + w[0].toUpperCase() + ' ' + w[1].toUpperCase() + ' ' + kg[0]) +
+        (roll[0] ? escapeHtml_(' / ' + roll[0]) : '');
+      const line2 = escapeHtml_(w[1].toUpperCase() + ' ' + kg[1]) + (roll[1] ? escapeHtml_(' / ' + roll[1]) : '');
+      const line3 = escapeHtml_(w[2].toUpperCase() + ' ' + kg[2]) + (roll[2] ? escapeHtml_(' / ' + roll[2]) : '');
+      return line1 + '\n' + line2 + '\n' + line3 + '\n' + qtyHtml;
+    }
+
+    // Kategori (ANAK/DEWASA) SENGAJA tetap ditulis literal di teks chat - konversi ke kode
+    // singkat (PJ/SET/dst) baru terjadi OTOMATIS belakangan di sheet lewat
+    // computeKodePenulisanDasar() yang SUDAH ADA, dan banyak aturannya BUTUH kata kategori ini
+    // supaya bisa ke-trigger dengan benar (mis. "Anak Panjang" baru -> PJ).
+    //
+    // Kalau Kode Item SENGAJA dikosongkan di sheet KATEGORI VARIAN (varian semacam
+    // "Pendek"/"Pendek Kombinasi"), Label Varian-nya TIDAK ikut ditulis, tapi kata Kategori
+    // tetap ada - jadi teksnya "ANAK MERAH" (bukan "PENDEK MERAH" ataupun "MERAH" doang).
+    const namaAwal = (item.kodeItem === '')
+      ? (item.kategori.toUpperCase() + ' ' + item.warna.toUpperCase())
+      : (item.kategori.toUpperCase() + ' ' + item.varianLabel.toUpperCase() + ' ' + item.warna.toUpperCase());
+    let line1Text;
+    if (item.roll) {
+      line1Text = namaAwal + ' ' + item.kg + ' / ' + item.roll;
+    } else {
+      line1Text = namaAwal + ' ' + item.kg + 'kg';
+    }
     return escapeHtml_(line1Text) + '\n' + qtyHtml;
   }).join('\n\n');
 }
@@ -654,6 +897,25 @@ function fetchWarnaFresh(){
   fetchWarnaFresh(); // selalu refresh diam-diam juga, biar ikutan warna baru dari stok masuk
 })();
 
+function fetchKombinasiFresh(){
+  fetch(WEBAPP_URL + '?action=kombinasi', { cache: 'no-store' })
+    .then(function(r){ return r.json(); })
+    .then(function(list){
+      KOMBINASI_WARNA = list;
+      try { localStorage.setItem(KOMBINASI_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: list })); } catch(e){}
+    })
+    .catch(function(){ /* diamkan - kalau gagal, combo picker akan kasih pesan error saat dibuka */ });
+}
+(function bootstrapKombinasi(){
+  try {
+    const cached = JSON.parse(localStorage.getItem(KOMBINASI_CACHE_KEY) || 'null');
+    if (cached && cached.data && (Date.now() - cached.ts) < KOMBINASI_CACHE_TTL_MS){
+      KOMBINASI_WARNA = cached.data;
+    }
+  } catch(e){}
+  fetchKombinasiFresh();
+})();
+
 let dariCache = false;
 try {
   const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
@@ -670,6 +932,7 @@ document.getElementById('refreshLink').addEventListener('click', function(){
   try {
     localStorage.removeItem(CACHE_KEY);
     localStorage.removeItem(WARNA_CACHE_KEY);
+    localStorage.removeItem(KOMBINASI_CACHE_KEY);
   } catch(e){}
   document.getElementById('mainWrap').style.display = 'none';
   const ls = document.getElementById('loadingScreen');
@@ -677,6 +940,7 @@ document.getElementById('refreshLink').addEventListener('click', function(){
   ls.textContent = 'Memuat ulang data terbaru...';
   fetchFresh(false);
   fetchWarnaFresh();
+  fetchKombinasiFresh();
 });
 </script>
 </body>
