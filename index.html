@@ -188,6 +188,7 @@
 <div class="topbar">
   <div class="topbar-eyebrow" id="topbarEyebrow">Tim Potong</div>
   <div class="topbar-title">Input Produksi</div>
+  <div id="refreshLink" style="margin-top:8px;font-size:13px;font-weight:600;color:var(--theme-accent-deep);cursor:pointer;">🔄 Refresh Data Kategori/Varian</div>
 </div>
 
 <div id="loadingScreen" class="loading-screen">Memuat data kategori/varian...</div>
@@ -574,7 +575,7 @@ function initUI(){
 }
 
 function fetchFresh(isBackground){
-  return fetch(WEBAPP_URL + '?action=kategori')
+  return fetch(WEBAPP_URL + '?action=kategori', { cache: 'no-store' })
     .then(function(r){ return r.json(); })
     .then(function(data){
       KATEGORI_VARIAN = data;
@@ -635,7 +636,7 @@ function tampilkanSaranWarna(){
 }
 
 function fetchWarnaFresh(){
-  fetch(WEBAPP_URL + '?action=warna')
+  fetch(WEBAPP_URL + '?action=warna', { cache: 'no-store' })
     .then(function(r){ return r.json(); })
     .then(function(list){
       WARNA_LIST = list;
@@ -664,6 +665,19 @@ try {
   }
 } catch(e){}
 if (!dariCache) fetchFresh(false);
+
+document.getElementById('refreshLink').addEventListener('click', function(){
+  try {
+    localStorage.removeItem(CACHE_KEY);
+    localStorage.removeItem(WARNA_CACHE_KEY);
+  } catch(e){}
+  document.getElementById('mainWrap').style.display = 'none';
+  const ls = document.getElementById('loadingScreen');
+  ls.style.display = 'block';
+  ls.textContent = 'Memuat ulang data terbaru...';
+  fetchFresh(false);
+  fetchWarnaFresh();
+});
 </script>
 </body>
 </html>
