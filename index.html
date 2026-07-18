@@ -47,6 +47,7 @@
     width:100%;border:none;outline:none;font-size:15.5px;color:var(--text-dark);
     background:transparent;padding:2px 0;font-family:inherit;
   }
+  #warnaInput{text-transform:uppercase;}
   select:disabled{color:var(--text-muted);}
   .qty-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
   .qty-cell{display:flex;flex-direction:column;gap:4px;}
@@ -194,9 +195,12 @@
     <button class="btn btn-green" id="btnBuatTeks" disabled>Buat Teks (0)</button>
   </div>
 
-  <div class="btn-row" id="btnRowSukses" style="display:none;">
-    <button class="btn btn-secondary" id="btnKembali">‹ Kembali Edit</button>
-    <button class="btn btn-primary" id="btnSalin">📋 Salin Teks</button>
+  <div class="btn-row" id="btnRowSukses" style="display:none;flex-direction:column;gap:8px;">
+    <button class="btn btn-primary btn-full" id="btnKirimChat">📤 Kirim ke Chat</button>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-secondary" id="btnKembali">‹ Kembali Edit</button>
+      <button class="btn btn-secondary" id="btnSalin">📋 Salin Teks</button>
+    </div>
   </div>
 
 </div>
@@ -235,6 +239,7 @@ const btnTambah = document.getElementById('btnTambah');
 const btnBuatTeks = document.getElementById('btnBuatTeks');
 const btnKembali = document.getElementById('btnKembali');
 const btnSalin = document.getElementById('btnSalin');
+const btnKirimChat = document.getElementById('btnKirimChat');
 
 function showError(msg){
   errorBanner.textContent = '⚠ ' + msg;
@@ -336,7 +341,7 @@ function renderItemList(){
     const row = document.createElement('div');
     row.className = 'item-row';
     row.innerHTML =
-      '<div class="item-row-text"><b>' + item.kodeItem + ' ' + item.warna.toUpperCase() + '</b> - ' +
+      '<div class="item-row-text"><b>' + item.varianLabel.toUpperCase() + ' ' + item.warna.toUpperCase() + '</b> - ' +
       item.kg + 'kg' + (item.roll ? ' (roll ' + item.roll + ')' : '') + '<br>' + qtyLines + '</div>' +
       '<div class="item-row-del" data-idx="' + idx + '">✕ Hapus</div>';
     itemList.appendChild(row);
@@ -351,9 +356,11 @@ function renderItemList(){
 
 btnTambah.addEventListener('click', function(){
   hideError();
+  const labelTerpilih = varianSelect.options[varianSelect.selectedIndex].text;
   daftarItem.push({
     kategori: state.kategori,
     kodeItem: state.kodeItem,
+    varianLabel: labelTerpilih,
     warna: state.warna,
     kg: state.kg,
     roll: state.roll,
@@ -370,10 +377,20 @@ btnTambah.addEventListener('click', function(){
   window.scrollTo(0,0);
 });
 
+// rev.2: teks yang dibuat pakai NAMA VARIAN yang manusiawi (mis. "Kaos Lengan Panjang"), BUKAN
+// kode singkatan ("PJ") - konversi ke kode baku tetap jalan OTOMATIS di background seperti
+// biasa lewat convertTimPotongItemName() begitu teks ini dikirim & diproses jalur chat yang
+// sudah ada, jadi tidak perlu dikonversi manual di sini.
 function generateTeksProduksi(){
   return daftarItem.map(function(item){
-    let line1 = item.kodeItem + ' ' + item.warna.toUpperCase() + ' ' + item.kg + 'kg';
-    if (item.roll) line1 += ' rol ' + item.roll;
+    let line1;
+    if (item.roll) {
+      // Format garis-miring (TANPA kata "kg") - biar cocok sama pola extractKodeRoll yang
+      // mendeteksi "<angka>/<kode>" persis di akhir baris, tanpa ada kata di antaranya.
+      line1 = item.varianLabel.toUpperCase() + ' ' + item.warna.toUpperCase() + ' ' + item.kg + '/' + item.roll;
+    } else {
+      line1 = item.varianLabel.toUpperCase() + ' ' + item.warna.toUpperCase() + ' ' + item.kg + 'kg';
+    }
     const qtyPairs = Object.keys(item.qty).filter(function(s){ return item.qty[s] > 0; })
       .map(function(s){ return s + ' ' + item.qty[s]; }).join(' ');
     return line1 + '\n' + qtyPairs;
@@ -396,6 +413,20 @@ btnKembali.addEventListener('click', function(){
   document.getElementById('successScreen').style.display = 'none';
   document.getElementById('btnRowForm').style.display = 'flex';
   document.getElementById('btnRowSukses').style.display = 'none';
+});
+
+btnKirimChat.addEventListener('click', function(){
+  const teks = document.getElementById('teksHasil').textContent;
+  // t.me/share/url membuka picker "kirim ke..." bawaan Telegram dengan teks SUDAH TERISI di
+  // kolom chat begitu grup tujuan dipilih - tim potong tinggal cek sekilas & tap kirim (Telegram
+  // sengaja mewajibkan 1 tap konfirmasi terakhir, tidak bisa auto-kirim penuh - itu proteksi
+  // anti-spam bawaan Telegram, bukan keterbatasan di kode ini).
+  const shareUrl = 'https://t.me/share/url?url=&text=' + encodeURIComponent(teks);
+  if (tg && tg.openTelegramLink) {
+    tg.openTelegramLink(shareUrl);
+  } else {
+    window.open(shareUrl, '_blank');
+  }
 });
 
 btnSalin.addEventListener('click', function(){
