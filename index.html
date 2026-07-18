@@ -34,17 +34,19 @@
     -webkit-font-smoothing:antialiased;
   }
 
-  .topbar{padding:14px 18px 2px;}
+  .topbar{padding:10px 16px 0;}
+  .topbar-top-row{display:flex;align-items:center;justify-content:space-between;}
   .topbar-eyebrow{
-    font-size:13px;font-weight:600;color:var(--theme-accent-deep);letter-spacing:.2px;
-    text-transform:uppercase;margin-bottom:2px;transition:color .4s;
+    font-size:11.5px;font-weight:600;color:var(--theme-accent-deep);letter-spacing:.2px;
+    text-transform:uppercase;transition:color .4s;
   }
-  .topbar-title{font-size:30px;font-weight:750;letter-spacing:-.4px;line-height:1.1;}
+  .topbar-title{font-size:22px;font-weight:750;letter-spacing:-.3px;line-height:1.1;}
   .version-badge{
-    display:inline-block;margin-top:6px;font-size:11px;font-weight:700;color:#fff;
-    background:var(--theme-accent-deep);padding:2px 9px;border-radius:20px;letter-spacing:.3px;
+    display:inline-block;font-size:10px;font-weight:700;color:#fff;
+    background:var(--theme-accent-deep);padding:1px 8px;border-radius:20px;letter-spacing:.3px;
     transition:background .4s;
   }
+  #refreshLink{font-size:11.5px;}
 
   .loading-screen{text-align:center;padding:60px 30px;color:var(--ink-2);font-size:14px;line-height:1.7;}
 
@@ -69,13 +71,13 @@
 
   .row{
     padding:9px 14px;border-bottom:0.5px solid var(--sep);
-    display:flex;flex-direction:column;gap:2px;
+    display:flex;flex-direction:row;align-items:center;gap:10px;min-height:20px;
   }
   .row:last-child{border-bottom:none;}
-  .row-label{font-size:12.5px;color:var(--ink-2);font-weight:600;}
+  .row-label{font-size:12px;color:var(--ink-2);font-weight:600;flex:0 0 auto;white-space:nowrap;}
   select,input[type=number],input[type=text]{
-    width:100%;border:none;outline:none;font-size:17px;color:var(--ink);
-    background:transparent;padding:1px 0;font-family:inherit;font-weight:450;
+    width:100%;flex:1;min-width:0;border:none;outline:none;font-size:16px;color:var(--ink);
+    background:transparent;padding:1px 0;font-family:inherit;font-weight:450;text-align:right;
   }
   #warnaInput{text-transform:uppercase;}
   select:disabled{color:var(--ink-3);}
@@ -221,7 +223,7 @@
   .combo-kgroll-label{font-size:11.5px;color:var(--ink-2);font-weight:650;margin-top:12px;margin-bottom:2px;}
 
   /* ---- Kg split (depan.belakang koma) - titik permanen, gak bisa lupa ---- */
-  .kg-split{display:flex;align-items:center;gap:6px;}
+  .kg-split{display:flex;align-items:center;gap:6px;margin-left:auto;}
   .kg-split-input{
     width:56px;flex:none !important;text-align:center;border:1px solid var(--sep);border-radius:9px;
     padding:8px 4px;font-size:17px;font-weight:600;background:var(--canvas);
@@ -234,10 +236,16 @@
 <body>
 
 <div class="topbar">
-  <div class="topbar-eyebrow" id="topbarEyebrow">Tim Potong</div>
-  <div class="topbar-title">Input Produksi</div>
-  <div class="version-badge">ver.01</div>
-  <div id="refreshLink" style="margin-top:8px;font-size:13px;font-weight:600;color:var(--theme-accent-deep);cursor:pointer;">🔄 Refresh Data Kategori/Varian</div>
+  <div class="topbar-top-row">
+    <div>
+      <div class="topbar-eyebrow" id="topbarEyebrow">Tim Potong</div>
+      <div class="topbar-title">Input Produksi</div>
+    </div>
+    <div style="text-align:right;">
+      <div class="version-badge">ver.01</div>
+      <div id="refreshLink" style="margin-top:4px;font-size:11.5px;font-weight:600;color:var(--theme-accent-deep);cursor:pointer;">🔄 Refresh</div>
+    </div>
+  </div>
 </div>
 
 <div id="loadingScreen" class="loading-screen">Memuat data kategori/varian...</div>
@@ -247,16 +255,17 @@
   <div class="app-body" id="formScreen">
     <div id="errorBanner" class="error-banner" style="display:none;"></div>
 
-    <div class="section-label"><span>Daftar Item</span><span class="count-chip" id="itemCount">0</span></div>
-    <div class="card">
-      <div id="itemList">
-        <div class="empty-hint" id="emptyHint">Belum ada item ditambahkan</div>
+    <div id="daftarItemSection" style="display:none;">
+      <div class="section-label"><span>Daftar Item</span><span class="count-chip" id="itemCount">0</span></div>
+      <div class="card">
+        <div id="itemList">
+          <div class="empty-hint" id="emptyHint">Belum ada item ditambahkan</div>
+        </div>
       </div>
+      <div class="cut-divider"><div class="scissor-chip">✂️</div></div>
     </div>
 
-    <div class="cut-divider"><div class="scissor-chip">✂️</div></div>
-
-    <div class="section-label">Kategori</div>
+    <div class="section-label" style="margin-top:6px;">Kategori</div>
     <div class="tab-row" id="kategoriSeg"></div>
 
     <div class="cut-divider"><div class="scissor-chip">✂️</div></div>
@@ -691,6 +700,7 @@ function renderItemList(){
   itemCountEl.textContent = daftarItem.length;
   btnBuatTeks.textContent = 'Buat Teks (' + daftarItem.length + ')';
   btnBuatTeks.disabled = daftarItem.length === 0;
+  document.getElementById('daftarItemSection').style.display = daftarItem.length === 0 ? 'none' : 'block';
   if (daftarItem.length === 0){
     itemList.innerHTML = '';
     itemList.appendChild(emptyHint);
