@@ -219,6 +219,16 @@
     flex:1;border:1px solid var(--sep);border-radius:8px;padding:9px 8px;font-size:14px;background:var(--canvas);
   }
   .combo-kgroll-label{font-size:11.5px;color:var(--ink-2);font-weight:650;margin-top:12px;margin-bottom:2px;}
+
+  /* ---- Kg split (depan.belakang koma) - titik permanen, gak bisa lupa ---- */
+  .kg-split{display:flex;align-items:center;gap:6px;}
+  .kg-split-input{
+    width:56px;flex:none !important;text-align:center;border:1px solid var(--sep);border-radius:9px;
+    padding:8px 4px;font-size:17px;font-weight:600;background:var(--canvas);
+  }
+  .kg-split-input:focus{border-color:var(--theme-accent);background:#fff;}
+  .kg-split-dot{font-size:22px;font-weight:800;color:var(--ink-2);}
+  .kg-split-unit{font-size:14px;color:var(--ink-2);font-weight:600;margin-left:4px;}
 </style>
 </head>
 <body>
@@ -265,7 +275,12 @@
         </div>
         <div class="row">
           <div class="row-label">Kg Kain Terpakai</div>
-          <input type="number" id="kgInput" step="0.01" autocomplete="off">
+          <div class="kg-split">
+            <input type="text" inputmode="numeric" maxlength="2" id="kgDepan" class="kg-split-input">
+            <span class="kg-split-dot">.</span>
+            <input type="text" inputmode="numeric" maxlength="2" id="kgBelakang" class="kg-split-input">
+            <span class="kg-split-unit">kg</span>
+          </div>
         </div>
         <div class="row">
           <div class="row-label">Kode Roll <span class="badge">opsional</span></div>
@@ -387,7 +402,8 @@ let state = {
 
 const varianSelect = document.getElementById('varianSelect');
 const warnaInput = document.getElementById('warnaInput');
-const kgInput = document.getElementById('kgInput');
+const kgDepan = document.getElementById('kgDepan');
+const kgBelakang = document.getElementById('kgBelakang');
 const rollInput = document.getElementById('rollInput');
 const qtyGrid = document.getElementById('qtyGrid');
 const qtyGridLain = document.getElementById('qtyGridLain');
@@ -432,7 +448,7 @@ function scrollKeTengah_(el){
     }, 300);
   });
 }
-[varianSelect, warnaInput, kgInput].forEach(scrollKeTengah_);
+[varianSelect, warnaInput, kgDepan, kgBelakang].forEach(scrollKeTengah_);
 
 rollInput.addEventListener('focus', function(){
   setTimeout(function(){
@@ -549,7 +565,27 @@ varianSelect.addEventListener('change', function(){
 warnaInput.addEventListener('input', function(){ state.warna = warnaInput.value; validate(); tampilkanSaranWarna(); });
 warnaInput.addEventListener('focus', function(){ tampilkanSaranWarna(); });
 warnaInput.addEventListener('blur', function(){ setTimeout(function(){ warnaDropdown.style.display = 'none'; }, 150); });
-kgInput.addEventListener('input', function(){ state.kg = kgInput.value; validate(); });
+function hanyaAngka_(el){
+  el.value = el.value.replace(/[^0-9]/g, '').slice(0, 2);
+}
+function gabungKgSplit_(){
+  // "harus selalu ada koma" - bagian belakang koma WAJIB diisi, gak dianggap valid kalau kosong
+  // (dicek di validate()), tapi buat nilai sementara tetap digabung apa adanya di sini.
+  state.kg = (kgDepan.value || '') + '.' + (kgBelakang.value || '');
+  validate();
+}
+kgDepan.addEventListener('input', function(){
+  hanyaAngka_(kgDepan);
+  gabungKgSplit_();
+  if (kgDepan.value.length === 2) kgBelakang.focus();
+});
+kgBelakang.addEventListener('input', function(){
+  hanyaAngka_(kgBelakang);
+  gabungKgSplit_();
+});
+kgBelakang.addEventListener('keydown', function(e){
+  if (e.key === 'Backspace' && kgBelakang.value === '') kgDepan.focus();
+});
 rollInput.addEventListener('input', function(){ state.roll = rollInput.value; });
 
 comboPickerBtn.addEventListener('click', function(){
@@ -584,15 +620,39 @@ function pilihKombinasi(c){
 
   kgRollComboWrap.innerHTML = tiga.map(function(w, i){
     return '<div class="combo-kgroll-label">Kg + Kode Roll - ' + w + '</div>' +
-      '<div class="combo-kgroll-row">' +
-        '<input type="number" step="0.01" class="comboKgInput" data-idx="'+i+'" placeholder="kg">' +
+      '<div class="combo-kgroll-row" style="align-items:center;">' +
+        '<div class="kg-split">' +
+          '<input type="text" inputmode="numeric" maxlength="2" class="comboKgDepan" data-idx="'+i+'">' +
+          '<span class="kg-split-dot">.</span>' +
+          '<input type="text" inputmode="numeric" maxlength="2" class="comboKgBelakang" data-idx="'+i+'">' +
+        '</div>' +
         '<input type="text" class="comboRollInput" data-idx="'+i+'" placeholder="kode roll (opsional)">' +
       '</div>';
   }).join('');
   kgRollComboRow.style.display = 'block';
 
-  document.querySelectorAll('.comboKgInput').forEach(function(inp){
-    inp.addEventListener('input', function(){ state.comboKg[parseInt(inp.dataset.idx,10)] = inp.value; validate(); });
+  function gabungComboKg_(idx){
+    const d = document.querySelector('.comboKgDepan[data-idx="'+idx+'"]');
+    const b = document.querySelector('.comboKgBelakang[data-idx="'+idx+'"]');
+    state.comboKg[idx] = (d.value || '') + '.' + (b.value || '');
+    validate();
+  }
+  document.querySelectorAll('.comboKgDepan').forEach(function(inp){
+    inp.addEventListener('input', function(){
+      hanyaAngka_(inp);
+      gabungComboKg_(parseInt(inp.dataset.idx,10));
+      if (inp.value.length === 2) {
+        document.querySelector('.comboKgBelakang[data-idx="'+inp.dataset.idx+'"]').focus();
+      }
+    });
+  });
+  document.querySelectorAll('.comboKgBelakang').forEach(function(inp){
+    inp.addEventListener('input', function(){ hanyaAngka_(inp); gabungComboKg_(parseInt(inp.dataset.idx,10)); });
+    inp.addEventListener('keydown', function(e){
+      if (e.key === 'Backspace' && inp.value === '') {
+        document.querySelector('.comboKgDepan[data-idx="'+inp.dataset.idx+'"]').focus();
+      }
+    });
   });
   document.querySelectorAll('.comboRollInput').forEach(function(inp){
     inp.addEventListener('input', function(){ state.comboRoll[parseInt(inp.dataset.idx,10)] = inp.value; });
@@ -613,11 +673,16 @@ function validate(){
   const total = updateTotal();
   let ok;
   if (state.mode === 'kombinasi') {
+    const semuaKgLengkap = state.comboWarna ? [0,1,2].every(function(i){
+      const d = document.querySelector('.comboKgDepan[data-idx="'+i+'"]');
+      const b = document.querySelector('.comboKgBelakang[data-idx="'+i+'"]');
+      return d && b && d.value && b.value;
+    }) : false;
     ok = state.kategori && state.kodeItem !== null && state.comboWarna &&
-      state.comboKg.every(function(k){ return k && parseFloat(k) > 0; }) && total > 0;
+      semuaKgLengkap && total > 0;
   } else {
     ok = state.kategori && state.kodeItem !== null && state.warna.trim() &&
-      state.kg && parseFloat(state.kg) > 0 && total > 0;
+      kgDepan.value && kgBelakang.value && parseFloat(state.kg) > 0 && total > 0;
   }
   btnTambah.disabled = !ok;
 }
@@ -696,7 +761,7 @@ btnTambah.addEventListener('click', function(){
   state.warna = ''; state.kg = ''; state.roll = '';
   state.comboWarna = null; state.comboKg = ['','','']; state.comboRoll = ['','',''];
   varianSelect.value = '';
-  warnaInput.value = ''; kgInput.value = ''; rollInput.value = '';
+  warnaInput.value = ''; kgDepan.value = ''; kgBelakang.value = ''; rollInput.value = '';
   biasaRows.style.display = 'block';
   kombinasiRows.style.display = 'none';
   resetComboUI();
