@@ -215,7 +215,7 @@ const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzaWvCi3Vw2fnFgBPfn1
 const SIZES_UTAMA = ["XS","S","M","L","XL","XXL"];
 const SIZES_LAIN = ["3XL","4XL","5XL","6XL"];
 const CACHE_KEY = 'timpotong_kategori_varian_cache_v1';
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 1 hari
+const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 hari - refresh diam-diam tetap jalan tiap buka (lihat fetchFresh(true)), jadi datanya gak akan basi walau TTL panjang
 
 const tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
 
@@ -247,6 +247,15 @@ function showError(msg){
   window.scrollTo(0,0);
 }
 function hideError(){ errorBanner.style.display = 'none'; }
+
+function scrollKeTengah_(el){
+  el.addEventListener('focus', function(){
+    setTimeout(function(){
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 300); // jeda dikit nunggu keyboard HP muncul dulu, biar posisi scroll-nya pas
+  });
+}
+[varianSelect, warnaInput, kgInput, rollInput].forEach(scrollKeTengah_);
 
 function renderKategori(){
   const kategoriList = Object.keys(KATEGORI_VARIAN);
@@ -284,6 +293,7 @@ function renderQtyGrid(container, sizes){
     return '<div class="qty-cell"><label>'+s+'</label><input type="number" min="0" data-size="'+s+'" placeholder="0"></div>';
   }).join('');
   container.querySelectorAll('input').forEach(function(inp){
+    scrollKeTengah_(inp);
     inp.addEventListener('input', function(){
       state.qty[inp.dataset.size] = parseInt(inp.value)||0;
       updateTotal();
@@ -377,29 +387,34 @@ btnTambah.addEventListener('click', function(){
   window.scrollTo(0,0);
 });
 
-// rev.2: teks yang dibuat pakai NAMA VARIAN yang manusiawi (mis. "Kaos Lengan Panjang"), BUKAN
-// kode singkatan ("PJ") - konversi ke kode baku tetap jalan OTOMATIS di background seperti
-// biasa lewat convertTimPotongItemName() begitu teks ini dikirim & diproses jalur chat yang
-// sudah ada, jadi tidak perlu dikonversi manual di sini.
-function generateTeksProduksi(){
+// Teks yang dibuat pakai NAMA VARIAN yang manusiawi (mis. "Kaos Lengan Panjang"), BUKAN kode
+// singkatan ("PJ") - konversi ke kode baku tetap jalan OTOMATIS di background seperti biasa
+// lewat convertTimPotongItemName() begitu teks ini dikirim & diproses jalur chat yang sudah ada.
+function escapeHtml_(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Versi TAMPILAN SAJA (angka qty di-bold pakai <b>) - dipakai buat innerHTML preview di app.
+// Tombol Salin/Kirim tetap baca lewat .textContent (bukan .innerHTML), yang otomatis kembali
+// jadi teks bersih tanpa tag sama sekali (browser yang urus otomatis), jadi teks yang
+// tersalin/terkirim ke chat TETAP aman diproses parser, TIDAK ikut kebawa tanda bold apapun.
+function generateTeksHtmlPreview_(){
   return daftarItem.map(function(item){
-    let line1;
+    let line1Text;
     if (item.roll) {
-      // Format garis-miring (TANPA kata "kg") - biar cocok sama pola extractKodeRoll yang
-      // mendeteksi "<angka>/<kode>" persis di akhir baris, tanpa ada kata di antaranya.
-      line1 = item.varianLabel.toUpperCase() + ' ' + item.warna.toUpperCase() + ' ' + item.kg + '/' + item.roll;
+      line1Text = item.varianLabel.toUpperCase() + ' ' + item.warna.toUpperCase() + ' ' + item.kg + ' / ' + item.roll;
     } else {
-      line1 = item.varianLabel.toUpperCase() + ' ' + item.warna.toUpperCase() + ' ' + item.kg + 'kg';
+      line1Text = item.varianLabel.toUpperCase() + ' ' + item.warna.toUpperCase() + ' ' + item.kg + 'kg';
     }
-    const qtyPairs = Object.keys(item.qty).filter(function(s){ return item.qty[s] > 0; })
-      .map(function(s){ return s + ' ' + item.qty[s]; }).join(' ');
-    return line1 + '\n' + qtyPairs;
+    const qtyHtml = Object.keys(item.qty).filter(function(s){ return item.qty[s] > 0; })
+      .map(function(s){ return escapeHtml_(s) + '<b>' + item.qty[s] + '</b>'; }).join(' ');
+    return escapeHtml_(line1Text) + '\n' + qtyHtml;
   }).join('\n\n');
 }
 
 btnBuatTeks.addEventListener('click', function(){
   if (daftarItem.length === 0) return;
-  document.getElementById('teksHasil').textContent = generateTeksProduksi();
+  document.getElementById('teksHasil').innerHTML = generateTeksHtmlPreview_();
   document.getElementById('formScreen').style.display = 'none';
   document.getElementById('successScreen').style.display = 'block';
   document.getElementById('btnRowForm').style.display = 'none';
