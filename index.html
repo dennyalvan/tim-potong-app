@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Input Produksi - Tim Potong</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root{
+    --tg-blue:#2AABEE;
+    --tg-blue-dark:#229ED9;
+    --bg:#F0F2F5;
+    --card:#FFFFFF;
+    --text-dark:#1c1c1c;
+    --text-muted:#8b9299;
+    --border:#e4e7eb;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--text-dark);
+    padding-bottom:100px;
+  }
+  .app-body{padding:14px;}
+  .field-group{
+    background:var(--card);
+    border-radius:14px;
+    padding:4px 14px;
+    margin-bottom:14px;
+    border:1px solid var(--border);
+  }
+  .field{padding:12px 0;border-bottom:1px solid var(--border);}
+  .field:last-child{border-bottom:none;}
+  .field-label{
+    font-size:12px;color:var(--text-muted);margin-bottom:6px;font-weight:600;
+    text-transform:uppercase;letter-spacing:.3px;
+  }
+  .segmented{display:flex;background:#eef0f2;border-radius:9px;padding:3px;gap:3px;flex-wrap:wrap;}
+  .seg-btn{
+    flex:1;min-width:70px;text-align:center;padding:8px 4px;border-radius:7px;
+    font-size:13.5px;font-weight:600;color:var(--text-muted);cursor:pointer;
+  }
+  .seg-btn.active{background:#fff;color:var(--tg-blue-dark);box-shadow:0 1px 3px rgba(0,0,0,.12);}
+  select,input[type=number],input[type=text]{
+    width:100%;border:none;outline:none;font-size:15.5px;color:var(--text-dark);
+    background:transparent;padding:2px 0;font-family:inherit;
+  }
+  select:disabled{color:var(--text-muted);}
+  .qty-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+  .qty-cell{display:flex;flex-direction:column;gap:4px;}
+  .qty-cell label{font-size:11.5px;color:var(--text-muted);font-weight:600;}
+  .qty-cell input{
+    border:1px solid var(--border);border-radius:8px;padding:8px 6px;
+    text-align:center;font-size:14px;background:#fafbfc;
+  }
+  .qty-cell input:focus{border-color:var(--tg-blue);background:#fff;}
+  .toggle-link{
+    font-size:12.5px;color:var(--tg-blue-dark);font-weight:600;cursor:pointer;
+    margin-top:10px;display:inline-block;
+  }
+  .total-row{
+    display:flex;justify-content:space-between;align-items:center;
+    padding-top:10px;margin-top:4px;border-top:1px dashed var(--border);
+    font-size:13.5px;color:var(--text-muted);
+  }
+  .total-row b{color:var(--text-dark);font-size:15px;}
+  .section-title{
+    font-size:13px;font-weight:700;color:var(--text-muted);margin:18px 4px 8px;
+    text-transform:uppercase;letter-spacing:.4px;
+  }
+  .main-btn-wrap{
+    position:fixed;bottom:0;left:0;right:0;padding:12px 14px 16px;
+    background:linear-gradient(to top, var(--bg) 60%, transparent);
+  }
+  .main-btn{
+    width:100%;background:var(--tg-blue);color:#fff;border:none;border-radius:12px;
+    padding:14px;font-size:16px;font-weight:700;cursor:pointer;
+    box-shadow:0 4px 14px rgba(42,171,238,.4);
+  }
+  .main-btn:disabled{background:#c7ccd1;box-shadow:none;cursor:not-allowed;}
+  .main-btn.confirm{background:#3ba55d;box-shadow:0 4px 14px rgba(59,165,93,.4);}
+  .success-screen{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:60px 30px;
+  }
+  .success-icon{
+    width:64px;height:64px;border-radius:50%;background:#e8f8ee;
+    display:flex;align-items:center;justify-content:center;font-size:32px;margin-bottom:16px;
+  }
+  .success-title{font-size:17px;font-weight:700;margin-bottom:6px;}
+  .success-sub{font-size:13.5px;color:var(--text-muted);line-height:1.6;}
+  .error-banner{
+    background:#fdecea;color:#c0392b;border:1px solid #f5c6c0;border-radius:10px;
+    padding:10px 14px;font-size:13px;margin-bottom:14px;
+  }
+  .badge{font-size:11px;background:#eef6fc;color:var(--tg-blue-dark);padding:2px 8px;border-radius:6px;font-weight:600;}
+  .loading-screen{
+    text-align:center;padding:60px 30px;color:var(--text-muted);font-size:14px;line-height:1.7;
+  }
+</style>
+</head>
+<body>
+
+<div id="loadingScreen" class="loading-screen">Memuat data kategori/varian...</div>
+
+<div id="mainWrap" style="display:none;">
+  <div class="app-body" id="formScreen">
+    <div id="errorBanner" class="error-banner" style="display:none;"></div>
+
+    <div class="section-title">Kategori</div>
+    <div class="field-group">
+      <div class="field"><div class="segmented" id="kategoriSeg"></div></div>
+    </div>
+
+    <div class="section-title">Detail Item</div>
+    <div class="field-group">
+      <div class="field">
+        <div class="field-label">Varian</div>
+        <select id="varianSelect"></select>
+      </div>
+      <div class="field">
+        <div class="field-label">Warna</div>
+        <input type="text" id="warnaInput" placeholder="Contoh: MERAH, BLACK, NAVY">
+      </div>
+      <div class="field">
+        <div class="field-label">Kg Kain Terpakai</div>
+        <input type="number" id="kgInput" placeholder="Contoh: 25.4" step="0.01">
+      </div>
+      <div class="field">
+        <div class="field-label">Kode Roll <span class="badge">opsional</span></div>
+        <input type="text" id="rollInput" placeholder="Contoh: 6097">
+      </div>
+    </div>
+
+    <div class="section-title">Qty per Size</div>
+    <div class="field-group">
+      <div class="field">
+        <div class="qty-grid" id="qtyGrid"></div>
+        <span class="toggle-link" id="toggleLain">+ Tampilkan ukuran lain (3XL-6XL)</span>
+        <div class="qty-grid" id="qtyGridLain" style="display:none;margin-top:10px;"></div>
+        <div class="total-row"><span>Total qty</span><b id="totalQty">0 pcs</b></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-body" id="confirmScreen" style="display:none;">
+    <div class="section-title">Cek Sebelum Kirim</div>
+    <div class="field-group" id="confirmBody" style="padding:14px;"></div>
+  </div>
+
+  <div class="success-screen" id="successScreen" style="display:none;">
+    <div class="success-icon">✅</div>
+    <div class="success-title">Tersimpan!</div>
+    <div class="success-sub">Data sudah masuk ke sheet TIM POTONG<br>dan stok kain otomatis diperbarui.</div>
+  </div>
+
+  <div class="main-btn-wrap" id="mainBtnWrap">
+    <button class="main-btn" id="mainBtn" disabled>Lanjut ke Konfirmasi</button>
+  </div>
+</div>
+
+<script>
+// =====================================================================================
+// GANTI baris di bawah ini dengan URL Web App Apps Script kamu sendiri
+// (Deploy > Manage deployments > lihat "Web app" URL-nya, bentuknya .../exec)
+// =====================================================================================
+const WEBAPP_URL = "GANTI_DENGAN_URL_WEB_APP_KAMU";
+
+const SIZES_UTAMA = ["XS","S","M","L","XL","XXL"];
+const SIZES_LAIN = ["3XL","4XL","5XL","6XL"];
+
+const tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
+
+let KATEGORI_VARIAN = {};
+let state = { kategori: null, kodeItem: null, warna: '', kg: '', roll: '', qty: {} };
+
+const varianSelect = document.getElementById('varianSelect');
+const warnaInput = document.getElementById('warnaInput');
+const kgInput = document.getElementById('kgInput');
+const rollInput = document.getElementById('rollInput');
+const qtyGrid = document.getElementById('qtyGrid');
+const qtyGridLain = document.getElementById('qtyGridLain');
+const totalQtyEl = document.getElementById('totalQty');
+const mainBtn = document.getElementById('mainBtn');
+const kategoriSeg = document.getElementById('kategoriSeg');
+const errorBanner = document.getElementById('errorBanner');
+
+function showError(msg){
+  errorBanner.textContent = '⚠ ' + msg;
+  errorBanner.style.display = 'block';
+  window.scrollTo(0,0);
+}
+function hideError(){ errorBanner.style.display = 'none'; }
+
+function renderKategori(){
+  const kategoriList = Object.keys(KATEGORI_VARIAN);
+  if (kategoriList.length === 0){
+    showError('Sheet KATEGORI VARIAN TIM POTONG masih kosong. Isi dulu dari spreadsheet.');
+    return;
+  }
+  kategoriSeg.innerHTML = '';
+  kategoriList.forEach(function(k, idx){
+    const btn = document.createElement('div');
+    btn.className = 'seg-btn' + (idx===0 ? ' active':'');
+    btn.textContent = k;
+    btn.onclick = function(){
+      kategoriSeg.querySelectorAll('.seg-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      state.kategori = k;
+      state.kodeItem = null;
+      renderVarian();
+      validate();
+    };
+    kategoriSeg.appendChild(btn);
+  });
+  state.kategori = kategoriList[0];
+  renderVarian();
+}
+
+function renderVarian(){
+  const list = KATEGORI_VARIAN[state.kategori] || [];
+  varianSelect.innerHTML = '<option value="">— pilih —</option>' +
+    list.map(function(v){ return '<option value="'+v.kode+'">'+v.label+'</option>'; }).join('');
+}
+
+function renderQtyGrid(container, sizes){
+  container.innerHTML = sizes.map(function(s){
+    return '<div class="qty-cell"><label>'+s+'</label><input type="number" min="0" data-size="'+s+'" placeholder="0"></div>';
+  }).join('');
+  container.querySelectorAll('input').forEach(function(inp){
+    inp.addEventListener('input', function(){
+      state.qty[inp.dataset.size] = parseInt(inp.value)||0;
+      updateTotal();
+      validate();
+    });
+  });
+}
+
+function updateTotal(){
+  const total = Object.keys(state.qty).reduce(function(sum,k){ return sum + (state.qty[k]||0); },0);
+  totalQtyEl.textContent = total + ' pcs';
+  return total;
+}
+
+document.getElementById('toggleLain').addEventListener('click', function(){
+  const showing = qtyGridLain.style.display !== 'none';
+  qtyGridLain.style.display = showing ? 'none' : 'grid';
+  this.textContent = showing ? '+ Tampilkan ukuran lain (3XL-6XL)' : '- Sembunyikan ukuran lain';
+});
+
+varianSelect.addEventListener('change', function(){
+  state.kodeItem = varianSelect.value || null;
+  validate();
+});
+warnaInput.addEventListener('input', function(){ state.warna = warnaInput.value; validate(); });
+kgInput.addEventListener('input', function(){ state.kg = kgInput.value; validate(); });
+rollInput.addEventListener('input', function(){ state.roll = rollInput.value; });
+
+function validate(){
+  const total = updateTotal();
+  const ok = state.kategori && state.kodeItem && state.warna.trim() &&
+    state.kg && parseFloat(state.kg) > 0 && total > 0;
+  mainBtn.disabled = !ok;
+}
+
+mainBtn.addEventListener('click', function(){
+  hideError();
+  if (mainBtn.textContent.indexOf('Lanjut') !== -1){
+    showConfirm();
+  } else if (mainBtn.textContent.indexOf('Kirim') !== -1){
+    submitToServer();
+  }
+});
+
+function showConfirm(){
+  document.getElementById('formScreen').style.display = 'none';
+  document.getElementById('confirmScreen').style.display = 'block';
+  const qtyLines = Object.keys(state.qty).filter(function(s){ return state.qty[s]>0; })
+    .map(function(s){ return s+' '+state.qty[s]; }).join('  ');
+  document.getElementById('confirmBody').innerHTML =
+    '<div style="font-size:14px;line-height:2;">' +
+    '<div><span style="color:var(--text-muted)">Kategori:</span> <b>'+state.kategori+'</b></div>' +
+    '<div><span style="color:var(--text-muted)">Varian:</span> <b>'+varianSelect.options[varianSelect.selectedIndex].text+'</b></div>' +
+    '<div><span style="color:var(--text-muted)">Warna:</span> <b>'+state.warna.toUpperCase()+'</b></div>' +
+    '<div><span style="color:var(--text-muted)">Kg kain:</span> <b>'+state.kg+' kg</b></div>' +
+    '<div><span style="color:var(--text-muted)">Kode roll:</span> <b>'+(state.roll || '—')+'</b></div>' +
+    '<div><span style="color:var(--text-muted)">Qty:</span> <b>'+qtyLines+'</b></div>' +
+    '<div><span style="color:var(--text-muted)">Total:</span> <b>'+updateTotal()+' pcs</b></div>' +
+    '</div>';
+  mainBtn.textContent = '✅ Kirim ke Sheet';
+  mainBtn.classList.add('confirm');
+}
+
+function submitToServer(){
+  mainBtn.disabled = true;
+  mainBtn.textContent = 'Mengirim...';
+  const payload = {
+    source: 'miniapp_v1',
+    initData: tg ? tg.initData : '',
+    platform: tg ? tg.platform : 'tidak ada tg.WebApp',
+    version: tg ? tg.version : '?',
+    kategori: state.kategori,
+    kodeItem: state.kodeItem,
+    warna: state.warna,
+    kg: state.kg,
+    kodeRoll: state.roll,
+    qty: state.qty
+  };
+  fetch(WEBAPP_URL, { method: 'POST', body: JSON.stringify(payload) })
+    .then(function(r){ return r.json(); })
+    .then(function(res){
+      if (res.ok){
+        document.getElementById('confirmScreen').style.display = 'none';
+        document.getElementById('mainBtnWrap').style.display = 'none';
+        document.getElementById('successScreen').style.display = 'flex';
+        if (tg){
+          if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+          setTimeout(function(){ tg.close(); }, 1600);
+        }
+      } else {
+        document.getElementById('confirmScreen').style.display = 'none';
+        document.getElementById('formScreen').style.display = 'block';
+        mainBtn.textContent = 'Lanjut ke Konfirmasi';
+        mainBtn.classList.remove('confirm');
+        showError(res.error || 'Gagal menyimpan, coba lagi');
+        validate();
+      }
+    })
+    .catch(function(err){
+      document.getElementById('confirmScreen').style.display = 'none';
+      document.getElementById('formScreen').style.display = 'block';
+      mainBtn.textContent = 'Lanjut ke Konfirmasi';
+      mainBtn.classList.remove('confirm');
+      showError('Gagal terhubung: ' + err.message);
+      validate();
+    });
+}
+
+// Init: ambil data Kategori/Varian dulu lewat fetch biasa (bukan disisipkan server-side lagi),
+// baru render form-nya setelah data siap.
+if (tg){
+  tg.ready();
+  tg.expand();
+}
+fetch(WEBAPP_URL + '?action=kategori')
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    KATEGORI_VARIAN = data;
+    document.getElementById('loadingScreen').style.display = 'none';
+    document.getElementById('mainWrap').style.display = 'block';
+    renderKategori();
+    renderQtyGrid(qtyGrid, SIZES_UTAMA);
+    renderQtyGrid(qtyGridLain, SIZES_LAIN);
+    validate();
+  })
+  .catch(function(err){
+    document.getElementById('loadingScreen').textContent = 'Gagal memuat data: ' + err.message + ' (cek WEBAPP_URL di kode)';
+  });
+</script>
+</body>
+</html>
