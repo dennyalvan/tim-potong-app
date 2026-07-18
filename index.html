@@ -195,8 +195,8 @@
   }
   .combo-picker-btn .chev{font-size:13px;opacity:.7;}
   .combo-dropdown{
-    position:absolute;left:16px;right:16px;top:100%;margin-top:6px;background:#fff;border-radius:14px;
-    box-shadow:0 10px 30px rgba(0,0,0,.18);max-height:260px;overflow-y:auto;z-index:50;display:none;
+    position:fixed;background:#fff;border-radius:14px;
+    box-shadow:0 10px 30px rgba(0,0,0,.18);max-height:260px;overflow-y:auto;z-index:999;display:none;
   }
   .combo-opt{padding:13px 15px;font-size:15px;font-weight:600;border-bottom:0.5px solid var(--sep);cursor:pointer;
     display:flex;justify-content:space-between;align-items:center;}
@@ -552,6 +552,18 @@ warnaInput.addEventListener('blur', function(){ setTimeout(function(){ warnaDrop
 kgInput.addEventListener('input', function(){ state.kg = kgInput.value; validate(); });
 rollInput.addEventListener('input', function(){ state.roll = rollInput.value; });
 
+document.body.appendChild(comboDropdown);
+window.addEventListener('scroll', function(){
+  if (comboDropdown.style.display === 'block') posisikanComboDropdown();
+}, true);
+
+function posisikanComboDropdown(){
+  const r = comboPickerBtn.getBoundingClientRect();
+  comboDropdown.style.left = r.left + 'px';
+  comboDropdown.style.top = (r.bottom + 6) + 'px';
+  comboDropdown.style.width = r.width + 'px';
+}
+
 comboPickerBtn.addEventListener('click', function(){
   const showing = comboDropdown.style.display === 'block';
   if (showing){ comboDropdown.style.display = 'none'; return; }
@@ -570,6 +582,7 @@ comboPickerBtn.addEventListener('click', function(){
     });
   });
   comboDropdown.style.display = 'block';
+  posisikanComboDropdown();
 });
 
 function pilihKombinasi(c){
