@@ -219,7 +219,8 @@
       </div>
       <div class="row">
         <div class="row-label">Warna</div>
-        <input type="text" id="warnaInput">
+        <input type="text" id="warnaInput" list="warnaDatalist">
+        <datalist id="warnaDatalist"></datalist>
       </div>
       <div class="row">
         <div class="row-label">Kg Kain Terpakai</div>
@@ -279,6 +280,8 @@ const SIZES_UTAMA = ["XS","S","M","L","XL","XXL"];
 const SIZES_LAIN = ["3XL","4XL","5XL","6XL"];
 const CACHE_KEY = 'timpotong_kategori_varian_cache_v1';
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const WARNA_CACHE_KEY = 'timpotong_warna_cache_v1';
+const WARNA_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 1 hari - stok kain bergerak tiap hari, beda dari kategori/varian yang jarang berubah
 
 const tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
 
@@ -585,6 +588,31 @@ function fetchFresh(isBackground){
 }
 
 if (tg){ tg.ready(); tg.expand(); }
+
+// ---- Daftar warna buat autocomplete - JALAN TERPISAH dari kategori/varian, tidak menahan
+// loading screen (murni saran, form tetap bisa diisi manual walau ini masih/gagal memuat) ----
+function renderWarnaDatalist(list){
+  const dl = document.getElementById('warnaDatalist');
+  dl.innerHTML = list.map(function(w){ return '<option value="'+w+'">'; }).join('');
+}
+function fetchWarnaFresh(){
+  fetch(WEBAPP_URL + '?action=warna')
+    .then(function(r){ return r.json(); })
+    .then(function(list){
+      renderWarnaDatalist(list);
+      try { localStorage.setItem(WARNA_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: list })); } catch(e){}
+    })
+    .catch(function(){ /* diamkan - autocomplete cuma bonus, gak boleh ganggu form kalau gagal */ });
+}
+(function bootstrapWarna(){
+  try {
+    const cached = JSON.parse(localStorage.getItem(WARNA_CACHE_KEY) || 'null');
+    if (cached && cached.data && (Date.now() - cached.ts) < WARNA_CACHE_TTL_MS){
+      renderWarnaDatalist(cached.data);
+    }
+  } catch(e){}
+  fetchWarnaFresh(); // selalu refresh diam-diam juga, biar ikutan warna baru dari stok masuk
+})();
 
 let dariCache = false;
 try {
