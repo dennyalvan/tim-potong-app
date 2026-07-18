@@ -255,7 +255,16 @@ function scrollKeTengah_(el){
     }, 300); // jeda dikit nunggu keyboard HP muncul dulu, biar posisi scroll-nya pas
   });
 }
-[varianSelect, warnaInput, kgInput, rollInput].forEach(scrollKeTengah_);
+[varianSelect, warnaInput, kgInput].forEach(scrollKeTengah_);
+
+// Kode Roll: field ini biasanya diisi TERAKHIR sebelum lanjut ke Qty per Size, jadi begitu
+// fokus di sini, langsung scroll ke bagian QTY (bukan ke kolom roll-nya sendiri) - biar pas
+// selesai isi roll, kolom qty udah kelihatan siap diisi tanpa scroll manual lagi.
+rollInput.addEventListener('focus', function(){
+  setTimeout(function(){
+    document.getElementById('qtyGrid').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 300);
+});
 
 function renderKategori(){
   const kategoriList = Object.keys(KATEGORI_VARIAN);
@@ -406,8 +415,10 @@ function generateTeksHtmlPreview_(){
     } else {
       line1Text = item.varianLabel.toUpperCase() + ' ' + item.warna.toUpperCase() + ' ' + item.kg + 'kg';
     }
-    const qtyHtml = Object.keys(item.qty).filter(function(s){ return item.qty[s] > 0; })
-      .map(function(s){ return escapeHtml_(s) + '<b>' + item.qty[s] + '</b>'; }).join(' ');
+    const daftarSize = Object.keys(item.qty).filter(function(s){ return item.qty[s] > 0; });
+    const totalQtyItem = daftarSize.reduce(function(sum,s){ return sum + item.qty[s]; }, 0);
+    const qtyHtml = daftarSize.map(function(s){ return escapeHtml_(s) + '<b>' + item.qty[s] + '</b>'; }).join(' ') +
+      ' = <b>' + totalQtyItem + '</b>';
     return escapeHtml_(line1Text) + '\n' + qtyHtml;
   }).join('\n\n');
 }
