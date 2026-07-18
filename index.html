@@ -7,126 +7,188 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root{
-    --tg-blue:#2AABEE;
-    --tg-blue-dark:#229ED9;
-    --bg:#F0F2F5;
+    --ink:#1C1C1E;
+    --ink-2:#8E8E93;
+    --ink-3:#C6C6C8;
+    --canvas:#F2F2F7;
     --card:#FFFFFF;
-    --text-dark:#1c1c1c;
-    --text-muted:#8b9299;
-    --border:#e4e7eb;
-    --green:#3ba55d;
+    --sep:#E5E5EA;
+    --danger:#FF3B30;
+    --danger-bg:#FFF0EF;
+    --success:#34C759;
+
+    --theme-accent:#3AAFC0;
+    --theme-accent-deep:#1F7A88;
+    --theme-accent-soft:#E4F6F8;
+    --theme-bg-image: none;
   }
-  *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;background:var(--bg);}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
   body{
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-    color:var(--text-dark);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Segoe UI",Roboto,sans-serif;
+    color:var(--ink);
+    background-color:var(--canvas);
+    background-image:var(--theme-bg-image);
+    transition:background-color .4s ease;
     padding-bottom:150px;
+    -webkit-font-smoothing:antialiased;
   }
-  .app-body{padding:14px;}
-  .field-group{
-    background:var(--card);
-    border-radius:14px;
-    padding:4px 14px;
-    margin-bottom:14px;
-    border:1px solid var(--border);
+
+  .topbar{padding:20px 20px 6px;}
+  .topbar-eyebrow{
+    font-size:13px;font-weight:600;color:var(--theme-accent-deep);letter-spacing:.2px;
+    text-transform:uppercase;margin-bottom:2px;transition:color .4s;
   }
-  .field{padding:12px 0;border-bottom:1px solid var(--border);}
-  .field:last-child{border-bottom:none;}
-  .field-label{
-    font-size:12px;color:var(--text-muted);margin-bottom:6px;font-weight:600;
+  .topbar-title{font-size:30px;font-weight:750;letter-spacing:-.4px;line-height:1.1;}
+
+  .loading-screen{text-align:center;padding:60px 30px;color:var(--ink-2);font-size:14px;line-height:1.7;}
+
+  .app-body{padding:8px 16px 0;}
+
+  .section-label{
+    font-size:13px;font-weight:600;color:var(--ink-2);
     text-transform:uppercase;letter-spacing:.3px;
+    margin:22px 6px 8px;display:flex;justify-content:space-between;align-items:center;
   }
-  .segmented{display:flex;background:#eef0f2;border-radius:9px;padding:3px;gap:3px;flex-wrap:wrap;}
-  .seg-btn{
-    flex:1;min-width:70px;text-align:center;padding:8px 4px;border-radius:7px;
-    font-size:13.5px;font-weight:600;color:var(--text-muted);cursor:pointer;
+  .section-label .count-chip{
+    background:var(--theme-accent);color:#fff;border-radius:20px;padding:2px 10px;
+    font-size:12.5px;font-weight:700;transition:background .4s;
   }
-  .seg-btn.active{background:#fff;color:var(--tg-blue-dark);box-shadow:0 1px 3px rgba(0,0,0,.12);}
-  select,input[type=number],input[type=text],textarea{
-    width:100%;border:none;outline:none;font-size:15.5px;color:var(--text-dark);
-    background:transparent;padding:2px 0;font-family:inherit;
+
+  .card{
+    background:var(--card);border-radius:18px;
+    box-shadow:0 1px 2px rgba(0,0,0,.04), 0 0 0 0.5px rgba(0,0,0,.04);
+    overflow:hidden;
+  }
+  .card + .card{margin-top:14px;}
+
+  .row{
+    padding:14px 16px;border-bottom:0.5px solid var(--sep);
+    display:flex;flex-direction:column;gap:4px;
+  }
+  .row:last-child{border-bottom:none;}
+  .row-label{font-size:12.5px;color:var(--ink-2);font-weight:600;}
+  select,input[type=number],input[type=text]{
+    width:100%;border:none;outline:none;font-size:17px;color:var(--ink);
+    background:transparent;padding:1px 0;font-family:inherit;font-weight:450;
   }
   #warnaInput{text-transform:uppercase;}
-  select:disabled{color:var(--text-muted);}
-  .qty-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
-  .qty-cell{display:flex;flex-direction:column;gap:4px;}
-  .qty-cell label{font-size:11.5px;color:var(--text-muted);font-weight:600;}
-  .qty-cell input{
-    border:1px solid var(--border);border-radius:8px;padding:8px 6px;
-    text-align:center;font-size:14px;background:#fafbfc;
+  select:disabled{color:var(--ink-3);}
+
+  .item-row{
+    padding:12px 16px;border-bottom:0.5px solid var(--sep);
+    display:flex;justify-content:space-between;align-items:center;gap:10px;
   }
-  .qty-cell input:focus{border-color:var(--tg-blue);background:#fff;}
+  .item-row:last-child{border-bottom:none;}
+  .item-row-text{font-size:14.5px;line-height:1.55;}
+  .item-row-text b{font-weight:650;}
+  .item-row-tag{
+    display:inline-block;font-size:10.5px;font-weight:700;padding:1.5px 7px;border-radius:6px;
+    margin-right:6px;background:var(--theme-accent-soft);color:var(--theme-accent-deep);
+    transition:all .4s;
+  }
+  .item-row-del{
+    color:var(--danger);font-size:20px;line-height:1;cursor:pointer;flex-shrink:0;
+    width:28px;height:28px;display:flex;align-items:center;justify-content:center;
+  }
+  .empty-hint{text-align:center;color:var(--ink-2);font-size:14px;padding:26px 16px;}
+
+  .tab-row{display:flex;gap:12px;}
+  .tab-card{
+    flex:1;border:none;border-radius:18px;padding:14px 10px;cursor:pointer;
+    display:flex;flex-direction:row;align-items:center;justify-content:center;gap:10px;
+    background:var(--card);
+    box-shadow:0 1px 2px rgba(0,0,0,.04), 0 0 0 0.5px rgba(0,0,0,.04);
+    color:var(--ink-2);transition:all .25s cubic-bezier(.2,.9,.3,1.2);
+  }
+  .tab-icon-badge{
+    width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;
+    background:var(--canvas);transition:all .3s;flex-shrink:0;
+  }
+  .tab-label{font-size:14px;font-weight:700;letter-spacing:.2px;text-transform:uppercase;}
+  .tab-card.active{
+    color:#fff;transform:translateY(-3px) scale(1.015);
+    box-shadow:0 10px 22px -6px var(--tab-shadow, rgba(0,0,0,.25));
+  }
+  .tab-card.tab-anak.active{ background:linear-gradient(160deg,#4FC7D6,#217F8D); --tab-shadow:rgba(33,127,141,.4); }
+  .tab-card.tab-dewasa.active{ background:linear-gradient(160deg,#3D5C87,#16283F); --tab-shadow:rgba(22,40,63,.4); }
+  .tab-card.tab-lain.active{ background:linear-gradient(160deg,#9C8EE0,#6B5BC4); --tab-shadow:rgba(107,91,196,.4); }
+  .tab-card.active .tab-icon-badge{ background:rgba(255,255,255,.22); }
+  .tab-card.active .tab-label{ color:#fff; }
+
+  .qty-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;padding:14px 16px;}
+  .qty-cell{display:flex;flex-direction:column;gap:5px;}
+  .qty-cell label{font-size:11.5px;color:var(--ink-2);font-weight:650;text-align:center;}
+  .qty-cell input{
+    border:1px solid var(--sep);border-radius:11px;padding:9px 4px;
+    text-align:center;font-size:16px;background:var(--canvas);font-weight:600;
+  }
+  .qty-cell input:focus{border-color:var(--theme-accent);background:#fff;}
   .toggle-link{
-    font-size:12.5px;color:var(--tg-blue-dark);font-weight:600;cursor:pointer;
-    margin-top:10px;display:inline-block;
+    font-size:13px;color:var(--theme-accent-deep);font-weight:600;cursor:pointer;
+    padding:2px 16px 12px;display:inline-block;transition:color .4s;
   }
   .total-row{
     display:flex;justify-content:space-between;align-items:center;
-    padding-top:10px;margin-top:4px;border-top:1px dashed var(--border);
-    font-size:13.5px;color:var(--text-muted);
+    padding:12px 16px;border-top:0.5px solid var(--sep);
+    font-size:13.5px;color:var(--ink-2);font-weight:500;
   }
-  .total-row b{color:var(--text-dark);font-size:15px;}
-  .section-title{
-    font-size:13px;font-weight:700;color:var(--text-muted);margin:18px 4px 8px;
-    text-transform:uppercase;letter-spacing:.4px;
-    display:flex;justify-content:space-between;align-items:center;
-  }
+  .total-row b{color:var(--ink);font-size:17px;font-weight:700;}
+
   .btn-row{
-    position:fixed;bottom:0;left:0;right:0;padding:10px 14px 14px;
-    background:linear-gradient(to top, var(--bg) 70%, transparent);
-    display:flex;gap:8px;
+    position:fixed;bottom:0;left:0;right:0;padding:12px 16px calc(16px + env(safe-area-inset-bottom));
+    background:rgba(242,242,247,.82);backdrop-filter:blur(20px) saturate(1.6);
+    -webkit-backdrop-filter:blur(20px) saturate(1.6);
+    border-top:0.5px solid var(--sep);
+    display:flex;gap:10px;
   }
   .btn{
-    flex:1;border:none;border-radius:12px;padding:13px;font-size:14.5px;font-weight:700;
-    cursor:pointer;
+    flex:1;border:none;border-radius:14px;padding:14px;font-size:16px;font-weight:650;
+    cursor:pointer;letter-spacing:-.1px;
   }
-  .btn-primary{background:var(--tg-blue);color:#fff;box-shadow:0 4px 14px rgba(42,171,238,.4);}
-  .btn-primary:disabled{background:#c7ccd1;box-shadow:none;cursor:not-allowed;}
-  .btn-secondary{background:#fff;color:var(--tg-blue-dark);border:1.5px solid var(--tg-blue);}
-  .btn-green{background:var(--green);color:#fff;box-shadow:0 4px 14px rgba(59,165,93,.4);}
+  .btn-primary{background:var(--theme-accent-deep);color:#fff;transition:background .4s;}
+  .btn-primary:disabled{background:var(--ink-3);cursor:not-allowed;}
+  .btn-secondary{background:var(--theme-accent-soft);color:var(--theme-accent-deep);transition:all .4s;}
+  .btn-green{background:var(--success);color:#fff;}
   .btn-full{width:100%;}
-  .item-list{margin-bottom:14px;}
-  .item-row{
-    background:var(--card);border:1px solid var(--border);border-radius:12px;
-    padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;
-  }
-  .item-row-text{font-size:13.5px;line-height:1.5;}
-  .item-row-text b{color:var(--tg-blue-dark);}
-  .item-row-del{
-    color:#c0392b;font-size:13px;font-weight:700;cursor:pointer;padding:4px 8px;flex-shrink:0;
-  }
-  .empty-hint{
-    text-align:center;color:var(--text-muted);font-size:13px;padding:16px;
-  }
-  .success-screen{
-    display:flex;flex-direction:column;align-items:center;text-align:center;padding:20px 20px 0;
-  }
-  .success-icon{
-    width:56px;height:56px;border-radius:50%;background:#e8f8ee;
-    display:flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:10px;
-  }
-  .success-title{font-size:16px;font-weight:700;margin-bottom:4px;}
-  .success-sub{font-size:13px;color:var(--text-muted);line-height:1.5;margin-bottom:14px;}
-  .teks-box{
-    width:100%;min-height:160px;background:var(--card);border:1px solid var(--border);
-    border-radius:12px;padding:12px;font-size:13.5px;line-height:1.6;white-space:pre-wrap;
-    font-family:ui-monospace,Menlo,Consolas,monospace;text-align:left;color:var(--text-dark);
-  }
+
   .error-banner{
-    background:#fdecea;color:#c0392b;border:1px solid #f5c6c0;border-radius:10px;
-    padding:10px 14px;font-size:13px;margin-bottom:14px;
+    background:var(--danger-bg);color:var(--danger);border-radius:14px;
+    padding:12px 16px;font-size:14px;margin:0 0 6px;font-weight:550;
   }
-  .badge{font-size:11px;background:#eef6fc;color:var(--tg-blue-dark);padding:2px 8px;border-radius:6px;font-weight:600;}
-  .loading-screen{
-    text-align:center;padding:60px 30px;color:var(--text-muted);font-size:14px;line-height:1.7;
+  .badge{font-size:10.5px;background:var(--canvas);color:var(--ink-2);padding:2px 8px;border-radius:6px;font-weight:650;}
+
+  .success-screen{display:flex;flex-direction:column;align-items:center;text-align:center;padding:6px 12px 0;}
+  .success-icon{
+    width:56px;height:56px;border-radius:16px;background:var(--theme-accent-soft);
+    display:flex;align-items:center;justify-content:center;margin-bottom:12px;transition:background .4s;
   }
-  .copied-flash{
-    color:var(--green);font-size:13px;font-weight:700;margin-top:8px;display:none;
+  .success-icon svg{width:28px;height:28px;color:var(--theme-accent-deep);transition:color .4s;}
+  .success-title{font-size:20px;font-weight:700;letter-spacing:-.3px;margin-bottom:4px;}
+
+  .cut-divider{position:relative;height:2px;margin:20px 6px 4px;background-image:repeating-linear-gradient(90deg, var(--ink-3) 0 7px, transparent 7px 15px);}
+  .cut-divider .scissor-chip{
+    position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    background:var(--canvas);width:28px;height:28px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;font-size:13px;
+    border:1.5px dashed var(--ink-3);transition:background .4s;
   }
+  .success-sub{font-size:14px;color:var(--ink-2);line-height:1.5;margin-bottom:16px;}
+  .teks-box{
+    width:100%;min-height:150px;background:var(--card);border-radius:16px;
+    box-shadow:0 1px 2px rgba(0,0,0,.04), 0 0 0 0.5px rgba(0,0,0,.04);
+    padding:16px;font-size:14px;line-height:1.75;white-space:pre-wrap;
+    font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;text-align:left;color:var(--ink);
+  }
+  .copied-flash{color:var(--success);font-size:13.5px;font-weight:650;margin-top:10px;display:none;}
 </style>
 </head>
 <body>
+
+<div class="topbar">
+  <div class="topbar-eyebrow" id="topbarEyebrow">Tim Potong</div>
+  <div class="topbar-title">Input Produksi</div>
+</div>
 
 <div id="loadingScreen" class="loading-screen">Memuat data kategori/varian...</div>
 
@@ -135,71 +197,73 @@
   <div class="app-body" id="formScreen">
     <div id="errorBanner" class="error-banner" style="display:none;"></div>
 
-    <div class="section-title">
-      <span>Daftar Item (<span id="itemCount">0</span>)</span>
-    </div>
-    <div class="item-list" id="itemList">
-      <div class="empty-hint" id="emptyHint">Belum ada item ditambahkan</div>
-    </div>
-
-    <div class="section-title">Kategori</div>
-    <div class="field-group">
-      <div class="field"><div class="segmented" id="kategoriSeg"></div></div>
+    <div class="section-label"><span>Daftar Item</span><span class="count-chip" id="itemCount">0</span></div>
+    <div class="card">
+      <div id="itemList">
+        <div class="empty-hint" id="emptyHint">Belum ada item ditambahkan</div>
+      </div>
     </div>
 
-    <div class="section-title">Detail Item Baru</div>
-    <div class="field-group">
-      <div class="field">
-        <div class="field-label">Varian</div>
+    <div class="cut-divider"><div class="scissor-chip">✂️</div></div>
+
+    <div class="section-label">Kategori</div>
+    <div class="tab-row" id="kategoriSeg"></div>
+
+    <div class="cut-divider"><div class="scissor-chip">✂️</div></div>
+
+    <div class="section-label">Detail Item Baru</div>
+    <div class="card">
+      <div class="row">
+        <div class="row-label">Varian</div>
         <select id="varianSelect"></select>
       </div>
-      <div class="field">
-        <div class="field-label">Warna</div>
-        <input type="text" id="warnaInput" placeholder="Contoh: MERAH, BLACK, NAVY">
+      <div class="row">
+        <div class="row-label">Warna</div>
+        <input type="text" id="warnaInput">
       </div>
-      <div class="field">
-        <div class="field-label">Kg Kain Terpakai</div>
-        <input type="number" id="kgInput" placeholder="Contoh: 25.4" step="0.01">
+      <div class="row">
+        <div class="row-label">Kg Kain Terpakai</div>
+        <input type="number" id="kgInput" step="0.01">
       </div>
-      <div class="field">
-        <div class="field-label">Kode Roll <span class="badge">opsional</span></div>
-        <input type="text" id="rollInput" placeholder="Contoh: 6097">
+      <div class="row">
+        <div class="row-label">Kode Roll <span class="badge">opsional</span></div>
+        <input type="text" id="rollInput">
       </div>
     </div>
 
-    <div class="section-title">Qty per Size</div>
-    <div class="field-group">
-      <div class="field">
-        <div class="qty-grid" id="qtyGrid"></div>
-        <span class="toggle-link" id="toggleLain">+ Tampilkan ukuran lain (3XL-6XL)</span>
-        <div class="qty-grid" id="qtyGridLain" style="display:none;margin-top:10px;"></div>
-        <div class="total-row"><span>Total qty item ini</span><b id="totalQty">0 pcs</b></div>
-      </div>
+    <div class="cut-divider"><div class="scissor-chip">✂️</div></div>
+
+    <div class="section-label">Qty per Size</div>
+    <div class="card">
+      <div class="qty-grid" id="qtyGrid"></div>
+      <span class="toggle-link" id="toggleLain">Tampilkan ukuran lain (3XL–6XL)</span>
+      <div class="qty-grid" id="qtyGridLain" style="display:none;"></div>
+      <div class="total-row"><span>Total qty item ini</span><b id="totalQty">0 pcs</b></div>
     </div>
   </div>
 
   <div class="app-body" id="successScreen" style="display:none;">
     <div class="success-screen">
-      <div class="success-icon">📋</div>
-      <div class="success-title">Teks siap dikirim!</div>
-      <div class="success-sub">Salin teks di bawah, lalu paste &amp; kirim MANUAL ke chat grup ini.</div>
+      <div class="success-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+      <div class="success-title">Teks siap dikirim</div>
+      <div class="success-sub">Salin teks di bawah, lalu paste &amp; kirim manual ke chat grup ini.</div>
     </div>
     <div class="teks-box" id="teksHasil"></div>
     <div style="text-align:center;">
-      <div class="copied-flash" id="copiedFlash">✅ Tersalin ke clipboard!</div>
+      <div class="copied-flash" id="copiedFlash">Tersalin ke clipboard</div>
     </div>
   </div>
 
   <div class="btn-row" id="btnRowForm">
-    <button class="btn btn-secondary" id="btnTambah">+ Tambah ke Daftar</button>
-    <button class="btn btn-green" id="btnBuatTeks" disabled>Buat Teks (0)</button>
+    <button class="btn btn-secondary" id="btnTambah">Tambah ke Daftar</button>
+    <button class="btn btn-primary" id="btnBuatTeks" disabled>Buat Teks (0)</button>
   </div>
 
-  <div class="btn-row" id="btnRowSukses" style="display:none;flex-direction:column;gap:8px;">
-    <button class="btn btn-primary btn-full" id="btnKirimChat">📤 Kirim ke Chat</button>
-    <div style="display:flex;gap:8px;">
-      <button class="btn btn-secondary" id="btnKembali">‹ Kembali Edit</button>
-      <button class="btn btn-secondary" id="btnSalin">📋 Salin Teks</button>
+  <div class="btn-row" id="btnRowSukses" style="display:none;flex-direction:column;gap:10px;">
+    <button class="btn btn-green btn-full" id="btnKirimChat">Kirim ke Chat</button>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-secondary" id="btnKembali">Kembali Edit</button>
+      <button class="btn btn-secondary" id="btnSalin">Salin Teks</button>
     </div>
   </div>
 
@@ -207,17 +271,41 @@
 
 <script>
 // =====================================================================================
-// GANTI baris di bawah ini dengan URL Web App Apps Script kamu sendiri
-// (Deploy > Manage deployments > lihat "Web app" URL-nya, bentuknya .../exec)
+// URL Web App Apps Script - GANTI kalau kamu redeploy ke project/URL yang berbeda
 // =====================================================================================
 const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzaWvCi3Vw2fnFgBPfn1qvFBSqYXOrdWi8yxvKc8WOtaIH78JN83dIMiQtQeockW6EDBw/exec";
 
 const SIZES_UTAMA = ["XS","S","M","L","XL","XXL"];
 const SIZES_LAIN = ["3XL","4XL","5XL","6XL"];
 const CACHE_KEY = 'timpotong_kategori_varian_cache_v1';
-const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 hari - refresh diam-diam tetap jalan tiap buka (lihat fetchFresh(true)), jadi datanya gak akan basi walau TTL panjang
+const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 const tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
+
+const THEME = {
+  anak: { key:'anak', accent:'#2FA8BA', accentDeep:'#1B7684', accentSoft:'#D8F1F3', canvas:'#D9F1F3', bgImage:'none' },
+  dewasa: { key:'dewasa', accent:'#2C4870', accentDeep:'#16283F', accentSoft:'#DCE6F0', canvas:'#D3DFEC', bgImage:'none' },
+  lain: { key:'lain', accent:'#6B5BC4', accentDeep:'#4E3FA0', accentSoft:'#E4E0F7', canvas:'#E4E0F7', bgImage:'none' }
+};
+const ICONS = {
+  anak: `<span style="font-size:28px;line-height:1;">🧒</span>`,
+  dewasa: `<span style="font-size:28px;line-height:1;">🧍</span>`,
+  lain: `<span style="font-size:28px;line-height:1;">✦</span>`
+};
+function themeUntukKategori(nama){
+  const n = nama.toLowerCase();
+  if (n.indexOf('anak') !== -1) return THEME.anak;
+  if (n.indexOf('dewasa') !== -1) return THEME.dewasa;
+  return THEME.lain;
+}
+function terapkanTema(theme){
+  const root = document.documentElement;
+  root.style.setProperty('--theme-accent', theme.accent);
+  root.style.setProperty('--theme-accent-deep', theme.accentDeep);
+  root.style.setProperty('--theme-accent-soft', theme.accentSoft);
+  root.style.setProperty('--canvas', theme.canvas);
+  root.style.setProperty('--theme-bg-image', theme.bgImage);
+}
 
 let KATEGORI_VARIAN = {};
 let daftarItem = []; // {kategori, kodeItem, varianLabel, warna, kg, roll, qty}
@@ -248,18 +336,19 @@ function showError(msg){
 }
 function hideError(){ errorBanner.style.display = 'none'; }
 
+// Auto-scroll ke kolom aktif - SENGAJA TIDAK dipasang di kolom Qty per Size (lihat
+// renderQtyGrid di bawah): begitu user sudah masuk area qty dan pindah-pindah antar kotak
+// ukuran, scroll tambahan tiap ganti kotak bikin pusing/goyang - jadi field-field lain tetap
+// auto-scroll, tapi kotak qty dibiarkan diam begitu sudah kelihatan sekali.
 function scrollKeTengah_(el){
   el.addEventListener('focus', function(){
     setTimeout(function(){
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 300); // jeda dikit nunggu keyboard HP muncul dulu, biar posisi scroll-nya pas
+    }, 300);
   });
 }
 [varianSelect, warnaInput, kgInput].forEach(scrollKeTengah_);
 
-// Kode Roll: field ini biasanya diisi TERAKHIR sebelum lanjut ke Qty per Size, jadi begitu
-// fokus di sini, langsung scroll ke bagian QTY (bukan ke kolom roll-nya sendiri) - biar pas
-// selesai isi roll, kolom qty udah kelihatan siap diisi tanpa scroll manual lagi.
 rollInput.addEventListener('focus', function(){
   setTimeout(function(){
     document.getElementById('qtyGrid').scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -274,20 +363,23 @@ function renderKategori(){
   }
   kategoriSeg.innerHTML = '';
   kategoriList.forEach(function(k, idx){
-    const btn = document.createElement('div');
-    btn.className = 'seg-btn' + (idx===0 ? ' active':'');
-    btn.textContent = k;
+    const theme = themeUntukKategori(k);
+    const btn = document.createElement('button');
+    btn.className = 'tab-card tab-' + theme.key + (idx===0 ? ' active':'');
+    btn.innerHTML = '<div class="tab-icon-badge">'+ICONS[theme.key]+'</div><div class="tab-label">'+k+'</div>';
     btn.onclick = function(){
-      kategoriSeg.querySelectorAll('.seg-btn').forEach(b=>b.classList.remove('active'));
+      kategoriSeg.querySelectorAll('.tab-card').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
       state.kategori = k;
       state.kodeItem = null;
+      terapkanTema(theme);
       renderVarian();
       validate();
     };
     kategoriSeg.appendChild(btn);
   });
   state.kategori = kategoriList[0];
+  terapkanTema(themeUntukKategori(kategoriList[0]));
   renderVarian();
 }
 
@@ -299,10 +391,9 @@ function renderVarian(){
 
 function renderQtyGrid(container, sizes){
   container.innerHTML = sizes.map(function(s){
-    return '<div class="qty-cell"><label>'+s+'</label><input type="number" min="0" data-size="'+s+'" placeholder="0"></div>';
+    return '<div class="qty-cell"><label>'+s+'</label><input type="number" min="0" data-size="'+s+'"></div>';
   }).join('');
   container.querySelectorAll('input').forEach(function(inp){
-    scrollKeTengah_(inp);
     inp.addEventListener('input', function(){
       state.qty[inp.dataset.size] = parseInt(inp.value)||0;
       updateTotal();
@@ -324,7 +415,7 @@ function updateTotal(){
 document.getElementById('toggleLain').addEventListener('click', function(){
   const showing = qtyGridLain.style.display !== 'none';
   qtyGridLain.style.display = showing ? 'none' : 'grid';
-  this.textContent = showing ? '+ Tampilkan ukuran lain (3XL-6XL)' : '- Sembunyikan ukuran lain';
+  this.textContent = showing ? 'Tampilkan ukuran lain (3XL-6XL)' : 'Sembunyikan ukuran lain';
 });
 
 varianSelect.addEventListener('change', function(){
@@ -346,23 +437,21 @@ function renderItemList(){
   itemCountEl.textContent = daftarItem.length;
   btnBuatTeks.textContent = 'Buat Teks (' + daftarItem.length + ')';
   btnBuatTeks.disabled = daftarItem.length === 0;
-
   if (daftarItem.length === 0){
     itemList.innerHTML = '';
     itemList.appendChild(emptyHint);
-    emptyHint.style.display = 'block';
     return;
   }
   itemList.innerHTML = '';
   daftarItem.forEach(function(item, idx){
     const qtyLines = Object.keys(item.qty).filter(function(s){return item.qty[s]>0;})
-      .map(function(s){ return s+' '+item.qty[s]; }).join(' ');
+      .map(function(s){ return s+item.qty[s]; }).join(' ');
     const row = document.createElement('div');
     row.className = 'item-row';
     row.innerHTML =
-      '<div class="item-row-text"><b>' + item.varianLabel.toUpperCase() + ' ' + item.warna.toUpperCase() + '</b> - ' +
+      '<div class="item-row-text"><span class="item-row-tag">'+item.kategori+'</span><b>' + item.varianLabel.toUpperCase() + ' ' + item.warna.toUpperCase() + '</b> - ' +
       item.kg + 'kg' + (item.roll ? ' (roll ' + item.roll + ')' : '') + '<br>' + qtyLines + '</div>' +
-      '<div class="item-row-del" data-idx="' + idx + '">✕ Hapus</div>';
+      '<div class="item-row-del" data-idx="' + idx + '">✕</div>';
     itemList.appendChild(row);
   });
   itemList.querySelectorAll('.item-row-del').forEach(function(el){
@@ -387,7 +476,6 @@ btnTambah.addEventListener('click', function(){
   });
   renderItemList();
 
-  // Reset field DETAIL ITEM (kategori TETAP, biar cepat isi item berikutnya kategori sama)
   state.kodeItem = null; state.warna = ''; state.kg = ''; state.roll = ''; state.qty = {};
   varianSelect.value = '';
   warnaInput.value = ''; kgInput.value = ''; rollInput.value = '';
@@ -396,17 +484,10 @@ btnTambah.addEventListener('click', function(){
   window.scrollTo(0,0);
 });
 
-// Teks yang dibuat pakai NAMA VARIAN yang manusiawi (mis. "Kaos Lengan Panjang"), BUKAN kode
-// singkatan ("PJ") - konversi ke kode baku tetap jalan OTOMATIS di background seperti biasa
-// lewat convertTimPotongItemName() begitu teks ini dikirim & diproses jalur chat yang sudah ada.
 function escapeHtml_(s){
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-// Versi TAMPILAN SAJA (angka qty di-bold pakai <b>) - dipakai buat innerHTML preview di app.
-// Tombol Salin/Kirim tetap baca lewat .textContent (bukan .innerHTML), yang otomatis kembali
-// jadi teks bersih tanpa tag sama sekali (browser yang urus otomatis), jadi teks yang
-// tersalin/terkirim ke chat TETAP aman diproses parser, TIDAK ikut kebawa tanda bold apapun.
 function generateTeksHtmlPreview_(){
   return daftarItem.map(function(item){
     let line1Text;
@@ -443,10 +524,6 @@ btnKembali.addEventListener('click', function(){
 
 btnKirimChat.addEventListener('click', function(){
   const teks = document.getElementById('teksHasil').textContent;
-  // t.me/share/url membuka picker "kirim ke..." bawaan Telegram dengan teks SUDAH TERISI di
-  // kolom chat begitu grup tujuan dipilih - tim potong tinggal cek sekilas & tap kirim (Telegram
-  // sengaja mewajibkan 1 tap konfirmasi terakhir, tidak bisa auto-kirim penuh - itu proteksi
-  // anti-spam bawaan Telegram, bukan keterbatasan di kode ini).
   const shareUrl = 'https://t.me/share/url?url=&text=' + encodeURIComponent(teks);
   if (tg && tg.openTelegramLink) {
     tg.openTelegramLink(shareUrl);
@@ -482,8 +559,6 @@ function fallbackCopy(teks, cb){
   document.body.removeChild(ta);
 }
 
-// ---- Ambil data Kategori/Varian: pakai cache localStorage dulu (biar buka form INSTAN),
-// sambil diam-diam refresh dari server di belakang layar ----
 function initUI(){
   document.getElementById('loadingScreen').style.display = 'none';
   document.getElementById('mainWrap').style.display = 'block';
@@ -518,7 +593,7 @@ try {
     KATEGORI_VARIAN = cached.data;
     dariCache = true;
     initUI();
-    fetchFresh(true); // refresh diam-diam di belakang layar
+    fetchFresh(true);
   }
 } catch(e){}
 if (!dariCache) fetchFresh(false);
