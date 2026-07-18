@@ -195,8 +195,8 @@
   }
   .combo-picker-btn .chev{font-size:13px;opacity:.7;}
   .combo-dropdown{
-    position:fixed;background:#fff;border-radius:14px;
-    box-shadow:0 10px 30px rgba(0,0,0,.18);max-height:260px;overflow-y:auto;z-index:999;display:none;
+    position:static;margin-top:8px;background:#fff;border-radius:14px;border:1px solid var(--sep);
+    max-height:260px;overflow-y:auto;display:none;
   }
   .combo-opt{padding:13px 15px;font-size:15px;font-weight:600;border-bottom:0.5px solid var(--sep);cursor:pointer;
     display:flex;justify-content:space-between;align-items:center;}
@@ -552,18 +552,6 @@ warnaInput.addEventListener('blur', function(){ setTimeout(function(){ warnaDrop
 kgInput.addEventListener('input', function(){ state.kg = kgInput.value; validate(); });
 rollInput.addEventListener('input', function(){ state.roll = rollInput.value; });
 
-document.body.appendChild(comboDropdown);
-window.addEventListener('scroll', function(){
-  if (comboDropdown.style.display === 'block') posisikanComboDropdown();
-}, true);
-
-function posisikanComboDropdown(){
-  const r = comboPickerBtn.getBoundingClientRect();
-  comboDropdown.style.left = r.left + 'px';
-  comboDropdown.style.top = (r.bottom + 6) + 'px';
-  comboDropdown.style.width = r.width + 'px';
-}
-
 comboPickerBtn.addEventListener('click', function(){
   const showing = comboDropdown.style.display === 'block';
   if (showing){ comboDropdown.style.display = 'none'; return; }
@@ -582,7 +570,6 @@ comboPickerBtn.addEventListener('click', function(){
     });
   });
   comboDropdown.style.display = 'block';
-  posisikanComboDropdown();
 });
 
 function pilihKombinasi(c){
@@ -853,19 +840,9 @@ if (tg){ tg.ready(); tg.expand(); }
 let WARNA_LIST = [];
 const warnaDropdown = document.createElement('div');
 warnaDropdown.id = 'warnaDropdown';
-warnaDropdown.style.cssText = 'position:fixed;z-index:999;background:#fff;border-radius:12px;' +
-  'box-shadow:0 8px 24px rgba(0,0,0,.18);max-height:200px;overflow-y:auto;display:none;';
-document.body.appendChild(warnaDropdown);
-window.addEventListener('scroll', function(){
-  if (warnaDropdown.style.display === 'block') posisikanDropdownWarna();
-}, true);
-
-function posisikanDropdownWarna(){
-  const r = warnaInput.getBoundingClientRect();
-  warnaDropdown.style.left = r.left + 'px';
-  warnaDropdown.style.top = (r.bottom + 6) + 'px';
-  warnaDropdown.style.width = r.width + 'px';
-}
+warnaDropdown.style.cssText = 'display:none;margin-top:8px;background:#fff;border-radius:12px;' +
+  'border:1px solid var(--sep);max-height:200px;overflow-y:auto;';
+warnaInput.insertAdjacentElement('afterend', warnaDropdown);
 
 function tampilkanSaranWarna(){
   if (WARNA_LIST.length === 0) { warnaDropdown.style.display = 'none'; return; }
@@ -887,7 +864,6 @@ function tampilkanSaranWarna(){
       validate();
     });
   });
-  posisikanDropdownWarna();
   warnaDropdown.style.display = 'block';
 }
 
