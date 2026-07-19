@@ -242,7 +242,7 @@
       <div class="topbar-title">Input Produksi</div>
     </div>
     <div style="text-align:right;">
-      <div class="version-badge">ver.02</div>
+      <div class="version-badge">ver.03</div>
       <div id="refreshLink" style="margin-top:4px;font-size:11.5px;font-weight:600;color:var(--theme-accent-deep);cursor:pointer;">🔄 Refresh</div>
     </div>
   </div>
@@ -371,6 +371,14 @@
 //
 // ver.02 - Ikon Anak & Dewasa diganti pakai gambar custom (bukan emoji lagi); kg dibalikin
 // jadi 1 kolom biasa (percobaan pemisah koma dibatalkan, terbukti bikin bug tampilan).
+//
+// ver.03 - Format penulisan teks total diubah sesuai tabel spek baru Denny: Kategori ANAK
+// selalu ditulis literal "ANAK" di depan, tapi DEWASA TIDAK PAKAI kata "DEWASA" sama sekali.
+// Prefix Tele sekarang diambil dari kolom "Kode Item" di sheet KATEGORI VARIAN (bukan Label
+// Varian lagi) - jadi PENTING: nilai kolom Kode Item di sheet harus diisi ulang sesuai tabel
+// baru (lihat pesan chat). Kombinasi 3 warna sekarang pakai formula SAMA kayak item biasa
+// (adaPanjang dihapus, gak perlu lagi - Prefix Tele dari sheet sudah otomatis benar). Ditambah
+// autocomplete Warna khusus 8 kombinasi tetap buat varian Ringer (Dewasa).
 // =====================================================================================
 
 // =====================================================================================
@@ -417,7 +425,7 @@ function terapkanTema(theme){
 let KATEGORI_VARIAN = {};
 let KOMBINASI_WARNA = [];
 let daftarItem = []; // item biasa: {mode:'biasa', kategori, kodeItem, varianLabel, warna, kg, roll, qty}
-                      // item kombinasi: {mode:'kombinasi', kategori, varianLabel, warnaTiga:[w1,w2,w3], kgTiga:[k1,k2,k3], rollTiga:[r1,r2,r3], adaPanjang, qty}
+                      // item kombinasi: {mode:'kombinasi', kategori, kodeItem, varianLabel, warnaTiga:[w1,w2,w3], kgTiga:[k1,k2,k3], rollTiga:[r1,r2,r3], qty}
 let state = {
   kategori: null, kodeItem: null, varianLabel: null, mode: 'biasa',
   warna: '', kg: '', roll: '',
@@ -697,13 +705,13 @@ function renderItemList(){
       .map(function(s){ return s+item.qty[s]; }).join(' ');
     let namaItem, subInfo;
     if (item.mode === 'kombinasi') {
-      namaItem = item.kategori.toUpperCase() + ' ' + (item.adaPanjang ? 'PANJANG KOMBINASI ' : 'KOMBINASI ') +
+      const awalanKombinasi = bikinAwalan_(item.kategori, item.kodeItem);
+      namaItem = (awalanKombinasi ? awalanKombinasi + ' ' : '') +
         item.warnaTiga[0].toUpperCase() + ' ' + item.warnaTiga[1].toUpperCase();
       subInfo = item.warnaTiga.map(function(w,i){ return w+' '+item.kgTiga[i]+'kg'; }).join(', ');
     } else {
-      namaItem = (item.kodeItem === '')
-        ? (item.kategori.toUpperCase() + ' ' + item.warna.toUpperCase())
-        : (item.kategori.toUpperCase() + ' ' + item.varianLabel.toUpperCase() + ' ' + item.warna.toUpperCase());
+      const awalanBiasa = bikinAwalan_(item.kategori, item.kodeItem);
+      namaItem = (awalanBiasa ? awalanBiasa + ' ' : '') + item.warna.toUpperCase();
       subInfo = item.kg + 'kg' + (item.roll ? ' (roll ' + item.roll + ')' : '');
     }
     const row = document.createElement('div');
@@ -726,12 +734,11 @@ btnTambah.addEventListener('click', function(){
   hideError();
   const labelTerpilih = state.varianLabel;
   if (state.mode === 'kombinasi') {
-    const adaPanjang = labelTerpilih.toLowerCase().indexOf('panjang') !== -1;
     daftarItem.push({
       mode: 'kombinasi',
       kategori: state.kategori,
+      kodeItem: state.kodeItem,
       varianLabel: labelTerpilih,
-      adaPanjang: adaPanjang,
       warnaTiga: state.comboWarna.slice(),
       kgTiga: state.comboKg.slice(),
       rollTiga: state.comboRoll.slice(),
@@ -771,6 +778,19 @@ function escapeHtml_(s){
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+// rev.49: format penulisan BARU sesuai tabel spek Denny - Kategori ANAK selalu ditulis literal
+// "ANAK" di depan (dibutuhkan aturan konversi buat trigger dengan benar), Kategori DEWASA
+// TIDAK pakai kata "DEWASA" sama sekali (langsung ke kode/warna) - beda dari sebelumnya.
+// Prefix Tele (kolom "Kode Item" di sheet KATEGORI VARIAN) dipakai APA ADANYA di sini (bukan
+// Label Varian lagi), karena sekarang seringkali beda (mis. Label "Panjang" tapi ditulis "PJG").
+function bikinAwalan_(kategori, kodeItem){
+  const kodeUpper = kodeItem ? kodeItem.toUpperCase() : '';
+  if (kategori.toLowerCase() === 'anak'){
+    return kodeUpper ? ('ANAK ' + kodeUpper) : 'ANAK';
+  }
+  return kodeUpper; // Dewasa (atau kategori lain) - tanpa kata kategori sama sekali
+}
+
 function generateTeksHtmlPreview_(){
   return daftarItem.map(function(item){
     const daftarSize = Object.keys(item.qty).filter(function(s){ return item.qty[s] > 0; });
@@ -782,27 +802,21 @@ function generateTeksHtmlPreview_(){
       // Format khusus KOMBINASI 3 warna - memanfaatkan mekanisme "RefStok"/breakdown yang
       // SUDAH ADA di sistem lama: baris pertama = item utama (warna 1+2, kg warna pertama),
       // 2 baris berikutnya = breakdown pemakaian kain warna ke-2 & ke-3 secara terpisah,
-      // baris terakhir = qty (berlaku buat 1 item gabungan ini).
-      const kataDepan = item.kategori.toUpperCase() + ' ' + (item.adaPanjang ? 'PANJANG KOMBINASI' : 'KOMBINASI');
+      // baris terakhir = qty (berlaku buat 1 item gabungan ini). Awalannya pakai formula yang
+      // SAMA kayak item biasa (bikinAwalan_) - Prefix Tele dari sheet sudah otomatis benar
+      // buat kombinasi (mis. "PJG" buat Panjang Kombinasi, kosong buat Pendek Kombinasi).
+      const awalan = bikinAwalan_(item.kategori, item.kodeItem);
       const w = item.warnaTiga, kg = item.kgTiga, roll = item.rollTiga;
-      const line1 = escapeHtml_(kataDepan + ' ' + w[0].toUpperCase() + ' ' + w[1].toUpperCase() + ' ' + kg[0]) +
+      const kataDepanLine1 = (awalan ? awalan + ' ' : '') + w[0].toUpperCase() + ' ' + w[1].toUpperCase();
+      const line1 = escapeHtml_(kataDepanLine1 + ' ' + kg[0]) +
         (roll[0] ? escapeHtml_(' / ' + roll[0]) : '');
       const line2 = escapeHtml_(w[1].toUpperCase() + ' ' + kg[1]) + (roll[1] ? escapeHtml_(' / ' + roll[1]) : '');
       const line3 = escapeHtml_(w[2].toUpperCase() + ' ' + kg[2]) + (roll[2] ? escapeHtml_(' / ' + roll[2]) : '');
       return line1 + '\n' + line2 + '\n' + line3 + '\n' + qtyHtml;
     }
 
-    // Kategori (ANAK/DEWASA) SENGAJA tetap ditulis literal di teks chat - konversi ke kode
-    // singkat (PJ/SET/dst) baru terjadi OTOMATIS belakangan di sheet lewat
-    // computeKodePenulisanDasar() yang SUDAH ADA, dan banyak aturannya BUTUH kata kategori ini
-    // supaya bisa ke-trigger dengan benar (mis. "Anak Panjang" baru -> PJ).
-    //
-    // Kalau Kode Item SENGAJA dikosongkan di sheet KATEGORI VARIAN (varian semacam
-    // "Pendek"/"Pendek Kombinasi"), Label Varian-nya TIDAK ikut ditulis, tapi kata Kategori
-    // tetap ada - jadi teksnya "ANAK MERAH" (bukan "PENDEK MERAH" ataupun "MERAH" doang).
-    const namaAwal = (item.kodeItem === '')
-      ? (item.kategori.toUpperCase() + ' ' + item.warna.toUpperCase())
-      : (item.kategori.toUpperCase() + ' ' + item.varianLabel.toUpperCase() + ' ' + item.warna.toUpperCase());
+    const awalan = bikinAwalan_(item.kategori, item.kodeItem);
+    const namaAwal = (awalan ? awalan + ' ' : '') + item.warna.toUpperCase();
     let line1Text;
     if (item.roll) {
       line1Text = namaAwal + ' ' + item.kg + ' / ' + item.roll;
@@ -905,10 +919,19 @@ warnaDropdown.style.cssText = 'display:none;position:static;width:100%;box-sizin
   'border:1px solid var(--sep);max-height:200px;overflow-y:auto;';
 document.getElementById('warnaInputWrap').insertAdjacentElement('afterend', warnaDropdown);
 
+// rev.49: RINGER (Dewasa) cuma boleh 8 kombinasi 2-warna TETAP ini (beda dari daftar warna
+// stok biasa) - dipakai gantiin saran autocomplete Warna KHUSUS saat varian Ringer dipilih.
+const RING_WARNA_LIST = [
+  'GREY NAVY', 'PUTIH TERACOTA', 'PUTIH HITAM', 'MUSTARD NAVY',
+  'PUTIH COKLAT', 'PUTIH MUSTARD', 'PUTIH MERAH', 'PUTIH BIRU'
+];
+
 function tampilkanSaranWarna(){
-  if (WARNA_LIST.length === 0) { warnaDropdown.style.display = 'none'; return; }
+  const sumberList = (state.varianLabel && state.varianLabel.toLowerCase().indexOf('ringer') !== -1)
+    ? RING_WARNA_LIST : WARNA_LIST;
+  if (sumberList.length === 0) { warnaDropdown.style.display = 'none'; return; }
   const q = warnaInput.value.trim().toUpperCase();
-  const cocok = q ? WARNA_LIST.filter(function(w){ return w.toUpperCase().indexOf(q) !== -1; }) : WARNA_LIST;
+  const cocok = q ? sumberList.filter(function(w){ return w.toUpperCase().indexOf(q) !== -1; }) : sumberList;
   if (cocok.length === 0) { warnaDropdown.style.display = 'none'; return; }
   warnaDropdown.innerHTML = cocok.slice(0,8).map(function(w){
     return '<div class="warna-opt" style="padding:10px 14px;font-size:14.5px;font-weight:500;' +
