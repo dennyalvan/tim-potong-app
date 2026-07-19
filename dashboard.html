@@ -1,9 +1,22 @@
 <!--
-  DASHBOARD STOK KAIN - TIM POTONG (rev.53 / ver.01)
+  DASHBOARD STOK KAIN - TIM POTONG (ver.01)
   Halaman statis, di-hosting di GitHub Pages yang sama dengan index.html (Mini App).
-  Murni MEMBACA data lewat doGet(?action=dashboard) di apps_script_tim_potong_rev52.js -
-  tidak ada tombol/aksi yang menulis ke sheet di halaman ini.
-  Dibuka lewat tombol yang dikirim bot Telegram saat perintah "/stok" diketik di grup.
+  Baca data lewat doGet(?action=dashboard) di apps_script_tim_potong.js. Checkbox "selesai"
+  di list Laporan Belum SELESAI menulis lewat doGet(?action=updateStatus&baris=N) - satu-satunya
+  aksi di halaman ini yang mengubah data di Sheet.
+
+  CATATAN SKEMA PENOMORAN (BARU): nomor revisi sekarang ditulis di komentar ini (bukan lagi di
+  nama file), supaya nama file "dashboard.html" tetap sama terus - tinggal replace isinya tiap
+  ada revisi. Skema lama (rev.53/ver.01 lama) DIRESET, mulai dari ver.01 lagi per hari ini.
+
+  ver.01 (perubahan hari ini, lihat RINGKASAN_THREAD_DASHBOARD_STOK_KAIN.md utk detail alasan):
+  1. Nomor urut di kedua list (Stok per Warna & Laporan Belum SELESAI).
+  2. Swatch warna sekarang dicocokkan ke nama warnanya (bukan cuma hash) - lihat PETA_WARNA.
+  3. "Stok Tersisa" sekarang HANYA roll yang belum disentuh sama sekali (backend sudah filter
+     Kg Terpakai = 0) - list ini bisa DIKLIK utk expand detail per-roll (kode + kg).
+  4. "Laporan Belum SELESAI" sekarang HANYA laporan yang roll-nya sudah habis (Kg Sisa = 0,
+     backend sudah filter) - tampilkan tanggal (+nama hari, dari sheet), qty per ukuran, jumlah
+     total, dan checkbox utk tandai SELESAI (nulis balik ke Sheet via ?action=updateStatus).
 -->
 <!doctype html>
 <html lang="id">
@@ -214,14 +227,20 @@ body{
 .card-list-scroll::-webkit-scrollbar{width:8px;}
 .card-list-scroll::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px;}
 
-.row{
-  display:flex;
-  align-items:center;
-  gap:9px;
-  padding:7px 12px;
-  border-bottom:1px solid var(--line);
+/* ===== ROW STOK (klik utk expand detail roll) ===== */
+.row{ border-bottom:1px solid var(--line); }
+.row:last-child{ border-bottom:none; }
+.row-head{
+  display:flex; align-items:center; gap:9px; padding:7px 12px; cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
 }
-.row:last-child{border-bottom:none;}
+.row-head:active{ background:var(--surface-2); }
+
+.num{
+  width:18px; height:18px; border-radius:50%; background:var(--surface-2);
+  color:var(--ink-muted); font-size:10px; font-weight:700; flex:0 0 auto;
+  display:flex; align-items:center; justify-content:center;
+}
 
 .swatch{
   width:20px;height:20px;border-radius:6px;flex:0 0 auto;
@@ -255,35 +274,64 @@ body{
   white-space:nowrap;
 }
 .row-figure .kg small{font-size:10.5px;font-weight:600;color:var(--ink-muted);}
-.bar-track{
-  width:40px;height:4px;border-radius:2px;
+
+.chevron{
+  flex:0 0 auto; width:14px; height:14px; color:var(--ink-muted);
+  transition:transform .2s ease;
+}
+.row-head.open .chevron{ transform:rotate(90deg); }
+
+.row-detail{
+  max-height:0; overflow:hidden; transition:max-height .22s ease;
   background:var(--surface-2);
-  margin-top:4px;
-  overflow:hidden;
-  margin-left:auto;
 }
-.bar-fill{height:100%;border-radius:2px;background:var(--accent);}
-
-.chip{
-  font-size:9.5px;
-  font-weight:700;
-  letter-spacing:0.02em;
-  padding:3px 7px;
-  border-radius:999px;
-  flex:0 0 auto;
-  white-space:nowrap;
-  background:var(--warn-tint);
-  color:var(--warn);
+.row-detail-inner{ padding:2px 12px 10px 41px; }
+.roll-item{
+  display:flex; justify-content:space-between; padding:5px 0;
+  font-size:11.5px; border-bottom:1px dashed var(--line);
 }
+.roll-item:last-child{ border-bottom:none; }
+.roll-item .kode{ color:var(--ink-muted); }
+.roll-item .kg{ font-weight:600; font-variant-numeric:tabular-nums; }
+.roll-item.catatan{ color:var(--ink-muted); font-style:italic; border-bottom:none; }
 
-.row-days{
-  font-size:10.5px;
-  color:var(--ink-muted);
+/* ===== ROW PROSES ===== */
+.prow{ display:flex; gap:9px; padding:9px 12px; border-bottom:1px solid var(--line); align-items:flex-start; }
+.prow:last-child{ border-bottom:none; }
+.prow.done{ opacity:0.45; }
+.prow.done .prow-title{ text-decoration:line-through; }
+
+.chk{
+  width:19px; height:19px; border-radius:6px; border:1.6px solid var(--line);
+  flex:0 0 auto; margin-top:1px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+  background:var(--surface); transition:background .15s,border-color .15s;
+}
+.chk.checked{ background:var(--good); border-color:var(--good); }
+.chk.busy{ opacity:0.5; pointer-events:none; }
+.chk svg{ width:12px; height:12px; opacity:0; transition:opacity .1s; }
+.chk.checked svg{ opacity:1; }
+
+.prow-main{ flex:1 1 auto; min-width:0; }
+.prow-title{ font-size:12.5px; font-weight:600; margin:0; }
+.prow-meta{
+  display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px;
+  font-size:12px; font-weight:700; color:var(--ink); margin:3px 0 6px;
   font-variant-numeric:tabular-nums;
-  flex:0 0 auto;
-  min-width:44px;
-  text-align:right;
 }
+.prow-meta .dot{ color:var(--line); font-weight:400; }
+.prow-meta .roll{ color:var(--accent-deep); }
+.prow-meta .kg{ color:var(--warn); }
+.prow-error{ font-size:11px; color:var(--warn); margin:4px 0 0; }
+
+.sizes{ display:flex; flex-wrap:wrap; gap:4px; }
+.size-chip{
+  font-size:10px; font-weight:600; background:var(--surface-2); color:var(--ink);
+  padding:1.5px 6px; border-radius:6px; font-variant-numeric:tabular-nums;
+}
+.size-chip b{ color:var(--accent); }
+
+.prow-right{ text-align:right; flex:0 0 auto; }
+.row-days{ font-size:10.5px; color:var(--ink-muted); font-variant-numeric:tabular-nums; }
 .row-days.stale{color:var(--warn);font-weight:700;}
 
 .empty-state, .error-state{
@@ -355,7 +403,7 @@ body{
     </div>
   </div>
 
-  <p class="foot-note">Tarik ke bawah / muat ulang halaman untuk data terbaru.</p>
+  <p class="foot-note">Tarik ke bawah / muat ulang halaman untuk data terbaru. Roll utuh = belum disentuh sama sekali. Laporan cuma tampil kalau roll-nya sudah habis kepakai.</p>
 
 </div>
 
@@ -367,69 +415,179 @@ function fmtKg(n){
   return (n || 0).toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
 
-// Warna kain di sheet dinamis (bukan daftar tetap) - bikin warna swatch yang KONSISTEN per nama
-// lewat hash sederhana, bukan indikasi warna kain yang presisi.
-function warnaToSwatch(nama){
-  let hash = 0;
-  for (let i = 0; i < nama.length; i++) hash = nama.charCodeAt(i) + ((hash << 5) - hash);
-  const hue = Math.abs(hash) % 360;
-  return "hsl(" + hue + ", 38%, 45%)";
+// ============ WARNA -> HEX (swatch sesuai nama warna, bukan cuma hash) ============
+const PETA_WARNA = [
+  ["ABU MUDA","#B9B6AC"], ["ABU TUA","#5B5850"], ["MERAH MUDA","#E3899C"], ["HIJAU LUMUT","#5B6B3F"],
+  ["HITAM","#202020"], ["BLACK","#202020"],
+  ["PUTIH","#F5F3EC"], ["WHITE","#F5F3EC"],
+  ["NAVY","#1D2A47"],
+  ["ABU","#8C887E"], ["GREY","#8C887E"], ["GRAY","#8C887E"],
+  ["MERAH","#C1372B"], ["RED","#C1372B"], ["MAROON","#6B1E28"],
+  ["BIRU","#2F5FA8"], ["BLUE","#2F5FA8"],
+  ["KUNING","#E6B92E"], ["YELLOW","#E6B92E"], ["MUSTARD","#C79A3A"],
+  ["HIJAU","#3F7D52"], ["GREEN","#3F7D52"],
+  ["TOSKA","#2E8B80"], ["TEAL","#2E8B80"],
+  ["COKLAT","#6B4A34"], ["COKELAT","#6B4A34"], ["BROWN","#6B4A34"],
+  ["CREAM","#E8DCC0"], ["KREM","#E8DCC0"],
+  ["UNGU","#6E4E93"], ["PURPLE","#6E4E93"],
+  ["PINK","#E28EA1"],
+  ["ORANGE","#DD7A34"], ["ORANYE","#DD7A34"],
+  ["TERACOTA","#BE6640"], ["TERRACOTA","#BE6640"], ["TERRACOTTA","#BE6640"],
+  ["SILVER","#B7B7B3"],
+  ["GOLD","#C6A24B"], ["EMAS","#C6A24B"],
+  ["DENIM","#3C5A75"],
+];
+
+function cariWarnaCocok(namaUpper){
+  const found = [];
+  let sisa = " " + namaUpper + " ";
+  for (const pasangan of PETA_WARNA) {
+    const kunci = pasangan[0], hex = pasangan[1];
+    const token = " " + kunci + " ";
+    if (sisa.indexOf(token) !== -1) {
+      found.push(hex);
+      sisa = sisa.split(token).join("  ");
+      if (found.length >= 2) break;
+    }
+  }
+  return found;
 }
 
+function hashColor(nama){
+  let hash = 0;
+  for (let i = 0; i < nama.length; i++) hash = nama.charCodeAt(i) + ((hash << 5) - hash);
+  return "hsl(" + (Math.abs(hash) % 360) + ",30%,55%)";
+}
+
+function swatchStyle(nama){
+  const cocok = cariWarnaCocok(String(nama || "").toUpperCase());
+  if (cocok.length === 2) return "background:linear-gradient(135deg," + cocok[0] + " 50%," + cocok[1] + " 50%)";
+  if (cocok.length === 1) return "background:" + cocok[0];
+  return "background:" + hashColor(String(nama || ""));
+}
+
+// ============ RENDER: STOK (klik = expand detail per-roll) ============
 function renderStok(stok){
   document.getElementById("stokValue").innerHTML = fmtKg(stok.totalKg) + "<small>kg</small>";
-  document.getElementById("stokSub").innerHTML = "di <b>" + (stok.totalRoll || 0) + " roll</b> aktif · " + (stok.totalWarna || 0) + " warna";
+  document.getElementById("stokSub").innerHTML = "di <b>" + (stok.totalRoll || 0) + " roll</b> utuh · " + (stok.totalWarna || 0) + " warna";
   document.getElementById("stokCount").textContent = (stok.totalWarna || 0) + " warna";
 
   const list = document.getElementById("stok-list");
   list.innerHTML = "";
   if (!stok.items || stok.items.length === 0) {
-    list.innerHTML = '<div class="empty-state">Belum ada stok kain tersisa.</div>';
+    list.innerHTML = '<div class="empty-state">Belum ada roll yang masih utuh (belum disentuh sama sekali).</div>';
     return;
   }
-  const maxKg = Math.max.apply(null, stok.items.map(function(s){ return s.kg; }));
-  stok.items.forEach(function(s){
-    const pct = maxKg > 0 ? Math.round((s.kg / maxKg) * 100) : 0;
+  stok.items.forEach(function(s, i){
+    const rolls = s.rolls || [];
     const row = document.createElement("div");
     row.className = "row";
+    const detailId = "stokdetail-" + i;
     row.innerHTML =
-      '<div class="swatch" style="background:' + warnaToSwatch(s.warna) + '"></div>' +
-      '<div class="row-main">' +
-        '<p class="row-title">' + s.warna + '</p>' +
-        '<p class="row-sub">' + s.roll + ' roll aktif</p>' +
+      '<div class="row-head" data-target="'+detailId+'">' +
+        '<span class="num">'+(i+1)+'</span>' +
+        '<div class="swatch" style="'+swatchStyle(s.warna)+'"></div>' +
+        '<div class="row-main">' +
+          '<p class="row-title">'+s.warna+'</p>' +
+          '<p class="row-sub">'+rolls.length+' roll utuh</p>' +
+        '</div>' +
+        '<div class="row-figure"><div class="kg">'+fmtKg(s.kg)+' <small>kg</small></div></div>' +
+        '<svg class="chevron" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
       '</div>' +
-      '<div class="row-figure">' +
-        '<div class="kg">' + fmtKg(s.kg) + ' <small>kg</small></div>' +
-        '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%"></div></div>' +
-      '</div>';
+      '<div class="row-detail" id="'+detailId+'"><div class="row-detail-inner">' +
+        (rolls.length
+          ? rolls.map(function(r){
+              return '<div class="roll-item"><span class="kode">Roll '+r.kodeRoll+'</span><span class="kg">'+fmtKg(r.kg)+' kg</span></div>';
+            }).join("")
+          : '<div class="roll-item catatan">Tidak ada detail roll.</div>') +
+      '</div></div>';
     list.appendChild(row);
+  });
+
+  list.querySelectorAll(".row-head").forEach(function(head){
+    head.addEventListener("click", function(){
+      const detail = document.getElementById(head.dataset.target);
+      const isOpen = head.classList.contains("open");
+      list.querySelectorAll(".row-head.open").forEach(function(h){
+        h.classList.remove("open");
+        document.getElementById(h.dataset.target).style.maxHeight = null;
+      });
+      if (!isOpen) {
+        head.classList.add("open");
+        detail.style.maxHeight = detail.scrollHeight + "px";
+      }
+    });
   });
 }
 
+// ============ RENDER: PROSES (checkbox nulis balik ke Sheet) ============
 function renderProses(proses){
   document.getElementById("prosesValue").innerHTML = fmtKg(proses.totalKg) + "<small>kg</small>";
-  document.getElementById("prosesSub").innerHTML = "<b>" + (proses.totalCount || 0) + " laporan</b> belum diisi SELESAI";
+  document.getElementById("prosesSub").innerHTML = "<b>" + (proses.totalCount || 0) + " laporan</b> — roll-nya sudah habis, tinggal isi Status";
   document.getElementById("prosesCount").textContent = (proses.totalCount || 0) + " baris";
 
   const list = document.getElementById("proses-list");
   list.innerHTML = "";
   if (!proses.items || proses.items.length === 0) {
-    list.innerHTML = '<div class="empty-state">Semua laporan sudah SELESAI 🎉</div>';
+    list.innerHTML = '<div class="empty-state">Tidak ada laporan yang menunggu konfirmasi selesai 🎉</div>';
     return;
   }
-  proses.items.forEach(function(p){
+  proses.items.forEach(function(p, i){
     const stale = p.hari !== null && p.hari >= 3;
     const hariLabel = p.hari === null ? "-" : (p.hari === 0 ? "hari ini" : p.hari + " hari lalu");
+    const sizeChips = Object.keys(p.sizes || {}).map(function(k){
+      return '<span class="size-chip">'+k+' <b>'+p.sizes[k]+'</b></span>';
+    }).join("");
+
     const row = document.createElement("div");
-    row.className = "row";
+    row.className = "prow";
+    row.dataset.baris = p.baris;
     row.innerHTML =
-      '<div class="row-main">' +
-        '<p class="row-title">' + p.item + '</p>' +
-        '<p class="row-sub">' + fmtKg(p.kg) + ' kg · roll ' + p.roll + '</p>' +
+      '<span class="num">'+(i+1)+'</span>' +
+      '<div class="chk" data-baris="'+p.baris+'"><svg viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>' +
+      '<div class="prow-main">' +
+        '<p class="prow-title">'+p.item+'</p>' +
+        '<div class="prow-meta">' +
+          '<span>'+(p.tanggal || '-')+'</span>' +
+          '<span class="dot">·</span><span class="roll">Roll '+p.roll+'</span>' +
+          '<span class="dot">·</span><span class="kg">'+fmtKg(p.kg)+' kg</span>' +
+        '</div>' +
+        '<div class="sizes">'+sizeChips+'<span class="size-chip">Jumlah <b>'+(p.jumlah||0)+'</b></span></div>' +
       '</div>' +
-      '<span class="chip">PROSES</span>' +
-      '<div class="row-days' + (stale ? ' stale' : '') + '">' + hariLabel + '</div>';
+      '<div class="prow-right">' +
+        '<div class="row-days'+(stale?' stale':'')+'">'+hariLabel+'</div>' +
+      '</div>';
     list.appendChild(row);
+  });
+
+  list.querySelectorAll(".chk").forEach(function(chk){
+    chk.addEventListener("click", function(){
+      if (chk.classList.contains("busy") || chk.classList.contains("checked")) return;
+      const baris = chk.dataset.baris;
+      const prow = chk.closest(".prow");
+      chk.classList.add("busy");
+      fetch(WEBAPP_URL + "?action=updateStatus&baris=" + encodeURIComponent(baris), { cache: "no-store" })
+        .then(function(res){ return res.json(); })
+        .then(function(hasil){
+          chk.classList.remove("busy");
+          if (hasil && hasil.ok) {
+            chk.classList.add("checked");
+            prow.classList.add("done");
+          } else {
+            const msg = document.createElement("p");
+            msg.className = "prow-error";
+            msg.textContent = "Gagal update: " + ((hasil && hasil.error) || "tidak diketahui") + ". Coba lagi.";
+            prow.querySelector(".prow-main").appendChild(msg);
+          }
+        })
+        .catch(function(err){
+          chk.classList.remove("busy");
+          const msg = document.createElement("p");
+          msg.className = "prow-error";
+          msg.textContent = "Gagal update: " + err.message;
+          prow.querySelector(".prow-main").appendChild(msg);
+        });
+    });
   });
 }
 
