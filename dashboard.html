@@ -1,15 +1,23 @@
 <!--
-  DASHBOARD STOK KAIN - TIM POTONG (ver.01)
+  DASHBOARD STOK KAIN - TIM POTONG (ver.02)
   Halaman statis, di-hosting di GitHub Pages yang sama dengan index.html (Mini App).
   Baca data lewat doGet(?action=dashboard) di apps_script_tim_potong_revNN.js. Checkbox "selesai"
-  di list Laporan Belum SELESAI menulis lewat doGet(?action=updateStatus&baris=N) - satu-satunya
-  aksi di halaman ini yang mengubah data di Sheet.
+  di list Laporan Belum SELESAI menulis lewat doGet(?action=updateStatus&baris=N&nilai=SELESAI|)
+  - satu-satunya aksi di halaman ini yang mengubah data di Sheet.
 
-  CATATAN SKEMA PENOMORAN (BARU): nomor revisi ditulis di NAMA FILE (dashboard_ver01.html, lalu
-  ver02, ver03, dst) SEKALIGUS di komentar ini, biar selalu sinkron & gampang dicari di riwayat
-  download. Pas upload ke GitHub Pages, tetap simpan sebagai "dashboard.html" (nama file di
-  hosting HARUS tetap itu karena sudah dirujuk dari tombol Telegram) - penomoran di nama file
-  ini cuma buat riwayat lokal/download, bukan nama pas di-hosting.
+  CATATAN SKEMA PENOMORAN: nomor revisi ditulis di NAMA FILE (dashboard_ver01.html, ver02, ver03,
+  dst) SEKALIGUS di komentar ini. Pas upload ke GitHub Pages, tetap simpan sebagai "dashboard.html"
+  (nama file di hosting HARUS tetap itu karena sudah dirujuk dari tombol Telegram) - penomoran di
+  nama file ini cuma buat riwayat lokal/download, bukan nama pas di-hosting.
+
+  ver.02 (perubahan hari ini):
+  1. Checkbox "selesai" sekarang 2 ARAH: dicentang -> Status jadi SELESAI di sheet; di-uncheck
+     -> Status dikosongkan lagi di sheet (baris otomatis balik muncul di data setelah reload).
+  2. Filter/sort di "Stok Tersisa per Warna": Kg (default) / Nama (A-Z) / Jumlah Roll.
+  3. Filter/sort di "Laporan Belum SELESAI": Hari (default, paling lama nunggu duluan) /
+     Jenis (A-Z, item+warna) / Tanggal (paling baru duluan).
+  Semua sort ini murni di sisi tampilan (data yang sudah kebaca tetap sama), tidak ada
+  fetch ulang tiap ganti filter.
 -->
 <!doctype html>
 <html lang="id">
@@ -201,6 +209,16 @@ body{
   font-variant-numeric:tabular-nums;
 }
 
+.filter-bar{
+  display:flex; gap:6px; padding:0 6px 8px; flex:0 0 auto; flex-wrap:wrap;
+}
+.filter-chip{
+  font-size:10.5px; font-weight:600; padding:4px 10px; border-radius:999px;
+  border:1px solid var(--line); background:var(--surface); color:var(--ink-muted);
+  cursor:pointer; -webkit-tap-highlight-color:transparent; white-space:nowrap;
+}
+.filter-chip.active{ background:var(--accent); border-color:var(--accent); color:#fff; }
+
 .card-list{
   background:var(--surface);
   border:1px solid var(--line);
@@ -376,6 +394,11 @@ body{
         <h2>Stok Tersisa per Warna</h2>
         <span class="count" id="stokCount"></span>
       </div>
+      <div class="filter-bar" id="stokFilterBar">
+        <span class="filter-chip active" data-sort="kg">Kg terbanyak</span>
+        <span class="filter-chip" data-sort="az">Nama A-Z</span>
+        <span class="filter-chip" data-sort="roll">Roll terbanyak</span>
+      </div>
       <div class="card-list">
         <div class="card-list-scroll" id="stok-list">
           <div class="empty-state">Memuat…</div>
@@ -387,6 +410,11 @@ body{
       <div class="section-head">
         <h2>Laporan Belum SELESAI</h2>
         <span class="count" id="prosesCount"></span>
+      </div>
+      <div class="filter-bar" id="prosesFilterBar">
+        <span class="filter-chip active" data-sort="hari">Paling lama</span>
+        <span class="filter-chip" data-sort="jenis">Jenis A-Z</span>
+        <span class="filter-chip" data-sort="tanggal">Tanggal terbaru</span>
       </div>
       <div class="card-list">
         <div class="card-list-scroll" id="proses-list">
@@ -459,19 +487,53 @@ function swatchStyle(nama){
   return "background:" + hashColor(String(nama || ""));
 }
 
+// ============ STATE (data mentah hasil fetch, dipakai ulang tiap ganti filter) ============
+let stokItemsRaw = [];
+let prosesItemsRaw = [];
+let stokSortMode = "kg";     // "kg" | "az" | "roll"
+let prosesSortMode = "hari"; // "hari" | "jenis" | "tanggal"
+
+function urutkanStok(items, mode){
+  const copy = items.slice();
+  if (mode === "az") {
+    copy.sort(function(a,b){ return a.warna.localeCompare(b.warna, "id"); });
+  } else if (mode === "roll") {
+    copy.sort(function(a,b){ return (b.rolls||[]).length - (a.rolls||[]).length; });
+  } else {
+    copy.sort(function(a,b){ return b.kg - a.kg; });
+  }
+  return copy;
+}
+
+function urutkanProses(items, mode){
+  const copy = items.slice();
+  if (mode === "jenis") {
+    copy.sort(function(a,b){ return a.item.localeCompare(b.item, "id"); });
+  } else if (mode === "tanggal") {
+    copy.sort(function(a,b){ return (a.hari === null ? 999 : a.hari) - (b.hari === null ? 999 : b.hari); });
+  } else {
+    copy.sort(function(a,b){ return (b.hari === null ? -1 : b.hari) - (a.hari === null ? -1 : a.hari); });
+  }
+  return copy;
+}
+
 // ============ RENDER: STOK (klik = expand detail per-roll) ============
 function renderStok(stok){
   document.getElementById("stokValue").innerHTML = fmtKg(stok.totalKg) + "<small>kg</small>";
   document.getElementById("stokSub").innerHTML = "di <b>" + (stok.totalRoll || 0) + " roll</b> utuh · " + (stok.totalWarna || 0) + " warna";
   document.getElementById("stokCount").textContent = (stok.totalWarna || 0) + " warna";
+  stokItemsRaw = stok.items || [];
+  renderStokList(urutkanStok(stokItemsRaw, stokSortMode));
+}
 
+function renderStokList(items){
   const list = document.getElementById("stok-list");
   list.innerHTML = "";
-  if (!stok.items || stok.items.length === 0) {
+  if (!items || items.length === 0) {
     list.innerHTML = '<div class="empty-state">Belum ada roll yang masih utuh (belum disentuh sama sekali).</div>';
     return;
   }
-  stok.items.forEach(function(s, i){
+  items.forEach(function(s, i){
     const rolls = s.rolls || [];
     const row = document.createElement("div");
     row.className = "row";
@@ -513,19 +575,23 @@ function renderStok(stok){
   });
 }
 
-// ============ RENDER: PROSES (checkbox nulis balik ke Sheet) ============
+// ============ RENDER: PROSES (checkbox 2 arah, nulis balik ke Sheet) ============
 function renderProses(proses){
   document.getElementById("prosesValue").innerHTML = fmtKg(proses.totalKg) + "<small>kg</small>";
   document.getElementById("prosesSub").innerHTML = "<b>" + (proses.totalCount || 0) + " laporan</b> — roll-nya sudah habis, tinggal isi Status";
   document.getElementById("prosesCount").textContent = (proses.totalCount || 0) + " baris";
+  prosesItemsRaw = proses.items || [];
+  renderProsesList(urutkanProses(prosesItemsRaw, prosesSortMode));
+}
 
+function renderProsesList(items){
   const list = document.getElementById("proses-list");
   list.innerHTML = "";
-  if (!proses.items || proses.items.length === 0) {
+  if (!items || items.length === 0) {
     list.innerHTML = '<div class="empty-state">Tidak ada laporan yang menunggu konfirmasi selesai 🎉</div>';
     return;
   }
-  proses.items.forEach(function(p, i){
+  items.forEach(function(p, i){
     const stale = p.hari !== null && p.hari >= 3;
     const hariLabel = p.hari === null ? "-" : (p.hari === 0 ? "hari ini" : p.hari + " hari lalu");
     const sizeChips = Object.keys(p.sizes || {}).map(function(k){
@@ -555,17 +621,24 @@ function renderProses(proses){
 
   list.querySelectorAll(".chk").forEach(function(chk){
     chk.addEventListener("click", function(){
-      if (chk.classList.contains("busy") || chk.classList.contains("checked")) return;
+      if (chk.classList.contains("busy")) return;
       const baris = chk.dataset.baris;
       const prow = chk.closest(".prow");
+      const akanDicentang = !chk.classList.contains("checked");
+      const nilai = akanDicentang ? "SELESAI" : "";
+
+      // Bersihkan pesan error lama (kalau ada) sebelum coba lagi
+      const errorLama = prow.querySelector(".prow-error");
+      if (errorLama) errorLama.remove();
+
       chk.classList.add("busy");
-      fetch(WEBAPP_URL + "?action=updateStatus&baris=" + encodeURIComponent(baris), { cache: "no-store" })
+      fetch(WEBAPP_URL + "?action=updateStatus&baris=" + encodeURIComponent(baris) + "&nilai=" + encodeURIComponent(nilai), { cache: "no-store" })
         .then(function(res){ return res.json(); })
         .then(function(hasil){
           chk.classList.remove("busy");
           if (hasil && hasil.ok) {
-            chk.classList.add("checked");
-            prow.classList.add("done");
+            chk.classList.toggle("checked", akanDicentang);
+            prow.classList.toggle("done", akanDicentang);
           } else {
             const msg = document.createElement("p");
             msg.className = "prow-error";
@@ -583,6 +656,26 @@ function renderProses(proses){
     });
   });
 }
+
+// ============ FILTER CHIP (event delegation, dipasang sekali) ============
+function pasangFilterBar(barId, onPilih){
+  const bar = document.getElementById(barId);
+  bar.addEventListener("click", function(ev){
+    const chip = ev.target.closest(".filter-chip");
+    if (!chip) return;
+    bar.querySelectorAll(".filter-chip").forEach(function(c){ c.classList.remove("active"); });
+    chip.classList.add("active");
+    onPilih(chip.dataset.sort);
+  });
+}
+pasangFilterBar("stokFilterBar", function(mode){
+  stokSortMode = mode;
+  renderStokList(urutkanStok(stokItemsRaw, stokSortMode));
+});
+pasangFilterBar("prosesFilterBar", function(mode){
+  prosesSortMode = mode;
+  renderProsesList(urutkanProses(prosesItemsRaw, prosesSortMode));
+});
 
 function muatDashboard(){
   fetch(WEBAPP_URL + "?action=dashboard", { cache: "no-store" })
