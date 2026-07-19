@@ -224,10 +224,10 @@
   .combo-kgroll-label{font-size:11.5px;color:var(--ink-2);font-weight:650;margin-top:12px;margin-bottom:2px;}
 
   /* ---- Kg split (depan.belakang koma) - titik permanen, gak bisa lupa ---- */
-  .kg-split{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex:1;}
+  .kg-split{display:flex;align-items:center;gap:5px;margin-left:auto;flex-shrink:0;}
   .kg-split-input{
-    width:56px;flex:none !important;text-align:center;border:1px solid var(--sep);border-radius:9px;
-    padding:8px 4px;font-size:17px;font-weight:600;background:var(--canvas);
+    width:44px;flex:none !important;text-align:center;border:1px solid var(--sep);border-radius:9px;
+    padding:8px 2px;font-size:16px;font-weight:600;background:var(--canvas);
   }
   .kg-split-input:focus{border-color:var(--theme-accent);background:#fff;}
   .kg-split-dot{font-size:22px;font-weight:800;color:var(--ink-2);}
@@ -302,7 +302,7 @@
         </div>
         <div class="row">
           <div class="row-inline">
-            <div class="row-label">Kg Kain Terpakai</div>
+            <div class="row-label">Kg Terpakai</div>
             <div class="kg-split">
               <input type="text" inputmode="numeric" maxlength="2" id="kgDepan" class="kg-split-input">
               <span class="kg-split-dot">.</span>
