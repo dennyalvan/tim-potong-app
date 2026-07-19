@@ -1,0 +1,458 @@
+<!--
+  DASHBOARD STOK KAIN - TIM POTONG (rev.53 / ver.01)
+  Halaman statis, di-hosting di GitHub Pages yang sama dengan index.html (Mini App).
+  Murni MEMBACA data lewat doGet(?action=dashboard) di apps_script_tim_potong_rev52.js -
+  tidak ada tombol/aksi yang menulis ke sheet di halaman ini.
+  Dibuka lewat tombol yang dikirim bot Telegram saat perintah "/stok" diketik di grup.
+-->
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dashboard Stok Kain — TIM POTONG</title>
+<style>
+:root{
+  --bg:#F6F3EC;
+  --surface:#FFFFFF;
+  --surface-2:#EFEAE0;
+  --ink:#1E2430;
+  --ink-muted:#726C60;
+  --line:#E4DDCE;
+  --accent:#2F6F68;
+  --accent-deep:#1E4B46;
+  --good:#2E7D5B;
+  --good-tint:#E3F1E9;
+  --warn:#B4790E;
+  --warn-tint:#FBEEDA;
+  --shadow: 0 1px 2px rgba(30,36,48,0.04), 0 8px 24px -12px rgba(30,36,48,0.12);
+}
+:root[data-theme="dark"]{
+  --bg:#14181F;
+  --surface:#1B2129;
+  --surface-2:#212934;
+  --ink:#EDEBE4;
+  --ink-muted:#9B968A;
+  --line:#2B323D;
+  --accent:#59A79C;
+  --accent-deep:#8FCBC0;
+  --good:#5CB88A;
+  --good-tint:#1B2E24;
+  --warn:#E0A94D;
+  --warn-tint:#332510;
+  --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 32px -16px rgba(0,0,0,0.5);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#14181F;
+    --surface:#1B2129;
+    --surface-2:#212934;
+    --ink:#EDEBE4;
+    --ink-muted:#9B968A;
+    --line:#2B323D;
+    --accent:#59A79C;
+    --accent-deep:#8FCBC0;
+    --good:#5CB88A;
+    --good-tint:#1B2E24;
+    --warn:#E0A94D;
+    --warn-tint:#332510;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 32px -16px rgba(0,0,0,0.5);
+  }
+}
+
+*{box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--ink);
+  font-family:-apple-system,"SF Pro Display","SF Pro Text",system-ui,"Segoe UI",Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.page{
+  max-width:980px;
+  margin:0 auto;
+  height:100vh;
+  padding:16px 16px 12px;
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+}
+
+.topbar{
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:12px;
+  padding:2px 4px 14px;
+  flex:0 0 auto;
+}
+.topbar h1{
+  font-size:22px;
+  font-weight:700;
+  letter-spacing:-0.01em;
+  margin:0;
+  text-wrap:balance;
+}
+.topbar .eyebrow{
+  display:block;
+  font-size:11px;
+  font-weight:600;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--accent);
+  margin-bottom:4px;
+}
+.topbar .updated{
+  font-size:12px;
+  color:var(--ink-muted);
+  font-variant-numeric:tabular-nums;
+  white-space:nowrap;
+}
+
+.stats{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+  margin-bottom:16px;
+  flex:0 0 auto;
+}
+@media (max-width:520px){
+  .stats{grid-template-columns:1fr;}
+}
+.stat-card{
+  position:relative;
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:18px;
+  padding:18px 18px 16px;
+  box-shadow:var(--shadow);
+  overflow:hidden;
+}
+.stat-card .label{
+  font-size:12.5px;
+  font-weight:600;
+  color:var(--ink-muted);
+  margin:0 0 10px;
+  max-width:70%;
+}
+.stat-card .value{
+  font-size:32px;
+  font-weight:750;
+  letter-spacing:-0.02em;
+  font-variant-numeric:tabular-nums;
+  line-height:1;
+  margin:0 0 6px;
+}
+.stat-card .value small{
+  font-size:16px;
+  font-weight:600;
+  color:var(--ink-muted);
+  margin-left:2px;
+}
+.stat-card .sub{
+  font-size:12.5px;
+  color:var(--ink-muted);
+  margin:0;
+}
+.stat-card.good{border-top:3px solid var(--good);}
+.stat-card.warn{border-top:3px solid var(--warn);}
+.stat-card .sub b{color:var(--ink);font-weight:600;}
+
+.sections{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:16px;
+  flex:1 1 auto;
+  min-height:0;
+}
+@media (max-width:640px){
+  .sections{grid-template-columns:1fr;}
+}
+.section{
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+}
+.section-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 6px 8px;
+  flex:0 0 auto;
+}
+.section-head h2{
+  font-size:13px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:0.06em;
+  color:var(--ink-muted);
+  margin:0;
+}
+.section-head .count{
+  font-size:12px;
+  color:var(--ink-muted);
+  font-variant-numeric:tabular-nums;
+}
+
+.card-list{
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:14px;
+  box-shadow:var(--shadow);
+  overflow:hidden;
+  flex:1 1 auto;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+}
+.card-list-scroll{
+  flex:1 1 auto;
+  min-height:0;
+  overflow-y:auto;
+}
+.card-list-scroll::-webkit-scrollbar{width:8px;}
+.card-list-scroll::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px;}
+
+.row{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  padding:7px 12px;
+  border-bottom:1px solid var(--line);
+}
+.row:last-child{border-bottom:none;}
+
+.swatch{
+  width:20px;height:20px;border-radius:6px;flex:0 0 auto;
+  border:1px solid rgba(0,0,0,0.08);
+}
+.row-main{flex:1 1 auto;min-width:0;}
+.row-title{
+  font-size:12.5px;
+  font-weight:600;
+  margin:0;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.row-sub{
+  font-size:11px;
+  color:var(--ink-muted);
+  margin:0;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.row-figure{
+  text-align:right;
+  flex:0 0 auto;
+}
+.row-figure .kg{
+  font-size:12.5px;
+  font-weight:700;
+  font-variant-numeric:tabular-nums;
+  white-space:nowrap;
+}
+.row-figure .kg small{font-size:10.5px;font-weight:600;color:var(--ink-muted);}
+.bar-track{
+  width:40px;height:4px;border-radius:2px;
+  background:var(--surface-2);
+  margin-top:4px;
+  overflow:hidden;
+  margin-left:auto;
+}
+.bar-fill{height:100%;border-radius:2px;background:var(--accent);}
+
+.chip{
+  font-size:9.5px;
+  font-weight:700;
+  letter-spacing:0.02em;
+  padding:3px 7px;
+  border-radius:999px;
+  flex:0 0 auto;
+  white-space:nowrap;
+  background:var(--warn-tint);
+  color:var(--warn);
+}
+
+.row-days{
+  font-size:10.5px;
+  color:var(--ink-muted);
+  font-variant-numeric:tabular-nums;
+  flex:0 0 auto;
+  min-width:44px;
+  text-align:right;
+}
+.row-days.stale{color:var(--warn);font-weight:700;}
+
+.empty-state, .error-state{
+  padding:24px 16px;
+  text-align:center;
+  font-size:12.5px;
+  color:var(--ink-muted);
+}
+.error-state{color:var(--warn);}
+
+.foot-note{
+  font-size:10.5px;
+  color:var(--ink-muted);
+  text-align:center;
+  margin:8px 0 0;
+  line-height:1.4;
+  flex:0 0 auto;
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <div class="topbar">
+    <div>
+      <span class="eyebrow">Tim Potong · Rekap Makloon</span>
+      <h1>Dashboard Stok Kain</h1>
+    </div>
+    <div class="updated" id="updatedAt">Memuat…</div>
+  </div>
+
+  <div class="stats">
+    <div class="stat-card good">
+      <p class="label">Total Kain Tersisa</p>
+      <p class="value" id="stokValue">—<small>kg</small></p>
+      <p class="sub" id="stokSub">Memuat data…</p>
+    </div>
+    <div class="stat-card warn">
+      <p class="label">Kain Sedang Diproses</p>
+      <p class="value" id="prosesValue">—<small>kg</small></p>
+      <p class="sub" id="prosesSub">Memuat data…</p>
+    </div>
+  </div>
+
+  <div class="sections">
+    <div class="section">
+      <div class="section-head">
+        <h2>Stok Tersisa per Warna</h2>
+        <span class="count" id="stokCount"></span>
+      </div>
+      <div class="card-list">
+        <div class="card-list-scroll" id="stok-list">
+          <div class="empty-state">Memuat…</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head">
+        <h2>Laporan Belum SELESAI</h2>
+        <span class="count" id="prosesCount"></span>
+      </div>
+      <div class="card-list">
+        <div class="card-list-scroll" id="proses-list">
+          <div class="empty-state">Memuat…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="foot-note">Tarik ke bawah / muat ulang halaman untuk data terbaru.</p>
+
+</div>
+
+<script>
+// Sama dengan WEBAPP_URL di index.html (Mini App) - satu Apps Script yang sama, cuma beda ?action=.
+const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzaWvCi3Vw2fnFgBPfn1qvFBSqYXOrdWi8yxvKc8WOtaIH78JN83dIMiQtQeockW6EDBw/exec";
+
+function fmtKg(n){
+  return (n || 0).toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
+// Warna kain di sheet dinamis (bukan daftar tetap) - bikin warna swatch yang KONSISTEN per nama
+// lewat hash sederhana, bukan indikasi warna kain yang presisi.
+function warnaToSwatch(nama){
+  let hash = 0;
+  for (let i = 0; i < nama.length; i++) hash = nama.charCodeAt(i) + ((hash << 5) - hash);
+  const hue = Math.abs(hash) % 360;
+  return "hsl(" + hue + ", 38%, 45%)";
+}
+
+function renderStok(stok){
+  document.getElementById("stokValue").innerHTML = fmtKg(stok.totalKg) + "<small>kg</small>";
+  document.getElementById("stokSub").innerHTML = "di <b>" + (stok.totalRoll || 0) + " roll</b> aktif · " + (stok.totalWarna || 0) + " warna";
+  document.getElementById("stokCount").textContent = (stok.totalWarna || 0) + " warna";
+
+  const list = document.getElementById("stok-list");
+  list.innerHTML = "";
+  if (!stok.items || stok.items.length === 0) {
+    list.innerHTML = '<div class="empty-state">Belum ada stok kain tersisa.</div>';
+    return;
+  }
+  const maxKg = Math.max.apply(null, stok.items.map(function(s){ return s.kg; }));
+  stok.items.forEach(function(s){
+    const pct = maxKg > 0 ? Math.round((s.kg / maxKg) * 100) : 0;
+    const row = document.createElement("div");
+    row.className = "row";
+    row.innerHTML =
+      '<div class="swatch" style="background:' + warnaToSwatch(s.warna) + '"></div>' +
+      '<div class="row-main">' +
+        '<p class="row-title">' + s.warna + '</p>' +
+        '<p class="row-sub">' + s.roll + ' roll aktif</p>' +
+      '</div>' +
+      '<div class="row-figure">' +
+        '<div class="kg">' + fmtKg(s.kg) + ' <small>kg</small></div>' +
+        '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%"></div></div>' +
+      '</div>';
+    list.appendChild(row);
+  });
+}
+
+function renderProses(proses){
+  document.getElementById("prosesValue").innerHTML = fmtKg(proses.totalKg) + "<small>kg</small>";
+  document.getElementById("prosesSub").innerHTML = "<b>" + (proses.totalCount || 0) + " laporan</b> belum diisi SELESAI";
+  document.getElementById("prosesCount").textContent = (proses.totalCount || 0) + " baris";
+
+  const list = document.getElementById("proses-list");
+  list.innerHTML = "";
+  if (!proses.items || proses.items.length === 0) {
+    list.innerHTML = '<div class="empty-state">Semua laporan sudah SELESAI 🎉</div>';
+    return;
+  }
+  proses.items.forEach(function(p){
+    const stale = p.hari !== null && p.hari >= 3;
+    const hariLabel = p.hari === null ? "-" : (p.hari === 0 ? "hari ini" : p.hari + " hari lalu");
+    const row = document.createElement("div");
+    row.className = "row";
+    row.innerHTML =
+      '<div class="row-main">' +
+        '<p class="row-title">' + p.item + '</p>' +
+        '<p class="row-sub">' + fmtKg(p.kg) + ' kg · roll ' + p.roll + '</p>' +
+      '</div>' +
+      '<span class="chip">PROSES</span>' +
+      '<div class="row-days' + (stale ? ' stale' : '') + '">' + hariLabel + '</div>';
+    list.appendChild(row);
+  });
+}
+
+function muatDashboard(){
+  fetch(WEBAPP_URL + "?action=dashboard", { cache: "no-store" })
+    .then(function(res){ return res.json(); })
+    .then(function(data){
+      renderStok(data.stok || {});
+      renderProses(data.proses || {});
+      const updated = data.updatedAt ? new Date(data.updatedAt) : new Date();
+      document.getElementById("updatedAt").textContent =
+        "Diperbarui " + updated.toLocaleDateString("id-ID", { day: "numeric", month: "short" }) +
+        ", " + updated.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+    })
+    .catch(function(err){
+      document.getElementById("updatedAt").textContent = "Gagal memuat";
+      ["stok-list", "proses-list"].forEach(function(id){
+        document.getElementById(id).innerHTML = '<div class="error-state">Gagal memuat data: ' + err.message + '</div>';
+      });
+    });
+}
+
+muatDashboard();
+</script>
+</body>
+</html>
