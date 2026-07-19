@@ -242,7 +242,7 @@
       <div class="topbar-title">Input Produksi</div>
     </div>
     <div style="text-align:right;">
-      <div class="version-badge">ver.05</div>
+      <div class="version-badge">ver.06</div>
       <div id="refreshLink" style="margin-top:4px;font-size:11.5px;font-weight:600;color:var(--theme-accent-deep);cursor:pointer;">🔄 Refresh</div>
     </div>
   </div>
@@ -391,6 +391,12 @@
 // lain (Ruffle/Setelan/Oneset Panjang/Oneset Pendek/Celana Pendek) sudah punya kode sendiri dan
 // SEHARUSNYA TANPA kata "ANAK" sama sekali. Ketauan setelah dites langsung tiap baris tabel
 // spek terhadap fungsi bikinAwalan_() - 5 dari 25 kasus gagal sebelum fix ini.
+//
+// ver.06 - fix bug warna nempel BABAK 2: fix ver.04 kemarin cuma nutup celah pas kolom
+// DISENTUH, tapi begitu SUDAH TAP salah satu saran, kolom tetap fokus (sengaja ditahan biar
+// tap-nya kedaftar) - jadi ketik lanjutan masih nempel di belakang kalau lupa hapus dulu.
+// Sekarang begitu 1 saran dipilih, teksnya otomatis ke-select juga (bukan cuma pas fokus awal)
+// - jadi ngetik lagi tanpa keluar-masuk kolom pun tetap otomatis GANTI, bukan nempel.
 // =====================================================================================
 
 // =====================================================================================
@@ -962,6 +968,8 @@ function tampilkanSaranWarna(){
       warnaInput.value = el.textContent;
       state.warna = el.textContent;
       warnaDropdown.style.display = 'none';
+      warnaInput.focus();
+      warnaInput.select(); // biar kalau lanjut ngetik tanpa keluar-masuk kolom dulu, otomatis GANTI bukan nempel
       validate();
     });
   });
