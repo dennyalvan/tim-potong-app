@@ -242,7 +242,7 @@
       <div class="topbar-title">Input Produksi</div>
     </div>
     <div style="text-align:right;">
-      <div class="version-badge">ver.03</div>
+      <div class="version-badge">ver.05</div>
       <div id="refreshLink" style="margin-top:4px;font-size:11.5px;font-weight:600;color:var(--theme-accent-deep);cursor:pointer;">🔄 Refresh</div>
     </div>
   </div>
@@ -379,6 +379,18 @@
 // baru (lihat pesan chat). Kombinasi 3 warna sekarang pakai formula SAMA kayak item biasa
 // (adaPanjang dihapus, gak perlu lagi - Prefix Tele dari sheet sudah otomatis benar). Ditambah
 // autocomplete Warna khusus 8 kombinasi tetap buat varian Ringer (Dewasa).
+//
+// ver.04 - fix bug warna "nempel" (mis. jadi "UNGU MUDA BATA" padahal cuma mau ketik "BATA"):
+// penyebabnya saran autocomplete Warna muncul LANGSUNG begitu kolom disentuh (sebelum ngetik
+// apa-apa), jadi rawan ke-tap gak sengaja. Sekarang saran BARU muncul setelah mulai ngetik,
+// plus teks lama (kalau ada sisa) otomatis ke-select penuh saat kolom disentuh - jadi ngetik
+// selanjutnya otomatis GANTI, bukan nempel di belakang.
+//
+// ver.05 - BUG FIX PENTING: kata "ANAK" ternyata kepasang di SEMUA varian kategori Anak,
+// padahal seharusnya HANYA muncul buat varian Pendek/Panjang (Kode Item kosong/"PJG") - varian
+// lain (Ruffle/Setelan/Oneset Panjang/Oneset Pendek/Celana Pendek) sudah punya kode sendiri dan
+// SEHARUSNYA TANPA kata "ANAK" sama sekali. Ketauan setelah dites langsung tiap baris tabel
+// spek terhadap fungsi bikinAwalan_() - 5 dari 25 kasus gagal sebelum fix ini.
 // =====================================================================================
 
 // =====================================================================================
@@ -614,7 +626,7 @@ function resetComboUI(){
 }
 
 warnaInput.addEventListener('input', function(){ state.warna = warnaInput.value; validate(); tampilkanSaranWarna(); });
-warnaInput.addEventListener('focus', function(){ tampilkanSaranWarna(); });
+warnaInput.addEventListener('focus', function(){ warnaInput.select(); });
 warnaInput.addEventListener('blur', function(){ setTimeout(function(){ warnaDropdown.style.display = 'none'; }, 150); });
 kgInput.addEventListener('input', function(){ state.kg = kgInput.value; validate(); });
 rollInput.addEventListener('input', function(){ state.roll = rollInput.value; });
@@ -783,12 +795,17 @@ function escapeHtml_(s){
 // TIDAK pakai kata "DEWASA" sama sekali (langsung ke kode/warna) - beda dari sebelumnya.
 // Prefix Tele (kolom "Kode Item" di sheet KATEGORI VARIAN) dipakai APA ADANYA di sini (bukan
 // Label Varian lagi), karena sekarang seringkali beda (mis. Label "Panjang" tapi ditulis "PJG").
+// rev.49/ver.05: format penulisan sesuai tabel spek Denny. Kata "ANAK" HANYA muncul untuk
+// varian Pendek/Panjang (Kode Item kosong atau "PJG") - varian Anak lainnya yang SUDAH punya
+// kode sendiri (RFL/SET./ONSET/SPEN/CELANA) TIDAK pakai kata "ANAK" sama sekali. Kategori
+// DEWASA TIDAK PERNAH pakai kata "DEWASA" sama sekali, di varian manapun.
 function bikinAwalan_(kategori, kodeItem){
   const kodeUpper = kodeItem ? kodeItem.toUpperCase() : '';
-  if (kategori.toLowerCase() === 'anak'){
+  const butuhKataAnak = kategori.toLowerCase() === 'anak' && (kodeUpper === '' || kodeUpper === 'PJG');
+  if (butuhKataAnak){
     return kodeUpper ? ('ANAK ' + kodeUpper) : 'ANAK';
   }
-  return kodeUpper; // Dewasa (atau kategori lain) - tanpa kata kategori sama sekali
+  return kodeUpper; // semua kasus lain (Anak RFL/SET./ONSET/SPEN/CELANA, dan semua Dewasa) - TANPA kata kategori
 }
 
 function generateTeksHtmlPreview_(){
