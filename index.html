@@ -1,467 +1,2172 @@
-<!DOCTYPE html>
+// ============================================================
+// APPS SCRIPT - TIM POTONG - rev.47
+// Project STANDALONE, akses spreadsheet via ID
+//
+// Riwayat revisi lengkap (rev.24-32) & alasan tiap perubahan: lihat RINGKASAN_TIM_POTONG.md
+//
+// SCRIPT PROPERTIES TAMBAHAN yang WAJIB diisi manual di Project Settings:
+//   TELEGRAM_BOT_USERNAME = rekap_makloon_bot (tanpa @)
+//   MINIAPP_SHORT_NAME    = produksi   (short name Mini App, cek/atur lewat /myapps di BotFather)
+//
+// rev.33-37 (Mini App, JALUR TULIS LANGSUNG - lihat catatan rev.47 di bawah, sudah TIDAK dipakai
+// lagi di praktiknya, tapi kodenya dibiarkan ada, tidak mengganggu): doGet() awalnya menyajikan
+// halaman form LANGSUNG dari Apps Script sendiri, submit lewat handleMiniAppSubmission() yang
+// validasi initData Telegram lalu tulisItemMiniApp() -> tulisKeSheetData(). Sempat ketemu &
+// diperbaiki beberapa bug di sepanjang jalan: (a) submit salah alamat karena pakai
+// window.location.href yang sudah kena redirect Apps Script - fix pakai ScriptApp.getService().
+// getUrl() lewat placeholder __WEBAPP_URL__; (b) tombol gak muncul di GRUP karena Menu Button
+// BotFather cuma jalan di chat pribadi - fix pakai perintah "/produksi" yang bikin bot kirim
+// tombol lewat kirimTombolMiniApp(); (c) izin UrlFetchApp belum di-approve - fix pakai
+// testManualCekBotToken(); (d) tombol tipe "web_app" kena BUTTON_TYPE_INVALID di grup - fix
+// pakai tombol tipe "url" ke link langsung Mini App (https://t.me/<bot>/<short_name>).
+//
+// rev.38-39: KETEMU AKAR MASALAH initData SELALU KOSONG di semua device (HP, PC, Telegram Web):
+// Apps Script SELALU mengalihkan (redirect) /exec ke script.googleusercontent.com, dan data
+// peluncuran Mini App dari Telegram (nempel di URL setelah "#") hilang di tengah pengalihan itu.
+// FIX: halaman HTML-nya dipindah hosting ke GitHub Pages (statis, TANPA pengalihan) - lihat file
+// index.html terpisah. doGet() di sini sekarang PUNYA MODE BARU: dipanggil dengan
+// ?action=kategori dari halaman GitHub Pages itu (fetch biasa, aman dari masalah redirect di
+// atas karena fetch tidak bawa fragment URL) buat ambil daftar Kategori/Varian sebagai JSON.
+//
+// rev.47 - PERUBAHAN ARSITEKTUR (permintaan Denny): Mini App sekarang HANYA jadi "alat bantu
+// format", BUKAN penulis langsung ke sheet lagi. Alasannya: (1) tim potong perlu lihat riwayat
+// input di history chat grup (kalau nulis langsung ke sheet, chat grup jadi kosong/gak ada
+// jejaknya), (2) submit langsung ke Apps Script lambat (cold start + baca/tulis banyak sheet
+// sekaligus), (3) sekalian menghindari ribetnya validasi initData Telegram yang beberapa kali
+// bermasalah di rev.33-39. Sekarang: halaman GitHub Pages bisa nampung BEBERAPA item sekaligus
+// dalam 1x buka (tanpa submit ke server), lalu tombol "Buat Teks" mengubahnya jadi teks PERSIS
+// format yang sudah dikenali parseTimPotongText() yang sudah ada (baris "<KodeItem> <WARNA>
+// <kg>kg rol <kodeRoll>" diikuti baris "<Size1> <Qty1> <Size2> <Qty2>...") - tim potong tinggal
+// salin (tombol copy) & kirim manual ke grup, lalu jalur chat teks yang SUDAH ADA (tidak
+// diubah sama sekali) yang memproses seperti biasa. handleMiniAppSubmission()/tulisItemMiniApp()
+// (jalur tulis langsung rev.33-39) DIBIARKAN ada di kode ini untuk jaga-jaga, tapi TIDAK dipakai
+// lagi oleh halaman GitHub Pages yang baru.
+//
+// CATATAN KETERBATASAN: kalau baris TIM POTONG di TENGAH sheet DIHAPUS (bukan dihapus isinya,
+// tapi baris fisiknya lewat "Delete row") sementara ada baris lain di bawahnya, tautan "Baris
+// TimPotong" di LOG PEMAKAIAN KAIN untuk baris yang ikut geser jadi tidak akurat. Kalau itu
+// terjadi (atau curiga stok kain "nyangkut"), jalankan perbaikiSemuaHariIniManual() dari editor
+// - aman dijalankan berkali-kali (idempotent).
+// ============================================================
+
+const SHEET_DATA_NAME = 'TIM POTONG';
+const DEBUG_SHEET_NAME = 'DEBUG_LOG_TIMPOTONG';
+
+// Format tanggal manual (tidak bergantung locale sistem), contoh hasil: "Kamis,  9/07/26"
+const DAYS_ID = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+function formatTanggalIndo(date) {
+  const dayName = DAYS_ID[date.getDay()];
+  const day = date.getDate();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = String(date.getFullYear()).slice(-2);
+  return dayName + ',  ' + day + '/' + month + '/' + year;
+}
+
+// Bandingkan nilai sel (bisa berupa teks ATAU Date object - Google Sheets kadang otomatis
+// mengubah teks yang mirip tanggal jadi Date object beneran) dengan tanggal HARI INI.
+function isTanggalHariIni(cellValue) {
+  const today = new Date();
+  if (Object.prototype.toString.call(cellValue) === '[object Date]') {
+    return cellValue.getDate() === today.getDate() &&
+      cellValue.getMonth() === today.getMonth() &&
+      cellValue.getFullYear() === today.getFullYear();
+  }
+  return String(cellValue) === formatTanggalIndo(today);
+}
+
+function getProp(key) {
+  return PropertiesService.getScriptProperties().getProperty(key);
+}
+
+// Konversi nomor kolom (1-based) jadi huruf kolom spreadsheet (1->A, 27->AA, dst)
+// Dipakai untuk membangun formula Kg Sisa supaya tidak jadi angka mati.
+function colLetter(colIndex1based) {
+  let letter = '';
+  let n = colIndex1based;
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    letter = String.fromCharCode(65 + rem) + letter;
+    n = Math.floor((n - 1) / 26);
+  }
+  return letter;
+}
+
+function getSpreadsheet() {
+  return SpreadsheetApp.openById(getProp('SPREADSHEET_ID'));
+}
+
+// ============================================================
+// KAMUS TIM POTONG - koreksi hasil akhir, BUKAN dari kode
+// Format sheet: kolom A = SALAH (hasil yang keluar sekarang), kolom B = BENAR (yang seharusnya)
+// Sheet dibuat otomatis (dengan header + contoh awal) kalau belum ada.
+// ============================================================
+const SHEET_KAMUS_TIMPOTONG = 'KAMUS TIM POTONG';
+
+function bacaKamusTimPotong() {
+  const ss = getSpreadsheet();
+  let sheet = ss.getSheetByName(SHEET_KAMUS_TIMPOTONG);
+
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_KAMUS_TIMPOTONG);
+    sheet.appendRow(['SALAH', 'BENAR']);
+    const contohAwal = [
+      ['PUTIH MUSTARD', 'WHITE MUSTARD'],
+      ['LS30 RIB PUTIH', 'LS WHITE SOLID'],
+      ['LS24-MERAH BATA', 'LS24-TERRACOTTA'],
+      ['LS STEEL BLUE', 'LS24-ST. BLUE'],
+      ['TS24 IJO BOTOL', 'TS HIJAU TUA'],
+      ['NEVY', 'NAVY'],
+      ['PUTIH TERACOTA', 'WHITE TERACOTA'],
+      ['KUBUS', 'MUSTARD'],
+      ['OS HIJAB PUTIH SAGE', 'OSHT WHITE SAGE'],
+      ['OS HIJAB CREAM SAGE', 'OSHT CREAM SAGE'],
+      ['OS HIJAB HITAM TERACOTA', 'OSHT BLACK TERRACOTTA'],
+      ['LT STEEL NEVY', 'LT STEEL NAVY'],
+      ['ST BLUE', 'ST. BLUE'],
+      ['OB HITAM TERACOTA', 'TST BLACK TERRACOTTA'],
+      ['OB MERAH 24S', 'TS MERAH'],
+      ['LS SAGE 24S', 'LS24-SAGE'],
+    ];
+    for (const pair of contohAwal) sheet.appendRow(pair);
+    logDebug('KAMUS TIM POTONG dibuat', 'Sheet baru dibuat dengan ' + contohAwal.length + ' contoh awal, silakan tambah/edit sendiri');
+  }
+
+  const data = sheet.getDataRange().getValues();
+  const map = {};
+  for (let r = 1; r < data.length; r++) {
+    const salah = data[r][0];
+    const benar = data[r][1];
+    if (salah && benar) {
+      map[String(salah).trim().toUpperCase()] = String(benar).trim().toUpperCase();
+    }
+  }
+  return map;
+}
+
+// ============================================================
+// KAMUS SINONIM WARNA (rev.29, diperluas rev.30) - menjembatani istilah warna yang beda-beda
+// tapi maksudnya SAMA antara nama item TIM POTONG (sering hasil KAMUS TIM POTONG jadi bahasa
+// Inggris, misal "BLACK") dan warna yang tertulis di sheet STOK KAIN (sering bahasa Indonesia,
+// misal "HITAM"). TANPA ini, item "OSHT BLACK TERRACOTTA" tidak akan pernah cocok ke stok kain
+// yang warnanya ditulis "HITAM".
+// Format sheet (rev.30): 1 BARIS = 1 GRUP sinonim, bisa 2 sampai 5 istilah (kolom Warna 1..5).
+// SEMUA istilah dalam 1 baris yang sama dianggap SAMA satu sama lain (bukan cuma pasangan 2
+// arah lagi) - kolom yang tidak dipakai boleh dikosongkan. Contoh: baris "GREY | GRAY | ABU |
+// ABU-ABU" berarti keempat istilah itu semuanya dianggap warna yang SAMA.
+// Sheet dibuat otomatis (dengan header + contoh awal) kalau belum ada.
+// ============================================================
+const SHEET_KAMUS_SINONIM_WARNA = 'KAMUS SINONIM WARNA';
+
+function bacaKamusSinonimWarna() {
+  const ss = getSpreadsheet();
+  let sheet = ss.getSheetByName(SHEET_KAMUS_SINONIM_WARNA);
+
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_KAMUS_SINONIM_WARNA);
+    sheet.appendRow(['Warna 1', 'Warna 2', 'Warna 3', 'Warna 4', 'Warna 5']);
+    const contohAwal = [
+      ['BLACK', 'HITAM'],
+      ['WHITE', 'PUTIH'],
+      ['RED', 'MERAH'],
+      ['GREEN', 'HIJAU'],
+      ['BLUE', 'BIRU'],
+      ['YELLOW', 'KUNING'],
+      ['GREY', 'GRAY', 'ABU', 'ABU-ABU'],
+      ['BROWN', 'COKLAT', 'COKELAT'],
+      ['PURPLE', 'UNGU', 'VIOLET'],
+      ['ORANGE', 'ORANYE'],
+      ['CREAM', 'KRIM', 'CREAM SUSU', 'IVORY'],
+      ['NAVY', 'DONGKER', 'BIRU DONGKER', 'BIRU TUA'],
+      ['MAROON', 'MARUN', 'MERAH HATI'],
+    ];
+    for (const row of contohAwal) sheet.appendRow(row);
+    logDebug('KAMUS SINONIM WARNA dibuat', 'Sheet baru dibuat dengan ' + contohAwal.length + ' grup contoh awal, silakan tambah/edit sendiri (boleh 2 sampai 5 istilah per baris)');
+  }
+
+  const data = sheet.getDataRange().getValues();
+  const map = {}; // WARNA -> [daftar sinonimnya dalam grup yang sama, TIDAK termasuk dirinya sendiri]
+  function tambah(a, b) {
+    if (!map[a]) map[a] = [];
+    if (map[a].indexOf(b) === -1) map[a].push(b);
+  }
+  for (let r = 1; r < data.length; r++) {
+    // Ambil semua istilah TERISI di baris ini (berapapun jumlah kolomnya, tidak dibatasi 5 persis -
+    // kalau Denny nambah kolom ke-6/7 dst manual, tetap kebaca).
+    const istilahDalamBaris = data[r]
+      .map(function (v) { return String(v || '').trim().toUpperCase(); })
+      .filter(function (v) { return v; });
+
+    // Setiap istilah dalam baris ini dianggap SAMA dengan SEMUA istilah LAIN di baris yang sama
+    for (let i = 0; i < istilahDalamBaris.length; i++) {
+      for (let j = 0; j < istilahDalamBaris.length; j++) {
+        if (i === j) continue;
+        tambah(istilahDalamBaris[i], istilahDalamBaris[j]);
+      }
+    }
+  }
+  return map;
+}
+
+// Kembalikan daftar istilah warna yang dianggap SAMA dengan `warna` (termasuk `warna` itu
+// sendiri), dipakai untuk mencocokkan ke sheet STOK KAIN. Contoh: warna="GREY" + kamus punya
+// grup [GREY, GRAY, ABU, ABU-ABU] -> hasil ["GREY", "GRAY", "ABU", "ABU-ABU"].
+function getSinonimWarna(warna, kamusSinonimWarna) {
+  const key = String(warna).trim().toUpperCase();
+  const hasil = [key];
+  if (kamusSinonimWarna && kamusSinonimWarna[key]) {
+    for (const sin of kamusSinonimWarna[key]) {
+      if (hasil.indexOf(sin) === -1) hasil.push(sin);
+    }
+  }
+  return hasil;
+}
+
+// ============================================================
+// KATEGORI VARIAN TIM POTONG (BARU rev.33) - daftar pilihan Kategori & Varian untuk MINI APP.
+// Format sheet: kolom A = Kategori (grup tampilan, misal "Anak"/"Dewasa"), kolom B = Label Varian
+// (teks yang dilihat tim potong di dropdown, bebas bahasa manusia), kolom C = Kode Item (kode
+// BAKU yang dipakai membentuk nama akhir di sheet TIM POTONG, sama formatnya dengan hasil
+// computeKodePenulisanDasar() di jalur chat teks, misal "PJ", "LT", "SET", "ONESET", "SPEN").
+// Nama akhir item = "<Kode Item> <WARNA>" (WARNA diisi user di field terpisah di form).
+// Sheet dibuat otomatis (dengan header + contoh awal) kalau belum ada, silakan Denny
+// tambah/ubah/hapus baris sendiri kapan saja - TIDAK perlu ubah kode untuk menambah varian baru.
+// ============================================================
+const SHEET_KATEGORI_VARIAN = 'KATEGORI VARIAN TIM POTONG';
+
+function bacaKategoriVarian() {
+  const ss = getSpreadsheet();
+  let sheet = ss.getSheetByName(SHEET_KATEGORI_VARIAN);
+
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_KATEGORI_VARIAN);
+    sheet.appendRow(['Kategori', 'Label Varian', 'Kode Item']);
+    const contohAwal = [
+      ['Anak', 'Kaos Lengan Panjang', 'PJ'],
+      ['Anak', 'Kaos Lengan Panjang Kombinasi', 'LT'],
+      ['Anak', 'Setelan', 'SET'],
+      ['Anak', 'Setelan Pendek', 'SET.'],
+      ['Anak', 'Oneset Panjang', 'ONESET'],
+      ['Anak', 'Oneset Pendek', 'SPEN'],
+      ['Anak', 'Celana Pendek', 'CP'],
+      ['Dewasa', 'Kaos Lengan Panjang 24S', 'LS24-'],
+      ['Dewasa', 'Kaos Lengan Panjang 30S', 'LS30'],
+      ['Dewasa', 'Kaos Oblong 24S', 'TS24'],
+      ['Dewasa', 'Kaos Oblong 30S', 'TS30'],
+    ];
+    for (const row of contohAwal) sheet.appendRow(row);
+    logDebug('KATEGORI VARIAN TIM POTONG dibuat', 'Sheet baru dibuat dengan ' + contohAwal.length + ' contoh awal - silakan sesuaikan/tambah sendiri, ini yang jadi pilihan di Mini App');
+  }
+
+  const data = sheet.getDataRange().getValues();
+  const kategoriMap = {}; // "Kategori" -> [{label: "Label Varian", kode: "Kode Item"}, ...]
+  for (let r = 1; r < data.length; r++) {
+    const kategori = String(data[r][0] || '').trim();
+    const label = String(data[r][1] || '').trim();
+    const kode = String(data[r][2] || '').trim();
+    // rev.47: Kode Item BOLEH kosong dengan SENGAJA - artinya nama akhir item di sheet nanti
+    // HANYA warna-nya saja (tanpa awalan apapun), sesuai konvensi lama untuk varian semacam
+    // "Pendek" / "Pendek Kombinasi". Yang WAJIB diisi cuma Kategori & Label Varian.
+    if (!kategori || !label) continue;
+    if (!kategoriMap[kategori]) kategoriMap[kategori] = [];
+    kategoriMap[kategori].push({ label: label, kode: kode });
+  }
+  return kategoriMap;
+}
+
+// Fungsi ini otomatis dipanggil Telegram tiap ada pesan teks baru masuk
+function doPost(e) {
+  logDebug('doPost terpanggil', e.postData ? e.postData.contents.substring(0, 300) : 'TIDAK ADA postData');
+
+  try {
+    const update = JSON.parse(e.postData.contents);
+
+    // rev.33: submit dari MINI APP ditandai field "source: miniapp_v1" - ini BUKAN update
+    // Telegram biasa (yang selalu punya "update_id"), jadi dicek & dipisah paling awal sebelum
+    // logic webhook Telegram di bawah ini disentuh sama sekali.
+    if (update && update.source === 'miniapp_v1') {
+      return handleMiniAppSubmission(update);
+    }
+
+    const updateId = String(update.update_id);
+
+    const cache = CacheService.getScriptCache();
+    const cacheKey = 'processed_' + updateId;
+    if (cache.get(cacheKey)) {
+      logDebug('Duplikat diabaikan', 'update_id ' + updateId);
+      return HtmlService.createHtmlOutput('OK - duplikat diabaikan');
+    }
+    cache.put(cacheKey, '1', 21600);
+
+    const message = update.message;
+
+    if (!message || !message.text) {
+      logDebug('Diabaikan', 'Bukan teks. Keys: ' + Object.keys(update).join(', '));
+      return HtmlService.createHtmlOutput('OK - bukan teks, diabaikan');
+    }
+
+    // rev.34: perintah buat MEMINTA tombol pembuka Mini App - dipakai KHUSUS untuk GRUP, karena
+    // tombol menu bawaan yang didaftarkan lewat BotFather HANYA muncul di chat PRIBADI dengan
+    // bot (batasan platform Telegram sendiri, bukan bug di sistem ini - lihat header file).
+    // Solusinya: bot kirim BALASAN berisi tombol (inline keyboard tipe "web_app") tiap kali ada
+    // yang ketik perintah ini - tombol jenis ini BISA muncul di grup. Sengaja diproses SEBELUM
+    // filter ALLOWED_USER_ID di bawah supaya siapa saja di grup bisa minta tombolnya (data yang
+    // DIKIRIM lewat form-nya sendiri tetap divalidasi ketat lewat validateTelegramWebAppData() +
+    // ALLOWED_USER_ID seperti biasa, jadi ini aman).
+    // rev.47: begitu ada request "/produksi" BARU masuk di chat yang sama, langsung hapus
+    // pasangan pesan "/produksi" + balasan tombol yang LAMA (bukan nunggu pembersihan jam 1
+    // pagi lagi) - lihat hapusProduksiSebelumnya_()/simpanProduksiTerakhir_() di bawah.
+    const teksTrim = message.text.trim().toLowerCase().split('@')[0];
+    if (teksTrim === '/produksi' || teksTrim === '/isiproduksi') {
+      hapusProduksiSebelumnya_(message.chat.id);
+      catatPesanUntukDihapus(message.chat.id, message.message_id);
+      const botMsgId = kirimTombolMiniApp(message.chat.id);
+      simpanProduksiTerakhir_(message.chat.id, message.message_id, botMsgId);
+      return HtmlService.createHtmlOutput('OK - tombol mini app dikirim');
+    }
+
+    // Filter: cuma proses pesan dari user yang diizinkan
+    const allowedUserId = getProp('ALLOWED_USER_ID');
+    const senderId = message.from ? String(message.from.id) : null;
+    if (allowedUserId && senderId !== String(allowedUserId)) {
+      logDebug('Diabaikan (bukan user diizinkan)', 'Pengirim: ' + (message.from ? message.from.first_name : '?') + ' (ID: ' + senderId + ')');
+      return HtmlService.createHtmlOutput('OK - bukan user diizinkan, diabaikan');
+    }
+
+    logDebug('Pesan diterima', message.text);
+
+    // Pisahkan dulu blok "Masuk ..." (stok kain BARU DATANG/pembelian) dari baris produksi biasa.
+    // rev.25: blok Masuk BISA dipecah jadi beberapa baris (baris pertama "Masuk <warna> <supplier>",
+    // diikuti baris-baris "kg / kode" satu-satu, contoh format WhatsApp/Telegram yang di-enter manual):
+    //   Masuk navy 24s ochim
+    //   25.10 / 0666
+    //   24.90 / 0963
+    // Baris LANJUTAN (cuma "kg / kode", tanpa kata "Masuk") IKUT digabung ke blok Masuk yang sama,
+    // bukan dianggap baris produksi - supaya tidak nyasar ke sheet TIM POTONG (bug rev.24 & sebelumnya).
+    const kelompok = pisahkanBarisMasukDanProduksi(message.text);
+
+    if (kelompok.blokMasuk.length > 0) {
+      for (const blok of kelompok.blokMasuk) {
+        const daftarMasuk = parseBarisMasuk(blok);
+        if (daftarMasuk && daftarMasuk.length > 0) {
+          for (const pm of daftarMasuk) {
+            tambahStokKainMasuk(pm.warna, pm.kg, pm.kodeRoll, pm.supplier);
+          }
+        } else {
+          logDebug('Blok Masuk gagal diparsing', blok);
+        }
+      }
+    }
+
+    const barisProduksi = kelompok.barisProduksi;
+    if (barisProduksi.trim()) {
+      const kamusTimPotong = bacaKamusTimPotong();
+      const items = parseTimPotongText(barisProduksi, kamusTimPotong);
+      logDebug('Hasil parsing', JSON.stringify(items));
+
+      tulisKeSheetData(items);
+      logDebug('Sukses tulis ke sheet', items.length + ' item');
+    }
+
+    return HtmlService.createHtmlOutput('OK');
+  } catch (err) {
+    logDebug('ERROR', err.message + ' | Stack: ' + err.stack);
+    return HtmlService.createHtmlOutput('ERROR: ' + err.message);
+  }
+}
+
+// ============================================================
+// MINI APP (BARU rev.33) - form web di dalam Telegram, jalur input TAMBAHAN (paralel, bukan
+// pengganti) dari chat teks biasa. Lihat catatan di header file untuk alur lengkapnya.
+// ============================================================
+
+// Dipanggil kalau ada yang buka URL Web App ini lewat browser/Telegram (method GET) - menyajikan
+// halaman form Mini App. Daftar Kategori/Varian disisipkan langsung ke HTML saat render (jadi
+// tidak perlu request terpisah lagi buat ambil data itu).
+// rev.47: peta SINONIM -> WARNA KANONIK yang KONSISTEN, selalu ambil KOLOM PERTAMA ("Warna 1")
+// di tiap baris sebagai nama baku - beda dari bacaKamusSinonimWarna() yang petanya SIMETRIS
+// (semua istilah saling menunjuk, jadi "kanonik"-nya bisa ambigu/gak konsisten kalau dipakai
+// buat pilih 1 nama representatif). Dipakai KHUSUS oleh bacaWarnaTersedia() di bawah.
+function bacaPetaWarnaKanonik() {
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_KAMUS_SINONIM_WARNA);
+  if (!sheet) return {};
+  const data = sheet.getDataRange().getValues();
+  const peta = {}; // SINONIM (uppercase) -> WARNA KANONIK (kolom pertama yang terisi di baris itu)
+  for (let r = 1; r < data.length; r++) {
+    const istilahDalamBaris = data[r]
+      .map(function (v) { return String(v || '').trim().toUpperCase(); })
+      .filter(function (v) { return v; });
+    if (istilahDalamBaris.length === 0) continue;
+    const kanonik = istilahDalamBaris[0]; // KOLOM PERTAMA terisi di baris ini = "Warna 1"
+    istilahDalamBaris.forEach(function (term) { peta[term] = kanonik; });
+  }
+  return peta;
+}
+
+// rev.47: daftar WARNA yang masih ada sisa stok di STOK KAIN, buat autocomplete di Mini App.
+// rev.47: dedup sekarang pakai bacaPetaWarnaKanonik() (kolom pertama KAMUS SINONIM WARNA
+// sebagai nama baku yang KONSISTEN), gantiin cara lama yang bisa ambigu.
+function bacaWarnaTersedia() {
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_PEMBELIAN_KAIN);
+  if (!sheet) return [];
+  const data = sheet.getDataRange().getValues();
+  const headerMap = getHeaderMap(sheet);
+  const idxWarna = headerMap[normalizeHeader('Warna')];
+  const idxKgSisa = headerMap[normalizeHeader('Kg Sisa')];
+  if (idxWarna === undefined || idxKgSisa === undefined) return [];
+
+  const petaKanonik = bacaPetaWarnaKanonik();
+
+  const setWarna = {};
+  for (let r = 1; r < data.length; r++) {
+    const warnaRaw = String(data[r][idxWarna] || '').trim();
+    const kgSisa = parseFloat(data[r][idxKgSisa]) || 0;
+    if (!warnaRaw || kgSisa <= 0) continue;
+    const warnaUpper = warnaRaw.toUpperCase();
+    const kanonik = petaKanonik[warnaUpper] || warnaUpper;
+    setWarna[kanonik] = true;
+  }
+  return Object.keys(setWarna).sort();
+}
+
+// rev.47: sheet KOMBINASI WARNA - daftar kombinasi 3 warna (Nama Warna = 2 kata pertama,
+// Warna Ketiga = warna aksen ketiga) buat dipilih di Mini App saat varian Kombinasi/Trico
+// dipilih. Auto-dibuat dengan contoh dari Denny, editable manual seperti sheet lainnya.
+const SHEET_KOMBINASI_WARNA = 'KOMBINASI WARNA';
+
+function bacaKombinasiWarna() {
+  const ss = getSpreadsheet();
+  let sheet = ss.getSheetByName(SHEET_KOMBINASI_WARNA);
+
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_KOMBINASI_WARNA);
+    sheet.appendRow(['Nama Warna', 'Warna Ketiga']);
+    const contohAwal = [
+      ['WHITE MUSTARD', 'STEEL BLUE'],
+      ['WHITE TERACOTA', 'NAVY'],
+      ['WHITE SAGE', 'HIJAU BOTOL'],
+      ['CREAM CHOCO', 'NAVY'],
+      ['CREAM MUSTARD', 'NAVY'],
+      ['CREAM SAGE', 'NAVY'],
+      ['NAVY WHITE', 'STEEL BLUE'],
+      ['NAVY CREAM', 'TERACOTA'],
+      ['MUSTARD NAVY', 'TERACOTA'],
+      ['BLACK TERACOTA', 'MUSTARD'],
+      ['TERACOTA GREEN', 'STEEL BLUE'],
+      ['STEEL NAVY', 'CREAM'],
+    ];
+    for (const row of contohAwal) sheet.appendRow(row);
+    logDebug('KOMBINASI WARNA dibuat', 'Sheet baru dibuat dengan ' + contohAwal.length + ' contoh awal - silakan sesuaikan/tambah sendiri');
+  }
+
+  const data = sheet.getDataRange().getValues();
+  const hasil = [];
+  for (let r = 1; r < data.length; r++) {
+    const nama = String(data[r][0] || '').trim();
+    const ketiga = String(data[r][1] || '').trim();
+    if (!nama || !ketiga) continue;
+    hasil.push({ nama: nama, ketiga: ketiga });
+  }
+  return hasil;
+}
+
+function doGet(e) {
+  try {
+    // rev.39: dipanggil dari halaman statis yang di-hosting di GitHub Pages (BUKAN lagi dari
+    // doGet ini) lewat fetch biasa - aman dari masalah "initData ilang" karena fetch tidak bawa
+    // fragment URL (#...) sama sekali, beda dari navigasi awal Telegram membuka Mini App.
+    if (e && e.parameter && e.parameter.action === 'kategori') {
+      const kategoriVarian = bacaKategoriVarian();
+      return ContentService.createTextOutput(JSON.stringify(kategoriVarian))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (e && e.parameter && e.parameter.action === 'warna') {
+      const warnaList = bacaWarnaTersedia();
+      return ContentService.createTextOutput(JSON.stringify(warnaList))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (e && e.parameter && e.parameter.action === 'kombinasi') {
+      const kombinasiList = bacaKombinasiWarna();
+      return ContentService.createTextOutput(JSON.stringify(kombinasiList))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // Jalur LAMA (rev.33-38) - halaman HTML disajikan LANGSUNG dari Apps Script. TERNYATA ini
+    // yang jadi biang kerok "initData selalu kosong": Apps Script SELALU mengalihkan (redirect)
+    // /exec ke alamat script.googleusercontent.com, dan data peluncuran Mini App dari Telegram
+    // (nempel di URL setelah "#") ketinggalan/hilang di tengah pengalihan itu - konsisten gagal
+    // di SEMUA device yang dites (HP, PC, Telegram Web), bukan soal versi/device. Makanya rev.39
+    // pindah HALAMANNYA ke GitHub Pages (hosting statis, TANPA pengalihan), Apps Script ini
+    // sekarang cuma jadi "otak"-nya (baca data kategori + terima submit). Jalur lama ini
+    // DIBIARKAN tetap ada sebagai cadangan/tes langsung dari editor, tapi TIDAK dipakai lagi
+    // buat Mini App produksi (link Mini App di BotFather sekarang arahnya ke GitHub Pages).
+    const kategoriVarian = bacaKategoriVarian();
+    const webAppUrl = ScriptApp.getService().getUrl();
+    let html = getMiniAppHtml_();
+    html = html.replace('__KATEGORI_VARIAN_JSON__', JSON.stringify(kategoriVarian));
+    html = html.replace('__WEBAPP_URL__', JSON.stringify(webAppUrl));
+    return HtmlService.createHtmlOutput(html)
+      .setTitle('Input Produksi - Tim Potong')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  } catch (err) {
+    logDebug('doGet ERROR', err.message + ' | Stack: ' + err.stack);
+    return HtmlService.createHtmlOutput('Terjadi error: ' + err.message);
+  }
+}
+
+// rev.39: kirim pesan berisi tombol ke chat (grup ATAU pribadi) - dipanggil dari perintah
+// /produksi. PENTING: tombol ini pakai tipe "url" biasa yang mengarah ke LINK LANGSUNG Mini App
+// (https://t.me/<bot>/<short_name>, didaftarkan lewat /newapp+/myapps di BotFather) - BUKAN
+// tipe tombol "web_app". Sudah dicoba pakai tipe "web_app" di rev.34 tapi Telegram menolak
+// dengan error "BUTTON_TYPE_INVALID" - itu batasan resmi Telegram, tombol tipe "web_app" yang
+// nempel di pesan biasa (sendMessage) CUMA boleh di chat pribadi, ditolak kalau dipakai di grup.
+// Tombol tipe "url" yang mengarah ke link langsung Mini App ini TETAP membuka Mini App beneran
+// (initData tetap kebaca normal), tapi lolos dipakai di grup karena secara teknis tipenya "url".
+function kirimTombolMiniApp(chatId) {
+  const botToken = getProp('TELEGRAM_BOT_TOKEN');
+  const botUsername = getProp('TELEGRAM_BOT_USERNAME');
+  const shortName = getProp('MINIAPP_SHORT_NAME');
+
+  if (!botUsername || !shortName) {
+    logDebug('Kirim tombol Mini App GAGAL', 'Script Property TELEGRAM_BOT_USERNAME dan/atau MINIAPP_SHORT_NAME belum diset (lihat /myapps di BotFather untuk nilainya)');
+    return;
+  }
+
+  const miniAppLink = 'https://t.me/' + botUsername + '/' + shortName;
+  // rev.47: balik ke tombol (bukan link polos di teks) - sekarang aman dipakai karena akar
+  // masalah initData sudah kelar (halaman sudah pindah ke GitHub Pages). Tombol tipe "url"
+  // (BUKAN "web_app") ini lolos dipakai di grup (beda dari tipe "web_app" yang kena
+  // BUTTON_TYPE_INVALID) dan hasilnya jauh lebih ringkas - gak muncul kartu preview besar
+  // seperti kalau link dikirim sebagai teks polos (rev.38-39).
+  const payload = {
+    chat_id: chatId,
+    text: '📝 Tap tombol di bawah buat isi data produksi:',
+    reply_markup: {
+      inline_keyboard: [[
+        { text: '📝 Isi Produksi', url: miniAppLink }
+      ]]
+    }
+  };
+  const response = UrlFetchApp.fetch('https://api.telegram.org/bot' + botToken + '/sendMessage', {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  });
+  const responseText = response.getContentText();
+  logDebug('Kirim tombol Mini App', 'Chat ID: ' + chatId + ' | Link: ' + miniAppLink + ' | Response: ' + responseText.substring(0, 300));
+
+  try {
+    const resJson = JSON.parse(responseText);
+    if (resJson.ok && resJson.result && resJson.result.message_id) {
+      catatPesanUntukDihapus(chatId, resJson.result.message_id);
+      return resJson.result.message_id;
+    }
+  } catch (e) {
+    logDebug('Gagal catat pesan bot buat cleanup', e.message);
+  }
+  return null;
+}
+
+// Dipanggil dari doPost() begitu ketemu penanda "source: miniapp_v1". Tugasnya: validasi bahwa
+// request ini BENAR datang dari Telegram Mini App (bukan sembarang orang yang tahu URL-nya) dan
+// dari user yang diizinkan, baru lanjut tulis ke sheet lewat tulisItemMiniApp().
+function handleMiniAppSubmission(data) {
+  try {
+    logDebug('Mini App: info klien', 'Platform: ' + (data.platform || '?') + ' | Versi Telegram.WebApp: ' + (data.version || '?'));
+
+    const validasi = validateTelegramWebAppData(data.initData);
+    if (!validasi.valid) {
+      logDebug('Mini App: submit ditolak', validasi.reason);
+      return ContentService.createTextOutput(JSON.stringify({ ok: false, error: validasi.reason }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    const allowedUserId = getProp('ALLOWED_USER_ID');
+    if (allowedUserId && String(validasi.userId) !== String(allowedUserId)) {
+      logDebug('Mini App: submit ditolak (bukan user diizinkan)', 'User ID: ' + validasi.userId);
+      return ContentService.createTextOutput(JSON.stringify({ ok: false, error: 'User tidak diizinkan mengisi form ini' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    const hasil = tulisItemMiniApp(data.kodeItem, data.warna, data.kg, data.kodeRoll, data.qty);
+    if (!hasil.ok) {
+      return ContentService.createTextOutput(JSON.stringify({ ok: false, error: hasil.error }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    logDebug('Mini App: sukses tulis ke sheet', JSON.stringify(data) + ' (user: ' + validasi.userId + ')');
+    return ContentService.createTextOutput(JSON.stringify({ ok: true }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    logDebug('Mini App ERROR', err.message + ' | Stack: ' + err.stack);
+    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// Bagian INTI penulisan ke sheet, DIPISAH dari handleMiniAppSubmission() supaya bisa dites
+// manual langsung dari editor (lihat testManualSimulasiMiniApp()) TANPA perlu initData Telegram
+// asli. Sengaja pakai tulisKeSheetData() yang SAMA dengan jalur chat teks - supaya semua logic
+// downstream (update STOK KAIN, KAMUS SINONIM WARNA, highlight "tidak ada stok kain", dst) otomatis
+// ikut berlaku sama persis, tidak ada logic yang diduplikasi/berisiko beda hasil.
+function tulisItemMiniApp(kodeItemRaw, warnaRaw, kgRaw, kodeRollRaw, qtyRaw) {
+  const kodeItem = String(kodeItemRaw || '').trim().toUpperCase();
+  const warna = String(warnaRaw || '').trim().toUpperCase();
+  const kg = parseFloat(kgRaw);
+  const kodeRoll = kodeRollRaw ? String(kodeRollRaw).trim() : '';
+  const qty = qtyRaw || {};
+
+  if (!kodeItem) return { ok: false, error: 'Kode item kosong (varian belum dipilih?)' };
+  if (!warna) return { ok: false, error: 'Warna belum diisi' };
+  if (!kg || isNaN(kg) || kg <= 0) return { ok: false, error: 'Kg kain tidak valid' };
+
+  const sizesClean = {};
+  for (const s of SIZE_ORDER) {
+    const v = parseInt(qty[s], 10);
+    if (v > 0) sizesClean[s] = v;
+  }
+  if (Object.keys(sizesClean).length === 0) return { ok: false, error: 'Qty per size kosong semua' };
+
+  const item = {
+    kain_kg: kg,
+    item: kodeItem + ' ' + warna,
+    sizes: sizesClean,
+    kodeRoll: kodeRoll,
+    confidence: 'high',
+    catatan: 'Input via Mini App'
+  };
+
+  tulisKeSheetData([item]);
+  return { ok: true };
+}
+
+// Validasi keaslian data yang dikirim balik Telegram Mini App (initData), sesuai algoritma resmi
+// Telegram: https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
+// Tanpa validasi ini, SIAPAPUN yang tahu URL Web App bisa kirim data palsu langsung ke sheet.
+function validateTelegramWebAppData(initData) {
+  try {
+    if (!initData) {
+      return { valid: false, reason: 'initData kosong - form ini harus dibuka lewat tombol di Telegram, bukan link langsung di browser' };
+    }
+    const botToken = getProp('TELEGRAM_BOT_TOKEN');
+    if (!botToken) {
+      return { valid: false, reason: 'TELEGRAM_BOT_TOKEN belum diset di Script Properties' };
+    }
+
+    const pairs = initData.split('&').map(function (pair) {
+      const idx = pair.indexOf('=');
+      return [pair.substring(0, idx), decodeURIComponent(pair.substring(idx + 1))];
+    });
+
+    let hash = null;
+    const filtered = [];
+    for (const p of pairs) {
+      if (p[0] === 'hash') { hash = p[1]; continue; }
+      filtered.push(p[0] + '=' + p[1]);
+    }
+    if (!hash) return { valid: false, reason: 'Tidak ada hash di initData' };
+
+    filtered.sort();
+    const dataCheckString = filtered.join('\n');
+
+    const secretKeyBytes = Utilities.computeHmacSha256Signature(botToken, 'WebAppData');
+    const dataCheckBytes = Utilities.newBlob(dataCheckString).getBytes();
+    const hashBytes = Utilities.computeHmacSha256Signature(dataCheckBytes, secretKeyBytes);
+    const hashHex = hashBytes.map(function (b) {
+      const v = (b < 0) ? b + 256 : b;
+      return ('0' + v.toString(16)).slice(-2);
+    }).join('');
+
+    if (hashHex !== hash) {
+      return { valid: false, reason: 'Hash tidak cocok - initData mungkin tidak valid/kadaluarsa' };
+    }
+
+    const authDateParam = pairs.find(function (p) { return p[0] === 'auth_date'; });
+    if (authDateParam) {
+      const authDate = parseInt(authDateParam[1], 10);
+      const umurDetik = (Date.now() / 1000) - authDate;
+      if (umurDetik > 3600) {
+        return { valid: false, reason: 'initData sudah kadaluarsa (lebih dari 1 jam sejak dibuka)' };
+      }
+    }
+
+    let userId = null;
+    const userParam = pairs.find(function (p) { return p[0] === 'user'; });
+    if (userParam) {
+      const userObj = JSON.parse(userParam[1]);
+      userId = userObj.id;
+    }
+
+    return { valid: true, userId: userId };
+  } catch (err) {
+    return { valid: false, reason: 'Error validasi initData: ' + err.message };
+  }
+}
+
+// ============================================================
+// PARSING UKURAN + QTY DARI 1 BARIS (support "M 60" maupun "M60")
+// ============================================================
+const SIZE_ORDER = ["XS","S","M","L","XL","XXL","3XL","4XL","5XL","6XL"];
+
+function normalizeSize(s) {
+  s = s.toUpperCase();
+  if (s === "2XL") return "XXL";
+  return s;
+}
+
+function sumSizes(sizes) {
+  return Object.keys(sizes).reduce(function (sum, k) { return sum + sizes[k]; }, 0);
+}
+
+// Cek + ekstrak SEMUA pasangan ukuran+qty dalam 1 baris, plus teks SEBELUM pasangan pertama (calon nama item).
+// Dipakai untuk mendeteksi baris "kombinasi": Nama + Ukuran (+Total) sekaligus dalam 1 baris, TANPA kg.
+function parseCombinedNameSizeLine(line) {
+  let cleaned = line.replace(/[.\-]+/g, ' ');
+  let claimedTotal = null;
+  const totalMatch = cleaned.match(/=\s*(\d+)/);
+  if (totalMatch) {
+    claimedTotal = parseInt(totalMatch[1], 10);
+    cleaned = cleaned.replace(/=\s*\d+/, '');
+  }
+
+  const pattern = /\b(XS|XXL|2XL|3XL|4XL|5XL|6XL|S|M|L|XL)\s*(\d+)/gi;
+  const sizes = {};
+  let firstMatchIndex = -1;
+  let m;
+  while ((m = pattern.exec(cleaned)) !== null) {
+    if (firstMatchIndex === -1) firstMatchIndex = m.index;
+    const size = normalizeSize(m[1]);
+    const qty = parseInt(m[2], 10);
+    sizes[size] = (sizes[size] || 0) + qty;
+  }
+
+  const itemName = firstMatchIndex >= 0 ? cleaned.substring(0, firstMatchIndex).trim() : cleaned.trim();
+  return { itemName: itemName, sizes: sizes, claimedTotal: claimedTotal };
+}
+
+// Parsing baris ukuran, contoh: "M 60 L 60 XL 60 XXL 60 =240" ATAU "S10 M12 L12"
+// Dipakai untuk baris ukuran MURNI (tanpa nama), yaitu baris SETELAH baris "Nama+Kg"
+function parseSizeLineV2(line) {
+  let cleaned = line.replace(/[.\-]+/g, ' ');
+  let claimedTotal = null;
+  const totalMatch = cleaned.match(/=\s*(\d+)/);
+  if (totalMatch) {
+    claimedTotal = parseInt(totalMatch[1], 10);
+    cleaned = cleaned.replace(/=\s*\d+/, '');
+  }
+  const pattern = /\b(XS|XXL|2XL|3XL|4XL|5XL|6XL|S|M|L|XL)\s*(\d+)/gi;
+  const sizes = {};
+  let m;
+  while ((m = pattern.exec(cleaned)) !== null) {
+    const size = normalizeSize(m[1]);
+    const qty = parseInt(m[2], 10);
+    sizes[size] = (sizes[size] || 0) + qty;
+  }
+  return { sizes: sizes, claimedTotal: claimedTotal };
+}
+
+// Parsing baris "Nama Item 25,4 kg" atau "Nama Item 25,4" (kata "kg" opsional).
+// Sebelum jatuh ke pola satu-angka, cek DULU pola "pengurangan kg":
+//   <nama> <kg_awal>- <kg_sisa>kg   contoh: "Oneset St blue pendek 13,48- 3,18kg"
+// Artinya kain yang TERPAKAI = kg_awal DIKURANGI kg_sisa (BUKAN cuma angka terakhir yang diambil).
+// Kalau hasilnya negatif (kg_sisa > kg_awal, artinya salah tulis), tetap dikembalikan tapi
+// ditandai needsReview supaya baris ini gampang ketahuan dan dicek manual.
+// HANYA dipanggil untuk baris yang TERBUKTI TIDAK punya ukuran di dalamnya (dicek di pemanggil).
+function tryParseNameOnly(line) {
+  const reductionMatch = line.match(/^(.*?)\s*([\d]+[.,]?[\d]*)\s*-\s*([\d]+[.,]?[\d]*)\s*(?:kg\.?)?\s*$/i);
+  if (reductionMatch) {
+    const itemNamePartR = reductionMatch[1].trim();
+    const kgAwal = parseFloat(reductionMatch[2].replace(',', '.'));
+    const kgSisaTertulis = parseFloat(reductionMatch[3].replace(',', '.'));
+    if (itemNamePartR && !isNaN(kgAwal) && !isNaN(kgSisaTertulis)) {
+      const kainKg = kgAwal - kgSisaTertulis;
+      const result = { itemName: itemNamePartR, kainKg: kainKg };
+      if (kainKg < 0) {
+        result.needsReview = true;
+        result.catatanReview = 'Hasil pengurangan kg negatif (' + kgAwal + ' - ' + kgSisaTertulis + ' = ' + kainKg + '), cek manual';
+      }
+      return result;
+    }
+  }
+
+  const cleaned = line.replace(/-/g, ' ').trim();
+  const m = cleaned.match(/^(.*?)\s*([\d]+[.,]?[\d]*)\s*(?:kg\.?)?\s*$/i);
+  if (!m) return null;
+  const itemNamePart = m[1].trim();
+  if (!itemNamePart) return null;
+  return { itemName: itemNamePart, kainKg: parseFloat(m[2].replace(',', '.')) };
+}
+
+// Gabungkan beberapa potongan catatan (buang yang kosong), pisahkan dengan "; "
+function gabungCatatan() {
+  const parts = Array.prototype.slice.call(arguments).filter(function (c) { return c; });
+  return parts.join('; ');
+}
+
+// Parsing baris "LEBIH BAJU M1 L2 XL3" atau "LEBIH CELANA S2"
+function tryParseLebih(line) {
+  const cleaned = line.replace(/[.\-]+/g, ' ').trim();
+  const m = cleaned.match(/^lebih\s+(baju|celana)\s+(.*)$/i);
+  if (!m) return null;
+  const type = m[1].toLowerCase();
+  const parsedSize = parseSizeLineV2(m[2]);
+  return { type: type, sizes: parsedSize.sizes };
+}
+
+// ============================================================
+// KONVERSI NAMA ITEM SESUAI ATURAN BISNIS TIM POTONG
+// ============================================================
+function computeKodePenulisanDasar(rawName) {
+  const name = rawName.trim();
+  const lower = name.toLowerCase();
+  const words = name.split(/\s+/);
+  const lowerWords = words.map(function (w) { return w.toLowerCase(); });
+
+  function removeWords(arr, toRemove) {
+    const result = arr.slice();
+    for (const w of toRemove) {
+      const idx = result.findIndex(function (x) { return x.toLowerCase() === w; });
+      if (idx !== -1) result.splice(idx, 1);
+    }
+    return result;
+  }
+  function hasWord(arr, w) {
+    return arr.some(function (x) { return x.toLowerCase() === w; });
+  }
+
+  // a) ONESET pola 1: "Stelan"+"Anak"+"Panjang" (urutan bebas)
+  if (hasWord(lowerWords, 'stelan') && hasWord(lowerWords, 'anak') && hasWord(lowerWords, 'panjang')) {
+    const rest = removeWords(words, ['stelan', 'anak', 'panjang']).join(' ').toUpperCase();
+    return rest ? 'ONESET ' + rest : 'ONESET';
+  }
+  // b) "Oneset Panjang" -> ONESET
+  if (hasWord(lowerWords, 'oneset') && hasWord(lowerWords, 'panjang')) {
+    const rest = removeWords(words, ['oneset', 'panjang']).join(' ').toUpperCase();
+    return rest ? 'ONESET ' + rest : 'ONESET';
+  }
+  // c) "Oneset Pendek" -> SPEN
+  if (hasWord(lowerWords, 'oneset') && hasWord(lowerWords, 'pendek')) {
+    const rest = removeWords(words, ['oneset', 'pendek']).join(' ').toUpperCase();
+    return rest ? 'SPEN ' + rest : 'SPEN';
+  }
+  // d) "OS Anak"
+  if (lower.startsWith('os anak')) {
+    const rest = words.slice(2).join(' ').toUpperCase();
+    return rest ? 'OSA ' + rest : 'OSA';
+  }
+  // e) "Anak Rempel"
+  if (lower.startsWith('anak rempel')) {
+    const rest = words.slice(2).join(' ').toUpperCase();
+    return rest ? 'RUFFLE ' + rest : 'RUFFLE';
+  }
+  // f) "Ruffle" (kata pertama)
+  if (lowerWords[0] === 'ruffle') {
+    const rest = words.slice(1).join(' ').toUpperCase();
+    return rest ? 'RFL ' + rest : 'RFL';
+  }
+  // g) "OB 24S Panjang" / "Panjang 24S"
+  if (hasWord(lowerWords, 'panjang') && hasWord(lowerWords, '24s')) {
+    const rest = removeWords(words, ['ob', '24s', 'panjang']).join(' ').toUpperCase();
+    return 'LS24-' + rest;
+  }
+  // h) "OB 30S Panjang" / "Panjang 30S"
+  if (hasWord(lowerWords, 'panjang') && hasWord(lowerWords, '30s')) {
+    const rest = removeWords(words, ['ob', '30s', 'panjang']).join(' ').toUpperCase();
+    return rest ? 'LS30 ' + rest : 'LS30';
+  }
+  // i) "OB 24S" (tanpa Panjang)
+  if (lower.startsWith('ob 24s')) {
+    const rest = words.slice(2).join(' ').toUpperCase();
+    return rest ? 'TS24 ' + rest : 'TS24';
+  }
+  // j) "OB 30S" (tanpa Panjang)
+  if (lower.startsWith('ob 30s')) {
+    const rest = words.slice(2).join(' ').toUpperCase();
+    return rest ? 'TS30 ' + rest : 'TS30';
+  }
+  // k) "Celana Pendek"
+  if (lower.startsWith('celana pendek')) {
+    const rest = words.slice(2).join(' ').toUpperCase();
+    return rest ? 'CP ' + rest : 'CP';
+  }
+  // l) "Setelan Pendek"
+  if (lower.startsWith('setelan pendek')) {
+    const rest = words.slice(2).join(' ').toUpperCase();
+    return rest ? 'SET. ' + rest : 'SET.';
+  }
+  // m) "Anak Panjang" / "Panjang Anak" -> PJ (HANYA kalau 1 kata warna); kalau 2+ kata warna -> LT (kombinasi)
+  if (lower.startsWith('anak panjang') || lower.startsWith('panjang anak')) {
+    const rest = removeWords(words, ['anak', 'panjang']).join(' ').toUpperCase();
+    const restWordCount = rest ? rest.split(/\s+/).length : 0;
+    if (restWordCount >= 2) {
+      return rest ? 'LT ' + rest : 'LT';
+    }
+    return rest ? 'PJ ' + rest : 'PJ';
+  }
+  // n) "Anak Pendek"
+  if (lower.startsWith('anak pendek')) {
+    const rest = words.slice(2).join(' ').toUpperCase();
+    return rest ? 'ANAK ' + rest : 'ANAK';
+  }
+  // o) "Anak Stelan"
+  if (lower.startsWith('anak stelan')) {
+    const rest = words.slice(2).join(' ').toUpperCase();
+    return rest ? 'SET ' + rest : 'SET';
+  }
+  // p) Kombinasi/Combinasi (dengan/tanpa Panjang)
+  if (hasWord(lowerWords, 'combinasi') || hasWord(lowerWords, 'kombinasi')) {
+    const hasPanjang = hasWord(lowerWords, 'panjang');
+    let rest = removeWords(words, ['anak', 'combinasi', 'kombinasi', 'panjang']).join(' ').toUpperCase();
+    rest = rest.replace(/\+/g, ' ').replace(/\s+/g, ' ').trim();
+    return hasPanjang ? 'LT ' + rest : rest;
+  }
+  // p2) "Anak <Warna1> <Warna2> Panjang" (diawali Anak, diakhiri Panjang, warna di tengah) -> "LT <Warna-warna>"
+  if (lowerWords[0] === 'anak' && lowerWords[lowerWords.length - 1] === 'panjang' && words.length > 2) {
+    const rest = words.slice(1, -1).join(' ').toUpperCase();
+    return rest ? 'LT ' + rest : 'LT';
+  }
+  // q) "Anak <Warna>" fallback (tanpa kata khusus lain)
+  if (lowerWords[0] === 'anak') {
+    const rest = words.slice(1).join(' ').toUpperCase();
+    return rest || name.toUpperCase();
+  }
+
+  // default: tidak ada rule yang cocok, pakai apa adanya
+  return name.toUpperCase();
+}
+
+// Wrapper: hitung nama dasar dulu, lalu cek KAMUS TIM POTONG untuk koreksi tahap akhir.
+// Format sheet KAMUS: kolom A = SALAH (hasil yang keluar sekarang), kolom B = BENAR (yang seharusnya).
+// Fallback koreksi PER-KATA/FRASA dari KAMUS, dipakai kalau tidak ada match UTUH.
+function terapkanKamusPerKata(hasilDasar, kamusTimPotong) {
+  const entries = Object.keys(kamusTimPotong)
+    .map(function (salah) { return { salahTokens: salah.split(/\s+/), benar: kamusTimPotong[salah] }; })
+    .sort(function (a, b) { return b.salahTokens.length - a.salahTokens.length; });
+
+  let current = hasilDasar;
+  const MAX_ITERASI = 5;
+  for (let iterasi = 0; iterasi < MAX_ITERASI; iterasi++) {
+    const tokens = current.split(/\s+/);
+    const hasilTokens = [];
+    let i = 0;
+    let adaPerubahan = false;
+    while (i < tokens.length) {
+      let cocok = false;
+      for (const entry of entries) {
+        const n = entry.salahTokens.length;
+        if (i + n > tokens.length) continue;
+        const potongan = tokens.slice(i, i + n).join(' ').toUpperCase();
+        if (potongan === entry.salahTokens.join(' ')) {
+          hasilTokens.push(entry.benar);
+          i += n;
+          cocok = true;
+          adaPerubahan = true;
+          break;
+        }
+      }
+      if (!cocok) {
+        hasilTokens.push(tokens[i]);
+        i += 1;
+      }
+    }
+    current = hasilTokens.join(' ');
+    if (!adaPerubahan) break;
+  }
+  return current;
+}
+
+function convertTimPotongItemName(rawName, kamusTimPotong) {
+  const hasilDasar = computeKodePenulisanDasar(rawName);
+  if (kamusTimPotong) {
+    const koreksiUtuh = kamusTimPotong[hasilDasar.toUpperCase()];
+    if (koreksiUtuh) return koreksiUtuh;
+    return terapkanKamusPerKata(hasilDasar, kamusTimPotong);
+  }
+  return hasilDasar;
+}
+
+// Ekstrak kode roll dari akhir baris. Dukung 2 format:
+//  1. Format lama, pakai kata "rol" eksplisit: "... 25,4kg - rol 0178" / "...25,4kg/ rol 0178"
+//  2. Format baru (rev.28), TANPA kata "rol" sama sekali - "/" murni pemisah kg vs kode roll:
+//     "Anak putih 25,05/6097" -> kg=25,05, kode roll=6097. "/" dan kode rollnya TIDAK BOLEH
+//     nyangkut jadi bagian nama item - makanya diekstrak dulu di sini, SEBELUM parsing nama.
+function extractKodeRoll(line) {
+  const cleaned = line.replace(/[-\/]/g, ' ');
+  const m = cleaned.match(/\brol\.?\s*(\S+)\s*$/i);
+  if (m) return { kodeRoll: m[1].trim(), lineWithoutKode: cleaned.slice(0, m.index).trim() };
+
+  // Format baru: "<...angka><spasi opsional>/<spasi opsional><kode>" persis di AKHIR baris,
+  // TANPA kata "rol". Kalau ada kata "rol" (kasus di atas), branch itu sudah lebih dulu menangani -
+  // branch ini HANYA jalan kalau memang tidak ada kata "rol" sama sekali di baris tsb.
+  const mSlash = line.match(/^(.*[\d])\s*\/\s*(\S+)\s*$/);
+  if (mSlash) {
+    return { kodeRoll: mSlash[2].trim(), lineWithoutKode: mSlash[1].trim() };
+  }
+
+  return { kodeRoll: null, lineWithoutKode: line };
+}
+
+// ============================================================
+// BARIS "MASUK" - stok kain BARU DATANG (pembelian/kedatangan), BUKAN pemakaian produksi.
+// ============================================================
+function isBarisMasuk(line) {
+  return /^\s*masuk\b/i.test(line);
+}
+
+// Baris LANJUTAN dari blok Masuk - dukung 2 pola:
+//  a) HANYA "kg / kode", contoh "25.10 / 0666" (warna SAMA untuk semua baris, dari header) - rev.25
+//  b) "<warna> <kg>[kg]/<kode>", contoh "Kubus 24,70kg/1615" (warna BEDA tiap baris, cuma
+//     supplier yang sama, dari header) - rev.31
+function isBarisPasanganKgKode(line) {
+  return /^[\d]+[.,]?[\d]*\s*\/\s*\S+\s*$/.test(line.trim());
+}
+function isBarisWarnaKgKode(line) {
+  return /^\S.*?\s+[\d]+[.,]?[\d]*\s*kg?\s*\/\s*\S+\s*$/i.test(line.trim());
+}
+function isBarisLanjutanMasuk(line) {
+  return isBarisPasanganKgKode(line) || isBarisWarnaKgKode(line);
+}
+
+// Kelompokkan teks pesan jadi: blok-blok "Masuk" (tiap blok = ARRAY baris mentahnya, BUKAN
+// digabung jadi 1 string lagi - rev.31, supaya warna per baris bisa dibedakan) + sisa baris
+// produksi biasa. Support 3 gaya penulisan (lihat parseBarisMasuk untuk detail tiap gaya):
+//  a) Semua dalam 1 baris: "Masuk navy 24s ochim 25.10 / 0666 24.90 / 0963"
+//  b) Header + lanjutan "kg/kode" (warna SAMA): "Masuk navy 24s ochim" lalu "25.10 / 0666" dst
+//  c) Header CUMA supplier + lanjutan "warna kg/kode" (warna BEDA tiap baris) - rev.31:
+//     "Masuk ochim" lalu "Kubus 24,70kg/1615" lalu "Dasty 24,6kg/ 1358"
+// Baris kosong mengakhiri blok (supaya blok Masuk tidak "menyerap" baris produksi yang tidak
+// berhubungan kalau kebetulan dipisah jarak/enter).
+function pisahkanBarisMasukDanProduksi(text) {
+  const semuaBaris = text.split('\n');
+  const blokMasukList = [];
+  const barisProduksiList = [];
+  let blokAktif = null;
+
+  for (const rawLine of semuaBaris) {
+    const line = rawLine.trim();
+
+    if (!line) {
+      if (blokAktif) { blokMasukList.push(blokAktif); blokAktif = null; }
+      continue;
+    }
+
+    if (isBarisMasuk(line)) {
+      if (blokAktif) blokMasukList.push(blokAktif); // blok Masuk sebelumnya (kalau ada) ditutup dulu
+      blokAktif = [line];
+      continue;
+    }
+
+    if (blokAktif && isBarisLanjutanMasuk(line)) {
+      blokAktif.push(line);
+      continue;
+    }
+
+    // Baris ini bukan bagian dari blok Masuk manapun -> tutup blok aktif (kalau ada), lalu
+    // anggap baris ini baris produksi biasa.
+    if (blokAktif) { blokMasukList.push(blokAktif); blokAktif = null; }
+    barisProduksiList.push(rawLine);
+  }
+  if (blokAktif) blokMasukList.push(blokAktif);
+
+  return { blokMasuk: blokMasukList, barisProduksi: barisProduksiList.join('\n') };
+}
+
+// lines: ARRAY baris mentah (sudah di-trim) untuk 1 blok Masuk, baris pertama diawali "Masuk".
+function parseBarisMasuk(lines) {
+  const headerLine = lines[0];
+  const sisaBarisLain = lines.slice(1);
+  const tanpaMasuk = headerLine.trim().replace(/^masuk\s+/i, '');
+
+  // FORMAT C (rev.31): header CUMA nama supplier (TIDAK ada pola "kg/kode" sama sekali di situ),
+  // dan ADA baris-baris lanjutan yang masing-masing punya WARNA+KG+KODE sendiri-sendiri.
+  // Contoh: "Masuk ochim" lalu "Kubus 24,70kg/1615" lalu "Dasty 24,6kg/ 1358"
+  const headerPunyaPasangan = /[\d]+[.,]?[\d]*\s*kg?\s*\/\s*\S+/i.test(tanpaMasuk);
+  if (!headerPunyaPasangan && sisaBarisLain.length > 0) {
+    const supplierC = tanpaMasuk.trim().toUpperCase();
+    const hasilC = [];
+    let semuaBarisCocok = true;
+    for (const lineLain of sisaBarisLain) {
+      const mBaris = lineLain.match(/^(.*?)\s+([\d]+[.,]?[\d]*)\s*kg?\s*\/\s*(\S+)\s*$/i);
+      if (!mBaris) { semuaBarisCocok = false; break; }
+      const warnaC = mBaris[1].trim().toUpperCase();
+      const kgC = parseFloat(mBaris[2].replace(',', '.'));
+      const kodeC = mBaris[3].trim();
+      if (!warnaC || isNaN(kgC)) { semuaBarisCocok = false; break; }
+      hasilC.push({ warna: warnaC, kg: kgC, kodeRoll: kodeC, supplier: supplierC });
+    }
+    if (semuaBarisCocok && hasilC.length > 0) return hasilC;
+    // Kalau ada baris yang TIDAK cocok pola ini, lanjut coba format lain di bawah (fallback aman)
+  }
+
+  // FORMAT B (rev.25): banyak roll sekaligus, WARNA SAMA untuk semua - gabungkan semua baris
+  // blok ini jadi 1 teks dulu, baru cari semua pasangan "kg/kode" di dalamnya.
+  const tanpaMasukGabung = lines.join(' ').trim().replace(/^masuk\s+/i, '');
+  const polaPasangan = /([\d]+[.,]?[\d]*)\s*\/\s*(\S+)/g;
+  const pasangan = [];
+  let m;
+  let firstIndex = -1;
+  while ((m = polaPasangan.exec(tanpaMasukGabung)) !== null) {
+    if (firstIndex === -1) firstIndex = m.index;
+    pasangan.push({ kg: parseFloat(m[1].replace(',', '.')), kodeRoll: m[2].trim() });
+  }
+
+  if (pasangan.length > 0) {
+    const keterangan = tanpaMasukGabung.slice(0, firstIndex).trim();
+    const kataKeterangan = keterangan.split(/\s+/).filter(function (w) { return w; });
+    const warna = kataKeterangan.length > 0 ? kataKeterangan[0].toUpperCase() : '';
+    const supplier = kataKeterangan.length > 1 ? kataKeterangan[kataKeterangan.length - 1].toUpperCase() : '';
+    return pasangan.map(function (p) {
+      return { warna: warna, kg: p.kg, kodeRoll: p.kodeRoll, supplier: supplier };
+    });
+  }
+
+  // FORMAT A (lama, fallback): satu roll, pakai kata "rol"
+  const stripped = extractKodeRoll(headerLine.trim());
+  const tanpaMasukLama = stripped.lineWithoutKode.replace(/^masuk\s+/i, '').trim();
+  const mLama = tanpaMasukLama.match(/^(.*?)\s*([\d]+[.,]?[\d]*)\s*(?:kg\.?)?\s*$/i);
+  if (!mLama) return [];
+  const warnaLama = mLama[1].trim().toUpperCase();
+  const kgLama = parseFloat(mLama[2].replace(',', '.'));
+  if (!warnaLama || isNaN(kgLama)) return [];
+  return [{ warna: warnaLama, kg: kgLama, kodeRoll: stripped.kodeRoll, supplier: '' }];
+}
+
+// ============================================================
+// PARSING UTAMA
+// ============================================================
+function parseTimPotongText(text, kamusTimPotong) {
+  const rawLinesOriginal = text.split('\n').map(function (l) { return l.trim(); }).filter(function (l) { return l; });
+  const stripped = rawLinesOriginal.map(function (l) { return extractKodeRoll(l); });
+  const rawLines = stripped.map(function (s) { return s.lineWithoutKode; });
+  const kodeRollPerLine = stripped.map(function (s) { return s.kodeRoll; });
+
+  const outputItems = [];
+  let i = 0;
+
+  while (i < rawLines.length) {
+    const line = rawLines[i];
+    const combinedThis = parseCombinedNameSizeLine(line);
+    const hasSizes = Object.keys(combinedThis.sizes).length > 0;
+
+    if (hasSizes && combinedThis.itemName !== '') {
+      const mismatch = combinedThis.claimedTotal != null && combinedThis.claimedTotal !== sumSizes(combinedThis.sizes);
+      outputItems.push({
+        kain_kg: '',
+        item: convertTimPotongItemName(combinedThis.itemName, kamusTimPotong),
+        sizes: combinedThis.sizes,
+        kodeRoll: kodeRollPerLine[i],
+        confidence: mismatch ? 'low' : 'high',
+        catatan: mismatch ? ('Total tertulis ' + combinedThis.claimedTotal + ' != hasil hitung ' + sumSizes(combinedThis.sizes)) : ''
+      });
+      i += 1;
+      continue;
+    }
+
+    if (!hasSizes) {
+      const nameOnly = tryParseNameOnly(line);
+      if (nameOnly) {
+        const kodeRollUtama = kodeRollPerLine[i];
+        const peekNext = parseCombinedNameSizeLine(rawLines[i + 1] || '');
+        const isNextPureSizeLine = peekNext.sizes && Object.keys(peekNext.sizes).length > 0 && peekNext.itemName === '';
+
+        if (isNextPureSizeLine) {
+          const sizeLine = rawLines[i + 1] || '';
+          const parsedSize = parseSizeLineV2(sizeLine);
+          i += 2;
+
+          let lebihInfo = null;
+          if (i < rawLines.length) {
+            const maybeLebih = tryParseLebih(rawLines[i]);
+            if (maybeLebih) { lebihInfo = maybeLebih; i += 1; }
+          }
+
+          if (lebihInfo) {
+            const namaDasar = nameOnly.itemName.replace(/^stelan\s+/i, '').trim();
+            outputItems.push({
+              kain_kg: nameOnly.kainKg,
+              item: 'SET. ' + namaDasar.toUpperCase(),
+              sizes: parsedSize.sizes,
+              kodeRoll: kodeRollUtama,
+              confidence: nameOnly.needsReview ? 'low' : 'high',
+              catatan: nameOnly.needsReview ? nameOnly.catatanReview : ''
+            });
+            const labelItem = lebihInfo.type === 'baju' ? namaDasar.toUpperCase() : 'CP ' + namaDasar.toUpperCase();
+            outputItems.push({
+              kain_kg: '',
+              item: labelItem,
+              sizes: lebihInfo.sizes,
+              kodeRoll: null,
+              confidence: 'high',
+              catatan: ''
+            });
+          } else {
+            const mismatch = parsedSize.claimedTotal != null && parsedSize.claimedTotal !== sumSizes(parsedSize.sizes);
+            const catatanGabungan = gabungCatatan(
+              nameOnly.needsReview ? nameOnly.catatanReview : '',
+              mismatch ? ('Total tertulis ' + parsedSize.claimedTotal + ' != hasil hitung ' + sumSizes(parsedSize.sizes)) : ''
+            );
+            outputItems.push({
+              kain_kg: nameOnly.kainKg,
+              item: convertTimPotongItemName(nameOnly.itemName, kamusTimPotong),
+              sizes: parsedSize.sizes,
+              kodeRoll: kodeRollUtama,
+              confidence: (mismatch || nameOnly.needsReview) ? 'low' : 'high',
+              catatan: catatanGabungan
+            });
+          }
+
+          if (!lebihInfo && nameOnly.itemName.toLowerCase().startsWith('stelan')) {
+            const warnaDasar = nameOnly.itemName.replace(/^stelan\s+/i, '').trim();
+            while (i < rawLines.length) {
+              const nextVarian = parseCombinedNameSizeLine(rawLines[i]);
+              const isSatuKata = nextVarian.itemName && !/\s/.test(nextVarian.itemName);
+              const adaUkuran = nextVarian.sizes && Object.keys(nextVarian.sizes).length > 0;
+              if (!isSatuKata || !adaUkuran) break;
+
+              const mismatchVarian = nextVarian.claimedTotal != null && nextVarian.claimedTotal !== sumSizes(nextVarian.sizes);
+              outputItems.push({
+                kain_kg: '',
+                item: convertTimPotongItemName(nextVarian.itemName + ' ' + warnaDasar, kamusTimPotong),
+                sizes: nextVarian.sizes,
+                kodeRoll: kodeRollUtama,
+                confidence: mismatchVarian ? 'low' : 'high',
+                catatan: mismatchVarian ? ('Total tertulis ' + nextVarian.claimedTotal + ' != hasil hitung ' + sumSizes(nextVarian.sizes)) : ''
+              });
+              i += 1;
+            }
+          }
+          continue;
+        }
+
+        const breakdownList = [];
+        let j = i + 1;
+        while (j < rawLines.length) {
+          const nextCombined = parseCombinedNameSizeLine(rawLines[j]);
+          if (nextCombined.sizes && Object.keys(nextCombined.sizes).length > 0) break;
+          const nextNameOnly = tryParseNameOnly(rawLines[j]);
+          if (!nextNameOnly) break;
+          nextNameOnly.kodeRoll = kodeRollPerLine[j];
+          breakdownList.push(nextNameOnly);
+          j += 1;
+        }
+
+        const sizeLineFinal = parseCombinedNameSizeLine(rawLines[j] || '');
+        const isValidFinalSizeLine = sizeLineFinal.sizes && Object.keys(sizeLineFinal.sizes).length > 0 && sizeLineFinal.itemName === '';
+
+        if (isValidFinalSizeLine) {
+          const parsedSize = parseSizeLineV2(rawLines[j]);
+          i = j + 1;
+          const mismatch = parsedSize.claimedTotal != null && parsedSize.claimedTotal !== sumSizes(parsedSize.sizes);
+          const breakdownReviewNotes = breakdownList
+            .filter(function (b) { return b.needsReview; })
+            .map(function (b) { return 'Breakdown "' + b.itemName + '": ' + b.catatanReview; });
+          const catatanGabungan = gabungCatatan(
+            nameOnly.needsReview ? nameOnly.catatanReview : '',
+            breakdownReviewNotes.join('; '),
+            mismatch ? ('Total tertulis ' + parsedSize.claimedTotal + ' != hasil hitung ' + sumSizes(parsedSize.sizes)) : ''
+          );
+          outputItems.push({
+            kain_kg: nameOnly.kainKg,
+            item: convertTimPotongItemName(nameOnly.itemName, kamusTimPotong),
+            sizes: parsedSize.sizes,
+            kodeRoll: kodeRollUtama,
+            confidence: (mismatch || nameOnly.needsReview || breakdownReviewNotes.length > 0) ? 'low' : 'high',
+            catatan: catatanGabungan,
+            stokTambahan: breakdownList
+          });
+        } else {
+          outputItems.push({
+            kain_kg: nameOnly.kainKg,
+            item: convertTimPotongItemName(nameOnly.itemName, kamusTimPotong),
+            sizes: {},
+            kodeRoll: kodeRollUtama,
+            confidence: 'low',
+            catatan: gabungCatatan(
+              'Baris ukuran tidak ditemukan setelah baris nama+kg',
+              nameOnly.needsReview ? nameOnly.catatanReview : ''
+            )
+          });
+          i += 1;
+        }
+        continue;
+      }
+    }
+
+    i += 1; // baris tidak dikenali, lewati
+  }
+  return outputItems;
+}
+
+// ============================================================
+// TULIS KE SHEET DATA
+// ============================================================
+function normalizeHeader(h) {
+  return String(h).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+}
+
+function getHeaderMap(sheet) {
+  const lastCol = sheet.getLastColumn();
+  const headerRow = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  const map = {};
+  headerRow.forEach(function (h, idx) {
+    if (h) map[normalizeHeader(h)] = idx;
+  });
+  return map;
+}
+
+function tulisKeSheetData(items) {
+  if (!items || items.length === 0) return;
+
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_DATA_NAME);
+  if (!sheet) {
+    throw new Error('Sheet "' + SHEET_DATA_NAME + '" tidak ditemukan');
+  }
+
+  const headerMap = getHeaderMap(sheet);
+  const numCols = sheet.getLastColumn();
+
+  function setCol(row, headerName, value) {
+    const idx = headerMap[normalizeHeader(headerName)];
+    if (idx !== undefined) row[idx] = value;
+  }
+
+  const tanggal = formatTanggalIndo(new Date());
+  const rowsToWrite = [];
+
+  for (const it of items) {
+    const total = Object.keys(it.sizes).reduce(function (sum, k) { return sum + it.sizes[k]; }, 0);
+    const row = new Array(numCols).fill('');
+
+    setCol(row, 'Tanggal', tanggal);
+    setCol(row, 'Pemakaian Kain (Kg)', it.kain_kg !== '' && it.kain_kg != null && !isNaN(it.kain_kg) ? it.kain_kg : '');
+    setCol(row, 'Pemakaian Rib (Kg)', '');
+    setCol(row, 'Kode Roll', it.kodeRoll || '');
+    setCol(row, 'Jenis & Warna Baju', it.item);
+    setCol(row, 'XS', it.sizes['XS'] || '');
+    setCol(row, 'S', it.sizes['S'] || '');
+    setCol(row, 'M', it.sizes['M'] || '');
+    setCol(row, 'L', it.sizes['L'] || '');
+    setCol(row, 'XL', it.sizes['XL'] || '');
+    setCol(row, 'XXL', it.sizes['XXL'] || '');
+    setCol(row, '3XL', it.sizes['3XL'] || '');
+    setCol(row, '4XL', it.sizes['4XL'] || '');
+    setCol(row, '5XL', it.sizes['5XL'] || '');
+    setCol(row, '6XL', it.sizes['6XL'] || '');
+    setCol(row, 'Jumlah', total);
+    setCol(row, 'RefStok', JSON.stringify(it.stokTambahan || []));
+
+    rowsToWrite.push(row);
+
+    if (it.confidence === 'low' && it.catatan) {
+      logDebug('Perlu dicek manual', it.item + ' - ' + it.catatan);
+    }
+  }
+
+  // Tulis semua baris sekaligus (1 kali operasi, bukan appendRow satu-satu)
+  const startRow = sheet.getLastRow() + 1;
+  sheet.getRange(startRow, 1, rowsToWrite.length, numCols).setValues(rowsToWrite);
+
+  // WAJIB: paksa Google Sheets commit perubahan dulu, supaya baris yang baru saja
+  // ditulis pasti terbaca kalau langsung dibaca lagi di bawah ini.
+  SpreadsheetApp.flush();
+
+  // rev.24: HANYA proses stok kain untuk baris-baris dari PESAN INI SAJA
+  // (bukan undo+replay seluruh hari ini seperti versi sebelumnya).
+  const rowsInfo = [];
+  for (let idx = 0; idx < rowsToWrite.length; idx++) {
+    rowsInfo.push({ row: startRow + idx, deleted: false });
+  }
+  updateStokKainUntukBarisTimPotong(rowsInfo);
+}
+
+// ============================================================
+// UPDATE STOK KAIN - HANYA UNTUK BARIS TIM POTONG YANG BERSANGKUTAN (rev.24)
+//
+// Dipanggil dari 2 tempat:
+//  1. tulisKeSheetData() - setelah pesan Telegram baru ditulis (rowsInfo = baris-baris baru itu)
+//  2. onTimPotongSheetEdit() - setelah ada edit manual (rowsInfo = baris yang diedit/dihapus)
+//
+// Untuk tiap baris di rowsInfo:
+//  - Kalau baris itu PERNAH diproses sebelumnya (ketemu jejaknya di LOG PEMAKAIAN KAIN lewat
+//    kolom "Baris TimPotong"), efek lamanya di-UNDO dulu (lihat undoStokKainUntukBarisTimPotong).
+//  - Kalau baris itu MASIH ADA (bukan dihapus), isinya dibaca ulang SAAT INI dan diterapkan
+//    ke STOK KAIN (lewat updateStokKain, yang otomatis mencatat jejak baru ke LOG).
+//  - Kalau baris itu SUDAH DIHAPUS dari sheet, cuma di-UNDO saja (tidak ada yang diterapkan lagi).
+// ============================================================
+function updateStokKainUntukBarisTimPotong(rowsInfo) {
+  if (!rowsInfo || rowsInfo.length === 0) return;
+
+  const paused = getProp('PAUSE_STOK_KAIN');
+  if (paused && String(paused).trim().toUpperCase() === 'YES') {
+    logDebug('Update stok kain DILEWATI', 'PAUSE_STOK_KAIN aktif (YES) di Script Properties');
+    return;
+  }
+
+  const ss = getSpreadsheet();
+  const sheetData = ss.getSheetByName(SHEET_DATA_NAME);
+  if (!sheetData) {
+    logDebug('Update stok kain dibatalkan', 'Sheet "' + SHEET_DATA_NAME + '" tidak ditemukan');
+    return;
+  }
+
+  // rev.29: baca sekali di awal (bukan per-item) - dipakai supaya "BLACK" bisa cocok ke stok
+  // kain yang ditulis "HITAM", dst. Lihat bacaKamusSinonimWarna().
+  const kamusSinonimWarna = bacaKamusSinonimWarna();
+
+  let jumlahDiproses = 0;
+
+  for (const info of rowsInfo) {
+    // 1. Undo dulu efek lama baris ini (kalau pernah ada) - aman dipanggil walau baris ini baru
+    //    dan belum pernah diproses (tidak akan ketemu apa-apa, jadi tidak melakukan apa-apa).
+    undoStokKainUntukBarisTimPotong(info.row);
+
+    if (info.deleted) continue; // baris sudah dihapus dari sheet, tidak ada yang perlu diterapkan lagi
+    if (info.row > sheetData.getLastRow()) continue; // jaga-jaga, seharusnya tidak terjadi kalau deleted=false
+
+    // rev.26: bersihkan dulu tanda "tidak ada stok kain yang sesuai" dari proses SEBELUMNYA -
+    // baris ini akan dicoba cocokkan lagi dari nol, jadi tanda lama (kalau ada) tidak relevan lagi.
+    bersihkanTandaTidakAdaStokKain(sheetData, info.row);
+
+    // 2. Baca ULANG isi baris ini SAAT INI dari sheet TIM POTONG, lalu terapkan ke STOK KAIN
+    const headerData = getHeaderMap(sheetData);
+    const idxKainKg = headerData[normalizeHeader('Pemakaian Kain (Kg)')];
+    const idxItem = headerData[normalizeHeader('Jenis & Warna Baju')];
+    const idxRefStok = headerData[normalizeHeader('RefStok')];
+    const idxKodeRollData = headerData[normalizeHeader('Kode Roll')];
+
+    const rowValues = sheetData.getRange(info.row, 1, 1, sheetData.getLastColumn()).getValues()[0];
+    const itemName = idxItem !== undefined ? rowValues[idxItem] : null;
+    const kainKg = idxKainKg !== undefined ? parseFloat(rowValues[idxKainKg]) : NaN;
+    const kodeRollUtama = idxKodeRollData !== undefined ? rowValues[idxKodeRollData] : null;
+
+    // rev.26: kumpulkan keterangan tiap kali item/breakdown TIDAK ketemu stok kain yang cocok.
+    // STOK KAIN sengaja TIDAK disentuh untuk kasus ini (updateStokKain sudah otomatis skip),
+    // data di TIM POTONG tetap masuk seperti biasa, cuma baris ini ditandai kuning + catatan.
+    const kegagalanCocok = [];
+
+    if (itemName && !isNaN(kainKg) && kainKg > 0) {
+      const hasil = updateStokKain(itemName, kainKg, itemName, kodeRollUtama, info.row, kamusSinonimWarna);
+      jumlahDiproses++;
+      if (hasil && !hasil.matched) kegagalanCocok.push(hasil.keterangan);
+    }
+
+    const refStokRaw = idxRefStok !== undefined ? rowValues[idxRefStok] : null;
+    if (refStokRaw) {
+      try {
+        const breakdownList = JSON.parse(refStokRaw);
+        for (const bd of breakdownList) {
+          if (bd.itemName && bd.kainKg) {
+            const hasilBd = updateStokKain(bd.itemName, bd.kainKg, itemName, bd.kodeRoll, info.row, kamusSinonimWarna);
+            if (hasilBd && !hasilBd.matched) kegagalanCocok.push(hasilBd.keterangan);
+          }
+        }
+      } catch (e) {
+        // RefStok bukan JSON valid (baris lama), lewati saja
+      }
+    }
+
+    // rev.26: kalau ADA kegagalan pencocokan (item utama dan/atau breakdown), tandai baris ini
+    // kuning + kasih catatan di kolom "Jenis & Warna Baju" - data TIM POTONG tetap masuk seperti
+    // biasa, cuma STOK KAIN yang tidak disentuh untuk item yang gagal cocok itu.
+    if (kegagalanCocok.length > 0) {
+      tandaiTidakAdaStokKain(sheetData, info.row, kegagalanCocok.join(' || '));
+    }
+  }
+
+  logDebug('Update stok kain (scoped) selesai', jumlahDiproses + ' baris diterapkan, total baris diproses: ' + rowsInfo.map(function (r) { return r.row + (r.deleted ? '(dihapus)' : ''); }).join(', '));
+}
+
+// rev.26: tandai baris TIM POTONG dengan highlight kuning + catatan (note) di kolom
+// "Jenis & Warna Baju", kalau salah satu/semua item di baris itu TIDAK ketemu stok kain yang
+// sesuai. STOK KAIN sengaja tidak diubah sama sekali untuk kasus ini - biar dicek manual dulu.
+function tandaiTidakAdaStokKain(sheetData, rowNum, keterangan) {
+  const headerMap = getHeaderMap(sheetData);
+  const numCols = sheetData.getLastColumn();
+
+  sheetData.getRange(rowNum, 1, 1, numCols).setBackground('#FFF2CC'); // kuning muda
+
+  const idxItem = headerMap[normalizeHeader('Jenis & Warna Baju')];
+  if (idxItem !== undefined) {
+    sheetData.getRange(rowNum, idxItem + 1).setNote('⚠ Tidak ada stok kain yang sesuai: ' + keterangan);
+  }
+}
+
+// Kebalikan dari tandaiTidakAdaStokKain() - dipanggil di AWAL tiap kali baris ini diproses ulang,
+// supaya kalau ternyata sekarang stok kainnya SUDAH cocok (misal setelah ditambah lewat "Masuk"),
+// highlight & catatan lama tidak nyangkut/basi.
+function bersihkanTandaTidakAdaStokKain(sheetData, rowNum) {
+  const headerMap = getHeaderMap(sheetData);
+  const numCols = sheetData.getLastColumn();
+
+  sheetData.getRange(rowNum, 1, 1, numCols).setBackground(null);
+
+  const idxItem = headerMap[normalizeHeader('Jenis & Warna Baju')];
+  if (idxItem !== undefined) {
+    sheetData.getRange(rowNum, idxItem + 1).setNote('');
+  }
+}
+
+// Undo efek lama 1 baris TIM POTONG tertentu, ketemu lewat kolom "Baris TimPotong" di
+// LOG PEMAKAIAN KAIN. Kalau baris ini belum pernah diproses sebelumnya, fungsi ini tidak
+// melakukan apa-apa (aman dipanggil untuk baris baru).
+function undoStokKainUntukBarisTimPotong(rowNumTimPotong) {
+  const ss = getSpreadsheet();
+  const sheetPembelian = ss.getSheetByName(SHEET_PEMBELIAN_KAIN);
+  const sheetLog = getSheetLogPemakaian();
+  if (!sheetPembelian || !sheetLog) return;
+
+  const headerPembelian = getHeaderMap(sheetPembelian);
+  const idxKgP = headerPembelian[normalizeHeader('Kg')];
+  const idxKgTerpakai = headerPembelian[normalizeHeader('Kg Terpakai')];
+  const idxKgSisa = headerPembelian[normalizeHeader('Kg Sisa')];
+  const idxTglTepakai = cariKolomTglTepakai(headerPembelian);
+
+  if (idxKgP === undefined || idxKgTerpakai === undefined || idxKgSisa === undefined) return;
+
+  const logData = sheetLog.getDataRange().getValues();
+  const IDX_LOG_TANGGAL = 0;
+  const IDX_LOG_KG_DIPAKAI = 3;
+  const IDX_LOG_ITEM_PRODUKSI = 4;
+  const IDX_LOG_BARIS_STOK = 5;
+  const IDX_LOG_BARIS_TIMPOTONG = 6;
+
+  const rowsToDelete = [];
+
+  for (let r = 1; r < logData.length; r++) {
+    const barisAsal = logData[r][IDX_LOG_BARIS_TIMPOTONG];
+    if (!barisAsal || String(barisAsal) !== String(rowNumTimPotong)) continue;
+
+    const barisStok = logData[r][IDX_LOG_BARIS_STOK];
+    const kgDipakai = parseFloat(logData[r][IDX_LOG_KG_DIPAKAI]) || 0;
+    const tglPakaiRaw = logData[r][IDX_LOG_TANGGAL];
+    const itemProduksi = logData[r][IDX_LOG_ITEM_PRODUKSI];
+
+    if (barisStok) {
+      const stokRowNum = parseInt(barisStok, 10);
+
+      const kgTerpakaiSaatIni = parseFloat(sheetPembelian.getRange(stokRowNum, idxKgTerpakai + 1).getValue()) || 0;
+      const kgTerpakaiBaru = Math.max(0, kgTerpakaiSaatIni - kgDipakai);
+      sheetPembelian.getRange(stokRowNum, idxKgTerpakai + 1).setValue(kgTerpakaiBaru);
+
+      // Kg Sisa tetap rumus (trik (x+ABS(x))/2 = MAX(0,x), aman untuk locale koma Indonesia)
+      const kgColL = colLetter(idxKgP + 1);
+      const kgTerpakaiColL = colLetter(idxKgTerpakai + 1);
+      const selisih = kgColL + stokRowNum + '-' + kgTerpakaiColL + stokRowNum;
+      sheetPembelian.getRange(stokRowNum, idxKgSisa + 1).setFormula('=(' + selisih + '+ABS(' + selisih + '))/2');
+
+      if (idxTglTepakai !== undefined) {
+        const tglPakaiStr = (Object.prototype.toString.call(tglPakaiRaw) === '[object Date]') ? formatTanggalIndo(tglPakaiRaw) : String(tglPakaiRaw);
+        const cell = sheetPembelian.getRange(stokRowNum, idxTglTepakai + 1);
+        let lines = (cell.getNote() || '').split('\n').filter(function (l) { return l.trim() !== ''; });
+        const targetLine = tglPakaiStr + ': ' + kgDipakai + 'kg (' + itemProduksi + ')';
+        lines = lines.filter(function (l) { return l !== targetLine; });
+        cell.setNote(lines.join('\n'));
+        if (lines.length > 0) {
+          const lastLine = lines[lines.length - 1];
+          const m = lastLine.match(/^(.*?):/);
+          cell.setValue(m ? m[1] : '');
+        } else {
+          cell.setValue('');
+        }
+      }
+    }
+
+    rowsToDelete.push(r + 1); // 1-based nomor baris di sheet LOG
+  }
+
+  if (rowsToDelete.length === 0) return; // tidak ada jejak sebelumnya, tidak ada yang perlu di-undo
+
+  rowsToDelete.sort(function (a, b) { return b - a; });
+  for (const rn of rowsToDelete) sheetLog.deleteRow(rn);
+
+  logDebug('Undo stok kain untuk baris TIM POTONG', 'Baris ' + rowNumTimPotong + ': ' + rowsToDelete.length + ' jejak pemakaian lama dibatalkan');
+}
+
+// ============================================================
+// PERBAIKAN MANUAL - jalankan SENDIRI dari editor kalau curiga ada stok kain yang "nyangkut"
+// (misal habis edit besar-besaran, restore data, atau ada baris yang sempat geser nomor karena
+// dihapus). TIDAK dipanggil otomatis - proses normal sekarang hanya memproses baris pesan/edit
+// yang bersangkutan saja. Aman dijalankan berkali-kali (idempotent).
+// ============================================================
+function perbaikiSemuaHariIniManual() {
+  const ss = getSpreadsheet();
+  const sheetData = ss.getSheetByName(SHEET_DATA_NAME);
+  if (!sheetData) { Logger.log('Sheet TIM POTONG tidak ditemukan'); return; }
+
+  const headerData = getHeaderMap(sheetData);
+  const idxTanggal = headerData[normalizeHeader('Tanggal')];
+  if (idxTanggal === undefined) { Logger.log('Kolom Tanggal tidak ditemukan'); return; }
+
+  const lastRow = sheetData.getLastRow();
+  const rowsInfo = [];
+  for (let r = 2; r <= lastRow; r++) {
+    const tglCell = sheetData.getRange(r, idxTanggal + 1).getValue();
+    if (tglCell && isTanggalHariIni(tglCell)) {
+      rowsInfo.push({ row: r, deleted: false });
+    }
+  }
+
+  if (rowsInfo.length === 0) { Logger.log('Tidak ada baris bertanggal hari ini'); return; }
+
+  updateStokKainUntukBarisTimPotong(rowsInfo);
+  Logger.log('Selesai: ' + rowsInfo.length + ' baris hari ini diproses ulang satu-per-satu (bukan replay gabungan)');
+}
+
+// ============================================================
+// TRIGGER: dipanggil otomatis kalau ada EDIT MANUAL di sheet TIM POTONG
+// (harus didaftarkan manual lewat setupTrigger(), lihat instruksi setup)
+// rev.24: HANYA memproses baris yang benar-benar diedit (bukan seluruh hari ini).
+// ============================================================
+function onTimPotongSheetEdit(e) {
+  if (!e || !e.range) return;
+  const sheet = e.range.getSheet();
+  if (sheet.getName() !== SHEET_DATA_NAME) return; // cuma proses kalau editnya di sheet TIM POTONG
+
+  const startRow = e.range.getRow();
+  const numRows = e.range.getNumRows();
+  if (startRow === 1 && numRows === 1) return; // cuma baris header, tidak perlu diproses
+
+  const firstDataRow = Math.max(startRow, 2);
+  const lastDataRow = startRow + numRows - 1;
+  const lastRow = sheet.getLastRow();
+
+  const headerMap = getHeaderMap(sheet);
+  const idxTanggal = headerMap[normalizeHeader('Tanggal')];
+
+  const rowsInfo = [];
+  for (let r = firstDataRow; r <= lastDataRow; r++) {
+    if (r > lastRow) {
+      // Baris ini sudah tidak ada lagi di sheet (misal habis dihapus) - tetap perlu di-UNDO
+      // efek stoknya, meski tidak ada yang bisa diterapkan ulang.
+      rowsInfo.push({ row: r, deleted: true });
+      continue;
+    }
+    if (idxTanggal === undefined) {
+      // Kolom Tanggal tidak ketemu (seharusnya tidak pernah terjadi) - proses saja demi keamanan
+      rowsInfo.push({ row: r, deleted: false });
+      continue;
+    }
+    const tglCell = sheet.getRange(r, idxTanggal + 1).getValue();
+    if (tglCell && isTanggalHariIni(tglCell)) {
+      rowsInfo.push({ row: r, deleted: false });
+    }
+    // Kalau bukan hari ini (atau kosong), baris ini DILEWATI - tidak sentuh stok kain sama sekali
+  }
+
+  if (rowsInfo.length === 0) {
+    logDebug('Edit diabaikan (bukan hari ini / tidak relevan)', 'Baris ' + firstDataRow + '-' + lastDataRow + ' di sheet ' + SHEET_DATA_NAME);
+    return;
+  }
+
+  updateStokKainUntukBarisTimPotong(rowsInfo);
+}
+
+// ============================================================
+// UPDATE STOK KAIN DI SHEET "STOK KAIN" SETELAH LAPORAN TIM POTONG
+// Prioritas pencocokan: 1) Kode Roll PERSIS (kalau ada) 2) fallback warna+kg terdekat
+// ============================================================
+const SHEET_PEMBELIAN_KAIN = 'STOK KAIN';
+const SHEET_LOG_PEMAKAIAN = 'LOG PEMAKAIAN KAIN';
+
+// Cari index kolom "Tgl Tepakai"/"Tgl Terpakai" secara fleksibel (toleran typo/variasi penulisan)
+function cariKolomTglTepakai(headerMap) {
+  for (const key in headerMap) {
+    if (key.indexOf('TGL') === 0 && (key.indexOf('TEPAKAI') !== -1 || key.indexOf('TERPAKAI') !== -1)) {
+      return headerMap[key];
+    }
+  }
+  return undefined;
+}
+
+// Update kolom Tgl Tepakai (tanggal PALING BARU) + Note/komentar sel (riwayat lengkap tiap kali dipakai).
+// rev.24: TIDAK lagi menghapus baris "hari ini" lain secara massal di sini - kalau baris ini
+// sebelumnya sudah pernah diproses, jejak LAMA-nya sudah dibersihkan secara presisi oleh
+// undoStokKainUntukBarisTimPotong() SEBELUM fungsi ini dipanggil. Di sini cukup TAMBAH baris baru.
+function updateTglTepakaiDanNote(sheet, headerMap, rowNum, kainKg, itemProduksiLabel) {
+  const idxTglTepakai = cariKolomTglTepakai(headerMap);
+  if (idxTglTepakai === undefined) return; // kolom belum ada di sheet, lewati fitur ini saja
+
+  const tanggalHariIni = formatTanggalIndo(new Date());
+  const cell = sheet.getRange(rowNum, idxTglTepakai + 1);
+
+  cell.setValue(tanggalHariIni);
+
+  let lines = (cell.getNote() || '').split('\n').filter(function (l) { return l.trim() !== ''; });
+  lines.push(tanggalHariIni + ': ' + kainKg + 'kg (' + itemProduksiLabel + ')');
+  cell.setNote(lines.join('\n'));
+}
+
+// Kode gaya yang BUKAN bagian dari warna, dibuang saat ekstrak kata warna dari nama item.
+// rev.28: tambah OSHT, TST, SPEN (kode gaya hasil KAMUS/aturan nama yang sebelumnya belum
+// masuk daftar ini, jadi sempat ikut kehitung sebagai "kata warna" padahal itu kode garmen).
+const KODE_GAYA_BUKAN_WARNA = ['LT', 'PJ', 'CP', 'SET', 'SET.', 'ANAK', 'OSA', 'RFL', 'RUFFLE', 'TS24', 'TS30', 'LS24-', 'LS30', 'ONESET', 'PENDEK', 'OSHT', 'TST', 'SPEN'];
+
+function ekstrakKataWarna(itemName) {
+  return itemName
+    .split(/\s+/)
+    .map(function (w) { return w.replace(/[.\-]/g, ''); })
+    .filter(function (w) { return w && KODE_GAYA_BUKAN_WARNA.indexOf(w.toUpperCase()) === -1; });
+}
+
+// ============================================================
+// TAMBAH BARIS BARU KE STOK KAIN UNTUK STOK YANG BARU MASUK
+// Beda dari updateStokKain() - ini bukan MENGURANGI baris yang sudah ada, tapi BIKIN
+// baris BARU (kg terpakai mulai dari 0). Tidak terkait fitur "per-baris" di atas karena
+// ini bukan pemakaian produksi (tidak perlu dicatat di LOG PEMAKAIAN KAIN).
+// ============================================================
+function tambahStokKainMasuk(warna, kg, kodeRoll, supplier) {
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_PEMBELIAN_KAIN);
+  if (!sheet) {
+    logDebug('Stok kain masuk dilewati', 'Sheet "' + SHEET_PEMBELIAN_KAIN + '" tidak ditemukan');
+    return;
+  }
+
+  const headerMap = getHeaderMap(sheet);
+  const numCols = sheet.getLastColumn();
+  const idxTglBeli = headerMap[normalizeHeader('Tgl Beli')];
+  const idxSupplier = headerMap[normalizeHeader('Supplier')];
+  const idxWarna = headerMap[normalizeHeader('Warna')];
+  const idxKg = headerMap[normalizeHeader('Kg')];
+  const idxKodeRoll = headerMap[normalizeHeader('Kode Roll')];
+  const idxKgTerpakai = headerMap[normalizeHeader('Kg Terpakai')];
+  const idxKgSisa = headerMap[normalizeHeader('Kg Sisa')];
+
+  if (idxWarna === undefined || idxKg === undefined || idxKgTerpakai === undefined || idxKgSisa === undefined) {
+    logDebug('Stok kain masuk dilewati', 'Header kolom penting (Warna/Kg/Kg Terpakai/Kg Sisa) tidak ditemukan di ' + SHEET_PEMBELIAN_KAIN);
+    return;
+  }
+
+  const row = new Array(numCols).fill('');
+  if (idxTglBeli !== undefined) row[idxTglBeli] = formatTanggalIndo(new Date());
+  if (idxSupplier !== undefined) row[idxSupplier] = supplier || '';
+  row[idxWarna] = warna;
+  row[idxKg] = kg;
+  if (idxKodeRoll !== undefined) row[idxKodeRoll] = kodeRoll || '';
+  row[idxKgTerpakai] = 0;
+
+  const newRowNum = sheet.getLastRow() + 1;
+  sheet.getRange(newRowNum, 1, 1, numCols).setValues([row]);
+
+  const kgColL = colLetter(idxKg + 1);
+  const kgTerpakaiColL = colLetter(idxKgTerpakai + 1);
+  sheet.getRange(newRowNum, idxKgSisa + 1).setFormula('=' + kgColL + newRowNum + '-' + kgTerpakaiColL + newRowNum);
+
+  logDebug('Stok kain masuk ditambahkan', 'Baris ' + newRowNum + ': ' + warna + ' (' + (supplier || '-') + '), ' + kg + 'kg, rol ' + (kodeRoll || '-'));
+}
+
+// sourceRowTimPotong (param baru rev.24): nomor baris di sheet TIM POTONG yang memicu pemakaian
+// ini - dicatat ke LOG PEMAKAIAN KAIN supaya bisa di-undo secara presisi lain kali baris itu berubah.
+function updateStokKain(itemName, kainKg, itemProduksiLabel, kodeRoll, sourceRowTimPotong, kamusSinonimWarna) {
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_PEMBELIAN_KAIN);
+  if (!sheet) {
+    logDebug('Stok kain dilewati', 'Sheet "' + SHEET_PEMBELIAN_KAIN + '" tidak ditemukan');
+    return { matched: false, keterangan: 'Sheet "' + SHEET_PEMBELIAN_KAIN + '" tidak ditemukan' };
+  }
+
+  const headerMap = getHeaderMap(sheet);
+  const idxWarna = headerMap[normalizeHeader('Warna')];
+  const idxKg = headerMap[normalizeHeader('Kg')];
+  const idxKgTerpakai = headerMap[normalizeHeader('Kg Terpakai')];
+  const idxKgSisa = headerMap[normalizeHeader('Kg Sisa')];
+  const idxNoDokumen = headerMap[normalizeHeader('No. Dokumen')];
+  const idxKodeRoll = headerMap[normalizeHeader('Kode Roll')];
+
+  if (idxWarna === undefined || idxKg === undefined || idxKgTerpakai === undefined || idxKgSisa === undefined) {
+    logDebug('Stok kain dilewati', 'Header kolom penting (Warna/Kg/Kg Terpakai/Kg Sisa) tidak ditemukan di ' + SHEET_PEMBELIAN_KAIN);
+    return { matched: false, keterangan: 'Header kolom penting tidak ditemukan di ' + SHEET_PEMBELIAN_KAIN };
+  }
+
+  const kataWarna = ekstrakKataWarna(itemName);
+  if (kataWarna.length === 0) {
+    logDebug('Stok kain dilewati', 'Tidak ada kata warna terdeteksi dari item: ' + itemName);
+    return { matched: false, keterangan: 'Tidak ada kata warna terdeteksi dari nama "' + itemName + '"' };
+  }
+
+  // rev.28: patokan pencocokan warna adalah KATA PERTAMA setelah kode gaya/prefiks dibuang -
+  // BUKAN "salah satu dari semua kata warna cocok". Contoh: "OSHT BLACK TERRACOTTA" -> kain yang
+  // dipakai adalah warna HITAM (kata pertama "BLACK"), bukan "TERRACOTTA" - walau nama itemnya
+  // menyebut 2 warna sekaligus (nama kombinasi), kain fisik yang dipotong cuma 1 warna, dan itu
+  // yang disebut PERTAMA setelah kode gaya.
+  // rev.29: warna utama itu dicocokkan lewat DAFTAR SINONIM (dari KAMUS SINONIM WARNA), bukan
+  // cuma teks persis - jadi "BLACK" otomatis juga dicoba cocokkan ke stok kain yang ditulis "HITAM".
+  const warnaUtama = kataWarna[0];
+  const daftarWarnaCari = getSinonimWarna(warnaUtama, kamusSinonimWarna);
+
+  const data = sheet.getDataRange().getValues();
+  const kodeRollNorm = kodeRoll ? String(kodeRoll).trim().toUpperCase() : null;
+
+  function cariBaris(wajibKodeRollCocok) {
+    let bestRowIndex = -1;
+    let bestDiff = Infinity;
+
+    for (let r = 1; r < data.length; r++) {
+      const warnaCell = String(data[r][idxWarna] || '').toUpperCase();
+      const kgAsli = parseFloat(data[r][idxKg]) || 0;
+      const kgTerpakaiSaatIni = parseFloat(data[r][idxKgTerpakai]) || 0;
+      const kgSisaSaatIni = kgAsli - kgTerpakaiSaatIni;
+
+      if (kgSisaSaatIni <= 0) continue;
+
+      const cocokWarna = daftarWarnaCari.some(function (w) { return warnaCell.indexOf(w) !== -1; });
+      if (!cocokWarna) continue;
+
+      if (wajibKodeRollCocok) {
+        const kodeCell = idxKodeRoll !== undefined ? String(data[r][idxKodeRoll] || '').trim().toUpperCase() : '';
+        if (!kodeCell || kodeCell !== kodeRollNorm) continue;
+      }
+
+      const diff = Math.abs(kgSisaSaatIni - kainKg);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        bestRowIndex = r;
+      }
+    }
+    return bestRowIndex;
+  }
+
+  let bestRowIndex = -1;
+  let matchedVia = '';
+
+  if (kodeRollNorm) {
+    // rev.27: Kalau kode roll DISEBUTKAN di pesan, WAJIB ketemu Warna+Kode Roll PERSIS.
+    // TIDAK ADA fallback ke Warna+Kg terdekat lagi. Sebelumnya (rev.26 & sebelumnya) kalau
+    // kode roll tidak ketemu, sistem tetap coba menebak dari kg terdekat - ini BERISIKO SALAH
+    // (bisa kepotong ke roll warna sama tapi fisik berbeda, kg tidak benar-benar cocok).
+    // Kalau kode roll disebut tapi tidak ketemu, sekarang LANGSUNG dianggap "tidak ada yang
+    // sesuai" - lihat tandaiTidakAdaStokKain().
+    bestRowIndex = cariBaris(true);
+    matchedVia = 'Warna+Kode Roll';
+  } else {
+    // Kode roll TIDAK disebutkan di pesan - satu-satunya cara mencocokkan adalah Warna+Kg terdekat.
+    bestRowIndex = cariBaris(false);
+    matchedVia = 'Warna+Kg';
+  }
+
+  if (bestRowIndex === -1) {
+    const daftarStr = daftarWarnaCari.join(' / ');
+    const keterangan = kodeRollNorm
+      ? ('Kode Roll "' + kodeRollNorm + '" (warna "' + daftarStr + '", kg ' + kainKg + ') tidak ketemu PERSIS di ' + SHEET_PEMBELIAN_KAIN + ' - tidak dicoba tebak dari kg terdekat')
+      : ('Warna "' + daftarStr + '" (kg ' + kainKg + ') tidak ketemu stok kain yang cocok/cukup di ' + SHEET_PEMBELIAN_KAIN);
+    logDebug('Stok kain: tidak ketemu baris cocok', 'Warna dicoba: ' + daftarStr + ' (lengkap nama item: ' + kataWarna.join(' ') + ') | Kg dilaporkan: ' + kainKg + ' | Item: ' + itemName + (kodeRollNorm ? (' | Kode Roll: ' + kodeRollNorm) : ''));
+    return { matched: false, keterangan: keterangan };
+  }
+
+  const rowNum = bestRowIndex + 1;
+  const noDokumen = idxNoDokumen !== undefined ? data[bestRowIndex][idxNoDokumen] : '';
+  const warnaAsli = data[bestRowIndex][idxWarna];
+  const kgAsli = parseFloat(data[bestRowIndex][idxKg]) || 0;
+  const kgTerpakaiLama = parseFloat(data[bestRowIndex][idxKgTerpakai]) || 0;
+  const kgTerpakaiBaru = kgTerpakaiLama + kainKg;
+  const kgSisaBaru = kgAsli - kgTerpakaiBaru;
+
+  if (kgSisaBaru < 0) {
+    logDebug('Stok kain: PERINGATAN kg melebihi sisa', 'Baris ' + rowNum + ' (' + warnaAsli + '), Kg dilaporkan: ' + kainKg + ', Kg Sisa sebelumnya: ' + (kgAsli - kgTerpakaiLama));
+  }
+
+  sheet.getRange(rowNum, idxKgTerpakai + 1).setValue(kgTerpakaiBaru);
+  const kgColL = colLetter(idxKg + 1);
+  const kgTerpakaiColL = colLetter(idxKgTerpakai + 1);
+  const selisih = kgColL + rowNum + '-' + kgTerpakaiColL + rowNum;
+  sheet.getRange(rowNum, idxKgSisa + 1).setFormula('=(' + selisih + '+ABS(' + selisih + '))/2');
+
+  logDebug('Stok kain diupdate (' + matchedVia + ')', 'Baris ' + rowNum + ' (' + warnaAsli + '), Kg Terpakai baru: ' + kgTerpakaiBaru + ', Kg Sisa baru: ' + kgSisaBaru);
+
+  updateTglTepakaiDanNote(sheet, headerMap, rowNum, kainKg, itemProduksiLabel || itemName);
+  tulisLogPemakaian(noDokumen, warnaAsli, kainKg, itemProduksiLabel || itemName, rowNum, sourceRowTimPotong);
+
+  return { matched: true };
+}
+
+// ============================================================
+// TAB LOG RIWAYAT PEMAKAIAN KAIN (terpisah dari tabel STOK KAIN)
+// Kolom "Baris Stok" (F) = nomor baris ASLI di sheet STOK KAIN saat itu.
+// Kolom "Baris TimPotong" (G, BARU rev.24) = nomor baris ASLI di sheet TIM POTONG yang memicu
+// pemakaian ini - dipakai untuk undo presisi per-baris (lihat undoStokKainUntukBarisTimPotong).
+// ============================================================
+function getSheetLogPemakaian() {
+  const ss = getSpreadsheet();
+  let sheet = ss.getSheetByName(SHEET_LOG_PEMAKAIAN);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_LOG_PEMAKAIAN);
+    sheet.appendRow(['Tanggal Pakai', 'No. Dokumen', 'Warna', 'Kg Dipakai', 'Item Produksi', 'Baris Stok', 'Baris TimPotong']);
+  } else if (sheet.getLastColumn() < 7 || !sheet.getRange(1, 7).getValue()) {
+    // Sheet sudah ada dari versi sebelum rev.24 (cuma 6 kolom) - tambahkan header kolom baru
+    sheet.getRange(1, 7).setValue('Baris TimPotong');
+  }
+  return sheet;
+}
+
+function tulisLogPemakaian(noDokumen, warna, kgDipakai, itemProduksi, rowNumStok, barisTimPotong) {
+  const sheet = getSheetLogPemakaian();
+  const tanggal = formatTanggalIndo(new Date());
+  sheet.appendRow([tanggal, noDokumen, warna, kgDipakai, itemProduksi, rowNumStok, barisTimPotong || '']);
+}
+
+// ============================================================
+// LOGGING DEBUG
+// ============================================================
+function logDebug(label, detail) {
+  try {
+    const ss = getSpreadsheet();
+    let sheet = ss.getSheetByName(DEBUG_SHEET_NAME);
+    if (!sheet) {
+      sheet = ss.insertSheet(DEBUG_SHEET_NAME);
+      sheet.appendRow(['Waktu', 'Label', 'Detail']);
+    }
+    sheet.appendRow([new Date(), label, String(detail).substring(0, 500)]);
+  } catch (e) {
+    // kalau logging sendiri gagal, jangan sampai bikin doPost ikut gagal
+  }
+}
+
+// ============================================================
+// TES MANUAL - MINI APP (rev.33). Jalankan dari editor Apps Script untuk verifikasi SEBELUM
+// dipakai produksi. Fungsi ini TIDAK dipanggil otomatis oleh sistem.
+// ============================================================
+
+// Cek TELEGRAM_BOT_TOKEN benar DAN sekalian mancing keluar popup "Authorization required" dari
+// Google untuk izin akses internet (UrlFetchApp) - WAJIB dijalankan 1x dari editor ini SEBELUM
+// /produksi dites di Telegram, kalau tidak nanti muncul error "You do not have permission to
+// call UrlFetchApp.fetch" pas dipanggil dari webhook (izin baru gak otomatis aktif, harus
+// di-approve manual sekali). Kalau berhasil, Logger bakal nampilin nama bot-nya.
+function testManualCekBotToken() {
+  const botToken = getProp('TELEGRAM_BOT_TOKEN');
+  if (!botToken) {
+    Logger.log('TELEGRAM_BOT_TOKEN belum diset di Script Properties');
+    return;
+  }
+  const response = UrlFetchApp.fetch('https://api.telegram.org/bot' + botToken + '/getMe', {
+    muteHttpExceptions: true
+  });
+  Logger.log(response.getContentText());
+}
+
+// Cek isi sheet KATEGORI VARIAN TIM POTONG kebaca dengan benar (dan sheet-nya otomatis
+// dibuat kalau belum ada). Lihat hasilnya di menu Lihat > Log (Ctrl+Enter) setelah jalan.
+function testManualKategoriVarian() {
+  const data = bacaKategoriVarian();
+  Logger.log(JSON.stringify(data, null, 2));
+}
+
+// Simulasi 1 kali submit dari Mini App TANPA perlu initData Telegram asli (langsung panggil
+// tulisItemMiniApp(), skip validasi Telegram) - buat mastiin logic tulis-ke-sheet & update
+// stok kainnya jalan benar. Cek hasilnya di sheet TIM POTONG + STOK KAIN + LOG PEMAKAIAN KAIN
+// setelah jalan. GANTI dulu isi parameter di bawah sesuai data yang mau dites.
+function testManualSimulasiMiniApp() {
+  const hasil = tulisItemMiniApp(
+    'PJ',           // Kode Item (harus persis salah satu "Kode Item" di sheet KATEGORI VARIAN)
+    'MERAH',        // Warna
+    5,              // Kg kain (angka kecil biar aman buat tes, sesuaikan)
+    '',             // Kode Roll (boleh kosong)
+    { M: 12, L: 12 } // Qty per size
+  );
+  Logger.log(JSON.stringify(hasil));
+}
+
+// Tes fungsi validateTelegramWebAppData() pakai initData PALSU (harus GAGAL/invalid, itu
+// tandanya validasinya bekerja benar - kalau initData asal-asalan malah lolos, berarti ada bug).
+// Untuk tes initData ASLI, harus dari device Telegram sungguhan (lihat panduan setup).
+function testManualValidasiInitDataPalsu() {
+  const hasil = validateTelegramWebAppData('user=%7B%22id%22%3A123%7D&auth_date=1234567890&hash=abalabal');
+  Logger.log(JSON.stringify(hasil));
+  Logger.log(hasil.valid === false ? 'OK - initData palsu berhasil ditolak' : 'BUG - initData palsu seharusnya ditolak tapi malah lolos!');
+}
+
+// ============================================================
+// HTML MINI APP - halaman form yang disajikan doGet(). Placeholder __KATEGORI_VARIAN_JSON__
+// diganti isi sheet KATEGORI VARIAN TIM POTONG saat halaman dirender (lihat doGet()).
+// ============================================================
+function getMiniAppHtml_() {
+  return `<!DOCTYPE html>
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Input Produksi - Tim Potong</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root{
-    --ink:#1C1C1E;
-    --ink-2:#8E8E93;
-    --ink-3:#C6C6C8;
-    --canvas:#F2F2F7;
+    --tg-blue:#2AABEE;
+    --tg-blue-dark:#229ED9;
+    --bg:#F0F2F5;
     --card:#FFFFFF;
-    --sep:#E5E5EA;
-    --danger:#FF3B30;
-    --danger-bg:#FFF0EF;
-    --success:#34C759;
-
-    --theme-accent:#3AAFC0;
-    --theme-accent-deep:#1F7A88;
-    --theme-accent-soft:#E4F6F8;
-    --theme-bg-image: none;
+    --text-dark:#1c1c1c;
+    --text-muted:#8b9299;
+    --border:#e4e7eb;
   }
-  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-  html,body{margin:0;padding:0;overflow-x:hidden;max-width:100vw;}
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);}
   body{
-    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Segoe UI",Roboto,sans-serif;
-    color:var(--ink);
-    background-color:var(--canvas);
-    background-image:var(--theme-bg-image);
-    transition:background-color .4s ease;
-    padding-bottom:135px;
-    -webkit-font-smoothing:antialiased;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--text-dark);
+    padding-bottom:100px;
   }
-
-  .topbar{padding:10px 16px 0;}
-  .topbar-top-row{display:flex;align-items:center;justify-content:space-between;}
-  .topbar-eyebrow{
-    font-size:11.5px;font-weight:600;color:var(--theme-accent-deep);letter-spacing:.2px;
-    text-transform:uppercase;transition:color .4s;
-  }
-  .topbar-title{font-size:22px;font-weight:750;letter-spacing:-.3px;line-height:1.1;}
-  .version-badge{
-    display:inline-block;font-size:10px;font-weight:700;color:#fff;
-    background:var(--theme-accent-deep);padding:1px 8px;border-radius:20px;letter-spacing:.3px;
-    transition:background .4s;
-  }
-  #refreshLink{font-size:11.5px;}
-
-  .loading-screen{text-align:center;padding:60px 30px;color:var(--ink-2);font-size:14px;line-height:1.7;}
-
-  .app-body{padding:6px 14px 0;}
-
-  .section-label{
-    font-size:12.5px;font-weight:600;color:var(--ink-2);
-    text-transform:uppercase;letter-spacing:.3px;
-    margin:14px 4px 6px;display:flex;justify-content:space-between;align-items:center;
-  }
-  .section-label .count-chip{
-    background:var(--theme-accent);color:#fff;border-radius:20px;padding:2px 10px;
-    font-size:12.5px;font-weight:700;transition:background .4s;
-  }
-
-  .card{
-    background:var(--card);border-radius:18px;
-    box-shadow:0 1px 2px rgba(0,0,0,.04), 0 0 0 0.5px rgba(0,0,0,.04);
-    overflow:hidden;
-  }
-  .card + .card{margin-top:8px;}
-
-  .row{
-    padding:9px 14px;border-bottom:0.5px solid var(--sep);
-    display:flex;flex-direction:column;
-  }
-  .row:last-child{border-bottom:none;}
-  .row-inline{display:flex;flex-direction:row;align-items:center;gap:10px;min-height:20px;min-width:0;}
-  .row-label{font-size:12px;color:var(--ink-2);font-weight:600;flex:0 0 auto;white-space:nowrap;}
-  select,input[type=number],input[type=text]{
-    width:100%;flex:1;min-width:0;border:none;outline:none;font-size:16px;color:var(--ink);
-    background:transparent;padding:1px 0;font-family:inherit;font-weight:450;text-align:right;
-  }
-  #warnaInput{text-transform:uppercase;}
-  select:disabled{color:var(--ink-3);}
-
-  .item-row{
-    padding:8px 14px;border-bottom:0.5px solid var(--sep);
-    display:flex;justify-content:space-between;align-items:center;gap:10px;
-  }
-  .item-row:last-child{border-bottom:none;}
-  .item-row-text{font-size:14.5px;line-height:1.55;}
-  .item-row-text b{font-weight:650;}
-  .item-row-tag{
-    display:inline-block;font-size:10.5px;font-weight:700;padding:1.5px 7px;border-radius:6px;
-    margin-right:6px;background:var(--theme-accent-soft);color:var(--theme-accent-deep);
-    transition:all .4s;
-  }
-  .item-row-del{
-    color:var(--danger);font-size:20px;line-height:1;cursor:pointer;flex-shrink:0;
-    width:28px;height:28px;display:flex;align-items:center;justify-content:center;
-  }
-  .empty-hint{text-align:center;color:var(--ink-2);font-size:14px;padding:26px 16px;}
-
-  .tab-row{display:flex;gap:8px;}
-  .tab-card{
-    flex:1;border:none;border-radius:16px;padding:10px 8px;cursor:pointer;
-    display:flex;flex-direction:row;align-items:center;justify-content:center;gap:7px;
+  .app-body{padding:14px;}
+  .field-group{
     background:var(--card);
-    box-shadow:0 1px 2px rgba(0,0,0,.04), 0 0 0 0.5px rgba(0,0,0,.04);
-    color:var(--ink-2);transition:all .25s cubic-bezier(.2,.9,.3,1.2);
+    border-radius:14px;
+    padding:4px 14px;
+    margin-bottom:14px;
+    border:1px solid var(--border);
   }
-  .tab-icon-badge{
-    width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;
-    background:var(--canvas);transition:all .3s;flex-shrink:0;
+  .field{padding:12px 0;border-bottom:1px solid var(--border);}
+  .field:last-child{border-bottom:none;}
+  .field-label{
+    font-size:12px;color:var(--text-muted);margin-bottom:6px;font-weight:600;
+    text-transform:uppercase;letter-spacing:.3px;
   }
-  .tab-label{font-size:13.5px;font-weight:700;letter-spacing:.2px;text-transform:uppercase;}
-  .tab-card.active{
-    color:#fff;transform:translateY(-3px) scale(1.015);
-    box-shadow:0 10px 22px -6px var(--tab-shadow, rgba(0,0,0,.25));
+  .segmented{display:flex;background:#eef0f2;border-radius:9px;padding:3px;gap:3px;flex-wrap:wrap;}
+  .seg-btn{
+    flex:1;min-width:70px;text-align:center;padding:8px 4px;border-radius:7px;
+    font-size:13.5px;font-weight:600;color:var(--text-muted);cursor:pointer;
   }
-  .tab-card.tab-anak.active{ background:linear-gradient(160deg,#4FC7D6,#217F8D); --tab-shadow:rgba(33,127,141,.4); }
-  .tab-card.tab-dewasa.active{ background:linear-gradient(160deg,#2E4A6E,#122238); --tab-shadow:rgba(18,34,56,.4); }
-  .tab-card.tab-lain.active{ background:linear-gradient(160deg,#9C8EE0,#6B5BC4); --tab-shadow:rgba(107,91,196,.4); }
-  .tab-card.active .tab-icon-badge{ background:rgba(255,255,255,.22); }
-  .tab-card.active .tab-label{ color:#fff; }
-
-  .qty-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:9px 14px;}
-  .qty-cell{display:flex;flex-direction:column;gap:2px;}
-  .qty-cell label{font-size:11px;color:var(--ink-2);font-weight:650;text-align:center;}
+  .seg-btn.active{background:#fff;color:var(--tg-blue-dark);box-shadow:0 1px 3px rgba(0,0,0,.12);}
+  select,input[type=number],input[type=text]{
+    width:100%;border:none;outline:none;font-size:15.5px;color:var(--text-dark);
+    background:transparent;padding:2px 0;font-family:inherit;
+  }
+  select:disabled{color:var(--text-muted);}
+  .qty-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+  .qty-cell{display:flex;flex-direction:column;gap:4px;}
+  .qty-cell label{font-size:11.5px;color:var(--text-muted);font-weight:600;}
   .qty-cell input{
-    border:1px solid var(--sep);border-radius:10px;padding:6px 4px;
-    text-align:center;font-size:15px;background:var(--canvas);font-weight:600;
+    border:1px solid var(--border);border-radius:8px;padding:8px 6px;
+    text-align:center;font-size:14px;background:#fafbfc;
   }
-  .qty-cell input:focus{border-color:var(--theme-accent);background:#fff;}
+  .qty-cell input:focus{border-color:var(--tg-blue);background:#fff;}
   .toggle-link{
-    font-size:12.5px;color:var(--theme-accent-deep);font-weight:600;cursor:pointer;
-    padding:2px 14px 8px;display:inline-block;transition:color .4s;
+    font-size:12.5px;color:var(--tg-blue-dark);font-weight:600;cursor:pointer;
+    margin-top:10px;display:inline-block;
   }
   .total-row{
     display:flex;justify-content:space-between;align-items:center;
-    padding:8px 14px;border-top:0.5px solid var(--sep);
-    font-size:13px;color:var(--ink-2);font-weight:500;
+    padding-top:10px;margin-top:4px;border-top:1px dashed var(--border);
+    font-size:13.5px;color:var(--text-muted);
   }
-  .total-row b{color:var(--ink);font-size:16px;font-weight:700;}
-
-  .btn-row{
-    position:fixed;bottom:0;left:0;right:0;padding:8px 14px calc(12px + env(safe-area-inset-bottom));
-    background:rgba(242,242,247,.82);backdrop-filter:blur(20px) saturate(1.6);
-    -webkit-backdrop-filter:blur(20px) saturate(1.6);
-    border-top:0.5px solid var(--sep);
-    display:flex;gap:8px;
+  .total-row b{color:var(--text-dark);font-size:15px;}
+  .section-title{
+    font-size:13px;font-weight:700;color:var(--text-muted);margin:18px 4px 8px;
+    text-transform:uppercase;letter-spacing:.4px;
   }
-  .btn{
-    flex:1;border:none;border-radius:13px;padding:12px;font-size:15.5px;font-weight:650;
-    cursor:pointer;letter-spacing:-.1px;
+  .main-btn-wrap{
+    position:fixed;bottom:0;left:0;right:0;padding:12px 14px 16px;
+    background:linear-gradient(to top, var(--bg) 60%, transparent);
   }
-  .btn-primary{background:var(--theme-accent-deep);color:#fff;transition:background .4s;}
-  .btn-primary:disabled{background:var(--ink-3);cursor:not-allowed;}
-  .btn-secondary{background:var(--theme-accent-soft);color:var(--theme-accent-deep);transition:all .4s;}
-  .btn-green{background:var(--success);color:#fff;}
-  .btn-full{width:100%;}
-
-  .error-banner{
-    background:var(--danger-bg);color:var(--danger);border-radius:14px;
-    padding:12px 16px;font-size:14px;margin:0 0 6px;font-weight:550;
+  .main-btn{
+    width:100%;background:var(--tg-blue);color:#fff;border:none;border-radius:12px;
+    padding:14px;font-size:16px;font-weight:700;cursor:pointer;
+    box-shadow:0 4px 14px rgba(42,171,238,.4);
   }
-  .badge{font-size:10.5px;background:var(--canvas);color:var(--ink-2);padding:2px 8px;border-radius:6px;font-weight:650;}
-
-  .success-screen{display:flex;flex-direction:column;align-items:center;text-align:center;padding:6px 12px 0;}
+  .main-btn:disabled{background:#c7ccd1;box-shadow:none;cursor:not-allowed;}
+  .main-btn.confirm{background:#3ba55d;box-shadow:0 4px 14px rgba(59,165,93,.4);}
+  .success-screen{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:60px 30px;
+  }
   .success-icon{
-    width:56px;height:56px;border-radius:16px;background:var(--theme-accent-soft);
-    display:flex;align-items:center;justify-content:center;margin-bottom:12px;transition:background .4s;
+    width:64px;height:64px;border-radius:50%;background:#e8f8ee;
+    display:flex;align-items:center;justify-content:center;font-size:32px;margin-bottom:16px;
   }
-  .success-icon svg{width:28px;height:28px;color:var(--theme-accent-deep);transition:color .4s;}
-  .success-title{font-size:20px;font-weight:700;letter-spacing:-.3px;margin-bottom:4px;}
-
-  .cut-divider{position:relative;height:2px;margin:10px 4px 2px;background-image:repeating-linear-gradient(90deg, var(--ink-3) 0 7px, transparent 7px 15px);}
-  .cut-divider .scissor-chip{
-    position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-    background:var(--canvas);width:28px;height:28px;border-radius:50%;
-    display:flex;align-items:center;justify-content:center;font-size:13px;
-    border:1.5px dashed var(--ink-3);transition:background .4s;
+  .success-title{font-size:17px;font-weight:700;margin-bottom:6px;}
+  .success-sub{font-size:13.5px;color:var(--text-muted);line-height:1.6;}
+  .error-banner{
+    background:#fdecea;color:#c0392b;border:1px solid #f5c6c0;border-radius:10px;
+    padding:10px 14px;font-size:13px;margin-bottom:14px;
   }
-  .success-sub{font-size:14px;color:var(--ink-2);line-height:1.5;margin-bottom:16px;}
-  .teks-box{
-    width:100%;min-height:150px;background:var(--card);border-radius:16px;
-    box-shadow:0 1px 2px rgba(0,0,0,.04), 0 0 0 0.5px rgba(0,0,0,.04);
-    padding:16px;font-size:14px;line-height:1.75;white-space:pre-wrap;
-    font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;text-align:left;color:var(--ink);
+  .badge{font-size:11px;background:#eef6fc;color:var(--tg-blue-dark);padding:2px 8px;border-radius:6px;font-weight:600;}
+  .warn-box{
+    text-align:center;padding:60px 30px;color:var(--text-muted);font-size:14px;line-height:1.7;
   }
-  .copied-flash{color:var(--success);font-size:13.5px;font-weight:650;margin-top:10px;display:none;}
-
-  /* ---- Kombinasi 3 Warna ---- */
-  .combo-picker-btn{
-    width:100%;text-align:left;background:var(--theme-accent-soft);border:1.5px dashed var(--theme-accent);
-    border-radius:12px;padding:11px 13px;font-size:15px;font-weight:600;color:var(--theme-accent-deep);
-    cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:all .4s;
-  }
-  .combo-picker-btn .chev{font-size:13px;opacity:.7;}
-  .combo-dropdown{
-    position:static;margin-top:8px;background:#fff;border-radius:14px;border:1px solid var(--sep);
-    max-height:260px;overflow-y:auto;display:none;
-  }
-  .combo-opt{padding:10px 14px;font-size:14.5px;font-weight:600;border-bottom:0.5px solid var(--sep);cursor:pointer;
-    display:flex;justify-content:space-between;align-items:center;}
-  .combo-opt:last-child{border-bottom:none;}
-  .combo-opt .opt-sub{font-size:12px;color:var(--ink-2);font-weight:500;}
-  .warna-chips{display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;}
-  .warna-chip{
-    flex:1;min-width:80px;background:var(--canvas);border:1.5px solid var(--sep);border-radius:12px;
-    padding:10px 8px;text-align:center;position:relative;
-  }
-  .warna-chip .chip-order{
-    position:absolute;top:-8px;left:8px;background:var(--theme-accent-deep);color:#fff;
-    font-size:10px;font-weight:800;width:18px;height:18px;border-radius:50%;
-    display:flex;align-items:center;justify-content:center;transition:background .4s;
-  }
-  .warna-chip .chip-text{font-size:12.5px;font-weight:700;letter-spacing:.2px;}
-  .ganti-link{font-size:12.5px;color:var(--theme-accent-deep);font-weight:600;margin-top:10px;display:inline-block;cursor:pointer;transition:color .4s;}
-  .combo-kgroll-row{display:flex;gap:8px;margin-top:8px;}
-  .combo-kgroll-row input{
-    flex:1;border:1px solid var(--sep);border-radius:8px;padding:9px 8px;font-size:14px;background:var(--canvas);
-  }
-  .combo-kgroll-label{font-size:11.5px;color:var(--ink-2);font-weight:650;margin-top:12px;margin-bottom:2px;}
-
-  /* ---- Kg split (depan.belakang koma) - titik permanen, gak bisa lupa ---- */
-  .kg-split{display:flex;align-items:center;gap:4px;margin-left:auto;flex-shrink:0;max-width:100%;}
-  .kg-split-input{
-    width:38px;flex:none !important;text-align:center;border:1px solid var(--sep);border-radius:9px;
-    padding:7px 2px;font-size:15px;font-weight:600;background:var(--canvas);
-  }
-  .kg-split-input:focus{border-color:var(--theme-accent);background:#fff;}
-  .kg-split-dot{font-size:22px;font-weight:800;color:var(--ink-2);}
-  .kg-split-unit{font-size:14px;color:var(--ink-2);font-weight:600;margin-left:4px;}
-
-  /* ---- Varian custom picker (ganti native <select> yang tampilannya gede bawaan Android) ---- */
-  .custom-select-btn{
-    flex:1;display:flex;justify-content:flex-end;align-items:center;gap:6px;cursor:pointer;
-    font-size:16px;font-weight:450;color:var(--ink);text-align:right;min-width:0;
-  }
-  .custom-select-btn.placeholder{color:var(--ink-3);}
-  .custom-select-btn .chev{font-size:11px;color:var(--ink-2);flex-shrink:0;}
-  .custom-select-btn span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 </style>
 </head>
 <body>
 
-<div class="topbar">
-  <div class="topbar-top-row">
-    <div>
-      <div class="topbar-eyebrow" id="topbarEyebrow">Tim Potong</div>
-      <div class="topbar-title">Input Produksi</div>
-    </div>
-    <div style="text-align:right;">
-      <div class="version-badge">ver.01</div>
-      <div id="refreshLink" style="margin-top:4px;font-size:11.5px;font-weight:600;color:var(--theme-accent-deep);cursor:pointer;">🔄 Refresh</div>
-    </div>
-  </div>
+<div id="warnBox" class="warn-box" style="display:none;">
+  ⚠️ Form ini harus dibuka lewat tombol di Telegram (Tim Potong Bot), bukan link langsung.
 </div>
 
-<div id="loadingScreen" class="loading-screen">Memuat data kategori/varian...</div>
-
-<div id="mainWrap" style="display:none;">
-
+<div id="mainWrap">
   <div class="app-body" id="formScreen">
     <div id="errorBanner" class="error-banner" style="display:none;"></div>
 
-    <div id="daftarItemSection" style="display:none;">
-      <div class="section-label"><span>Daftar Item</span><span class="count-chip" id="itemCount">0</span></div>
-      <div class="card">
-        <div id="itemList">
-          <div class="empty-hint" id="emptyHint">Belum ada item ditambahkan</div>
-        </div>
-      </div>
-      <div class="cut-divider"><div class="scissor-chip">✂️</div></div>
+    <div class="section-title">Kategori</div>
+    <div class="field-group">
+      <div class="field"><div class="segmented" id="kategoriSeg"></div></div>
     </div>
 
-    <div class="section-label" style="margin-top:6px;">Kategori</div>
-    <div class="tab-row" id="kategoriSeg"></div>
-
-    <div class="cut-divider"><div class="scissor-chip">✂️</div></div>
-
-    <div class="section-label">Detail Item Baru</div>
-    <div class="card">
-      <div class="row" style="position:relative;">
-        <div class="row-inline">
-          <div class="row-label">Varian</div>
-          <div class="custom-select-btn placeholder" id="varianPickerBtn">
-            <span id="varianPickerLabel">— pilih —</span>
-            <span class="chev">▾</span>
-          </div>
-        </div>
-        <div class="combo-dropdown" id="varianDropdown"></div>
+    <div class="section-title">Detail Item</div>
+    <div class="field-group">
+      <div class="field">
+        <div class="field-label">Varian</div>
+        <select id="varianSelect"></select>
       </div>
-
-      <div id="biasaRows">
-        <div class="row" style="position:relative;">
-          <div class="row-inline" id="warnaInputWrap">
-            <div class="row-label">Warna</div>
-            <input type="text" id="warnaInput" autocomplete="off">
-          </div>
-        </div>
-        <div class="row">
-          <div class="row-inline">
-            <div class="row-label">Kg Terpakai</div>
-            <div class="kg-split">
-              <input type="text" inputmode="numeric" maxlength="2" id="kgDepan" class="kg-split-input">
-              <span class="kg-split-dot">.</span>
-              <input type="text" inputmode="numeric" maxlength="2" id="kgBelakang" class="kg-split-input">
-              <span class="kg-split-unit">kg</span>
-            </div>
-          </div>
-        </div>
-        <div class="row">
-          <div class="row-inline">
-            <div class="row-label">Kode Roll <span class="badge">opsional</span></div>
-            <input type="text" id="rollInput" autocomplete="off">
-          </div>
-        </div>
+      <div class="field">
+        <div class="field-label">Warna</div>
+        <input type="text" id="warnaInput" placeholder="Contoh: MERAH, BLACK, NAVY">
       </div>
-
-      <div id="kombinasiRows" style="display:none;">
-        <div class="row" style="position:relative;">
-          <div class="row-label">Warna <span class="badge">Kombinasi 3 Warna</span></div>
-          <div id="comboPickerWrap">
-            <div class="combo-picker-btn" id="comboPickerBtn">
-              <span id="comboPickerLabel">Pilih kombinasi warna...</span>
-              <span class="chev">▾</span>
-            </div>
-            <div class="combo-dropdown" id="comboDropdown"></div>
-          </div>
-          <div id="comboHasil" style="display:none;">
-            <div class="warna-chips" id="warnaChips"></div>
-            <span class="ganti-link" id="gantiKombinasi">Ganti kombinasi</span>
-          </div>
-        </div>
-        <div class="row" id="kgRollComboRow" style="display:none;">
-          <div id="kgRollComboWrap"></div>
-        </div>
+      <div class="field">
+        <div class="field-label">Kg Kain Terpakai</div>
+        <input type="number" id="kgInput" placeholder="Contoh: 25.4" step="0.01">
+      </div>
+      <div class="field">
+        <div class="field-label">Kode Roll <span class="badge">opsional</span></div>
+        <input type="text" id="rollInput" placeholder="Contoh: 6097">
       </div>
     </div>
 
-    <div class="cut-divider"><div class="scissor-chip">✂️</div></div>
-
-    <div class="section-label">Qty per Size</div>
-    <div class="card">
-      <div class="qty-grid" id="qtyGrid"></div>
-      <span class="toggle-link" id="toggleLain">Tampilkan ukuran lain (3XL–6XL)</span>
-      <div class="qty-grid" id="qtyGridLain" style="display:none;"></div>
-      <div class="total-row"><span>Total qty item ini</span><b id="totalQty">0 pcs</b></div>
+    <div class="section-title">Qty per Size</div>
+    <div class="field-group">
+      <div class="field">
+        <div class="qty-grid" id="qtyGrid"></div>
+        <span class="toggle-link" id="toggleLain">+ Tampilkan ukuran lain (3XL-6XL)</span>
+        <div class="qty-grid" id="qtyGridLain" style="display:none;margin-top:10px;"></div>
+        <div class="total-row"><span>Total qty</span><b id="totalQty">0 pcs</b></div>
+      </div>
     </div>
   </div>
 
-  <div class="app-body" id="successScreen" style="display:none;">
-    <div class="success-screen">
-      <div class="success-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
-      <div class="success-title">Teks siap dikirim</div>
-      <div class="success-sub">Salin teks di bawah, lalu paste &amp; kirim manual ke chat grup ini.</div>
-    </div>
-    <div class="teks-box" id="teksHasil"></div>
-    <div style="text-align:center;">
-      <div class="copied-flash" id="copiedFlash">Tersalin ke clipboard</div>
-    </div>
+  <div class="app-body" id="confirmScreen" style="display:none;">
+    <div class="section-title">Cek Sebelum Kirim</div>
+    <div class="field-group" id="confirmBody" style="padding:14px;"></div>
   </div>
 
-  <div class="btn-row" id="btnRowForm">
-    <button class="btn btn-secondary" id="btnTambah">Tambah ke Daftar</button>
-    <button class="btn btn-primary" id="btnBuatTeks" disabled>Buat Teks (0)</button>
+  <div class="success-screen" id="successScreen" style="display:none;">
+    <div class="success-icon">✅</div>
+    <div class="success-title">Tersimpan!</div>
+    <div class="success-sub">Data sudah masuk ke sheet TIM POTONG<br>dan stok kain otomatis diperbarui.</div>
   </div>
 
-  <div class="btn-row" id="btnRowSukses" style="display:none;flex-direction:column;gap:10px;">
-    <button class="btn btn-green btn-full" id="btnKirimChat">Kirim ke Chat</button>
-    <div style="display:flex;gap:10px;">
-      <button class="btn btn-secondary" id="btnKembali">Kembali Edit</button>
-      <button class="btn btn-secondary" id="btnSalin">Salin Teks</button>
-    </div>
+  <div class="main-btn-wrap" id="mainBtnWrap">
+    <button class="main-btn" id="mainBtn" disabled>Lanjut ke Konfirmasi</button>
   </div>
-
 </div>
 
 <script>
-// =====================================================================================
-// URL Web App Apps Script - GANTI kalau kamu redeploy ke project/URL yang berbeda
-// =====================================================================================
-const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzaWvCi3Vw2fnFgBPfn1qvFBSqYXOrdWi8yxvKc8WOtaIH78JN83dIMiQtQeockW6EDBw/exec";
-
+const KATEGORI_VARIAN = __KATEGORI_VARIAN_JSON__;
+const WEBAPP_URL = __WEBAPP_URL__;
 const SIZES_UTAMA = ["XS","S","M","L","XL","XXL"];
 const SIZES_LAIN = ["3XL","4XL","5XL","6XL"];
-const CACHE_KEY = 'timpotong_kategori_varian_cache_v1';
-const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-const WARNA_CACHE_KEY = 'timpotong_warna_cache_v1';
-const WARNA_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 1 hari - stok kain bergerak tiap hari, beda dari kategori/varian yang jarang berubah
-const KOMBINASI_CACHE_KEY = 'timpotong_kombinasi_warna_cache_v1';
-const KOMBINASI_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 hari - kombinasi warna jarang ganti tapi gak sejarang kategori/varian
 
 const tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
 
-const THEME = {
-  anak: { key:'anak', accent:'#2FA8BA', accentDeep:'#1B7684', accentSoft:'#D8F1F3', canvas:'#D9F1F3', bgImage:'none' },
-  dewasa: { key:'dewasa', accent:'#264060', accentDeep:'#101F32', accentSoft:'#E7EAEE', canvas:'#FFFFFF', bgImage:'none' },
-  lain: { key:'lain', accent:'#6B5BC4', accentDeep:'#4E3FA0', accentSoft:'#E4E0F7', canvas:'#E4E0F7', bgImage:'none' }
-};
-const ICONS = {
-  anak: `<img src="data:image/png;base64,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" style="width:26px;height:26px;object-fit:contain;">`,
-  dewasa: `<span style="font-size:22px;line-height:1;">🧍</span>`,
-  lain: `<span style="font-size:22px;line-height:1;">✦</span>`
-};
-function themeUntukKategori(nama){
-  const n = nama.toLowerCase();
-  if (n.indexOf('anak') !== -1) return THEME.anak;
-  if (n.indexOf('dewasa') !== -1) return THEME.dewasa;
-  return THEME.lain;
-}
-function terapkanTema(theme){
-  const root = document.documentElement;
-  root.style.setProperty('--theme-accent', theme.accent);
-  root.style.setProperty('--theme-accent-deep', theme.accentDeep);
-  root.style.setProperty('--theme-accent-soft', theme.accentSoft);
-  root.style.setProperty('--canvas', theme.canvas);
-  root.style.setProperty('--theme-bg-image', theme.bgImage);
-}
+let state = { kategori: null, kodeItem: null, warna: '', kg: '', roll: '', qty: {} };
 
-let KATEGORI_VARIAN = {};
-let KOMBINASI_WARNA = [];
-let daftarItem = []; // item biasa: {mode:'biasa', kategori, kodeItem, varianLabel, warna, kg, roll, qty}
-                      // item kombinasi: {mode:'kombinasi', kategori, varianLabel, warnaTiga:[w1,w2,w3], kgTiga:[k1,k2,k3], rollTiga:[r1,r2,r3], adaPanjang, qty}
-let state = {
-  kategori: null, kodeItem: null, varianLabel: null, mode: 'biasa',
-  warna: '', kg: '', roll: '',
-  comboWarna: null, comboKg: ['','',''], comboRoll: ['','',''],
-  qty: {}
-};
-
-const varianPickerBtn = document.getElementById('varianPickerBtn');
-const varianPickerLabel = document.getElementById('varianPickerLabel');
-const varianDropdown = document.getElementById('varianDropdown');
+const varianSelect = document.getElementById('varianSelect');
 const warnaInput = document.getElementById('warnaInput');
-const kgDepan = document.getElementById('kgDepan');
-const kgBelakang = document.getElementById('kgBelakang');
+const kgInput = document.getElementById('kgInput');
 const rollInput = document.getElementById('rollInput');
 const qtyGrid = document.getElementById('qtyGrid');
 const qtyGridLain = document.getElementById('qtyGridLain');
 const totalQtyEl = document.getElementById('totalQty');
+const mainBtn = document.getElementById('mainBtn');
 const kategoriSeg = document.getElementById('kategoriSeg');
 const errorBanner = document.getElementById('errorBanner');
-const itemList = document.getElementById('itemList');
-const emptyHint = document.getElementById('emptyHint');
-const itemCountEl = document.getElementById('itemCount');
-const btnTambah = document.getElementById('btnTambah');
-const btnBuatTeks = document.getElementById('btnBuatTeks');
-const btnKembali = document.getElementById('btnKembali');
-const btnSalin = document.getElementById('btnSalin');
-const btnKirimChat = document.getElementById('btnKirimChat');
-const biasaRows = document.getElementById('biasaRows');
-const kombinasiRows = document.getElementById('kombinasiRows');
-const comboPickerWrap = document.getElementById('comboPickerWrap');
-const comboPickerBtn = document.getElementById('comboPickerBtn');
-const comboPickerLabel = document.getElementById('comboPickerLabel');
-const comboDropdown = document.getElementById('comboDropdown');
-const comboHasil = document.getElementById('comboHasil');
-const warnaChips = document.getElementById('warnaChips');
-const gantiKombinasi = document.getElementById('gantiKombinasi');
-const kgRollComboRow = document.getElementById('kgRollComboRow');
-const kgRollComboWrap = document.getElementById('kgRollComboWrap');
 
 function showError(msg){
   errorBanner.textContent = '⚠ ' + msg;
@@ -469,25 +2174,6 @@ function showError(msg){
   window.scrollTo(0,0);
 }
 function hideError(){ errorBanner.style.display = 'none'; }
-
-// Auto-scroll ke kolom aktif - SENGAJA TIDAK dipasang di kolom Qty per Size (lihat
-// renderQtyGrid di bawah): begitu user sudah masuk area qty dan pindah-pindah antar kotak
-// ukuran, scroll tambahan tiap ganti kotak bikin pusing/goyang - jadi field-field lain tetap
-// auto-scroll, tapi kotak qty dibiarkan diam begitu sudah kelihatan sekali.
-function scrollKeTengah_(el){
-  el.addEventListener('focus', function(){
-    setTimeout(function(){
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 300);
-  });
-}
-[warnaInput, kgDepan, kgBelakang].forEach(scrollKeTengah_);
-
-rollInput.addEventListener('focus', function(){
-  setTimeout(function(){
-    document.getElementById('qtyGrid').scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }, 300);
-});
 
 function renderKategori(){
   const kategoriList = Object.keys(KATEGORI_VARIAN);
@@ -497,80 +2183,32 @@ function renderKategori(){
   }
   kategoriSeg.innerHTML = '';
   kategoriList.forEach(function(k, idx){
-    const theme = themeUntukKategori(k);
-    const btn = document.createElement('button');
-    btn.className = 'tab-card tab-' + theme.key + (idx===0 ? ' active':'');
-    btn.innerHTML = '<div class="tab-icon-badge">'+ICONS[theme.key]+'</div><div class="tab-label">'+k+'</div>';
+    const btn = document.createElement('div');
+    btn.className = 'seg-btn' + (idx===0 ? ' active':'');
+    btn.textContent = k;
     btn.onclick = function(){
-      kategoriSeg.querySelectorAll('.tab-card').forEach(b=>b.classList.remove('active'));
+      kategoriSeg.querySelectorAll('.seg-btn').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
       state.kategori = k;
       state.kodeItem = null;
-      state.varianLabel = null;
-      state.mode = 'biasa';
-      biasaRows.style.display = 'block';
-      kombinasiRows.style.display = 'none';
-      terapkanTema(theme);
       renderVarian();
       validate();
     };
     kategoriSeg.appendChild(btn);
   });
   state.kategori = kategoriList[0];
-  terapkanTema(themeUntukKategori(kategoriList[0]));
   renderVarian();
 }
 
 function renderVarian(){
   const list = KATEGORI_VARIAN[state.kategori] || [];
-  varianPickerLabel.textContent = '— pilih —';
-  varianPickerBtn.classList.add('placeholder');
-  varianDropdown.innerHTML = list.map(function(v, idx){
-    return '<div class="combo-opt" data-idx="' + idx + '">' + v.label + '</div>';
-  }).join('');
-  varianDropdown.querySelectorAll('.combo-opt').forEach(function(el){
-    el.addEventListener('click', function(){
-      pilihVarian(parseInt(el.dataset.idx, 10));
-      varianDropdown.style.display = 'none';
-    });
-  });
+  varianSelect.innerHTML = '<option value="">— pilih —</option>' +
+    list.map(function(v){ return '<option value="'+v.kode+'">'+v.label+'</option>'; }).join('');
 }
-
-function pilihVarian(idx){
-  const list = KATEGORI_VARIAN[state.kategori] || [];
-  const v = list[idx];
-  if (!v) return;
-  varianPickerLabel.textContent = v.label;
-  varianPickerBtn.classList.remove('placeholder');
-  state.kodeItem = v.kode; // BISA jadi string kosong '' - itu VALID (lihat catatan di bawah)
-  state.varianLabel = v.label;
-  state.mode = isKombinasi(v.label) ? 'kombinasi' : 'biasa';
-  if (state.mode === 'kombinasi') {
-    biasaRows.style.display = 'none';
-    kombinasiRows.style.display = 'block';
-    resetComboUI();
-  } else {
-    biasaRows.style.display = 'block';
-    kombinasiRows.style.display = 'none';
-  }
-  validate();
-}
-
-varianPickerBtn.addEventListener('click', function(){
-  const showing = varianDropdown.style.display === 'block';
-  if (showing){ varianDropdown.style.display = 'none'; return; }
-  varianDropdown.style.display = 'block';
-  setTimeout(function(){ varianPickerBtn.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 200);
-});
-document.addEventListener('click', function(e){
-  if (!varianPickerBtn.contains(e.target) && !varianDropdown.contains(e.target)) {
-    varianDropdown.style.display = 'none';
-  }
-});
 
 function renderQtyGrid(container, sizes){
   container.innerHTML = sizes.map(function(s){
-    return '<div class="qty-cell"><label>'+s+'</label><input type="number" min="0" data-size="'+s+'"></div>';
+    return '<div class="qty-cell"><label>'+s+'</label><input type="number" min="0" data-size="'+s+'" placeholder="0"></div>';
   }).join('');
   container.querySelectorAll('input').forEach(function(inp){
     inp.addEventListener('input', function(){
@@ -579,10 +2217,6 @@ function renderQtyGrid(container, sizes){
       validate();
     });
   });
-}
-
-function resetQtyInputs(){
-  document.querySelectorAll('#qtyGrid input, #qtyGridLain input').forEach(function(inp){ inp.value = ''; });
 }
 
 function updateTotal(){
@@ -594,460 +2228,255 @@ function updateTotal(){
 document.getElementById('toggleLain').addEventListener('click', function(){
   const showing = qtyGridLain.style.display !== 'none';
   qtyGridLain.style.display = showing ? 'none' : 'grid';
-  this.textContent = showing ? 'Tampilkan ukuran lain (3XL-6XL)' : 'Sembunyikan ukuran lain';
+  this.textContent = showing ? '+ Tampilkan ukuran lain (3XL-6XL)' : '- Sembunyikan ukuran lain';
 });
 
-function isKombinasi(label){
-  const l = (label || '').toLowerCase();
-  return l.indexOf('kombinasi') !== -1 || l.indexOf('trico') !== -1;
-}
-
-function resetComboUI(){
-  comboPickerWrap.style.display = 'block';
-  comboHasil.style.display = 'none';
-  kgRollComboRow.style.display = 'none';
-  comboPickerLabel.textContent = 'Pilih kombinasi warna...';
-  state.comboWarna = null;
-  state.comboKg = ['','',''];
-  state.comboRoll = ['','',''];
-}
-
-warnaInput.addEventListener('input', function(){ state.warna = warnaInput.value; validate(); tampilkanSaranWarna(); });
-warnaInput.addEventListener('focus', function(){ tampilkanSaranWarna(); });
-warnaInput.addEventListener('blur', function(){ setTimeout(function(){ warnaDropdown.style.display = 'none'; }, 150); });
-function hanyaAngka_(el){
-  el.value = el.value.replace(/[^0-9]/g, '').slice(0, 2);
-}
-function gabungKgSplit_(){
-  // "harus selalu ada koma" - bagian belakang koma WAJIB diisi, gak dianggap valid kalau kosong
-  // (dicek di validate()), tapi buat nilai sementara tetap digabung apa adanya di sini.
-  state.kg = (kgDepan.value || '') + '.' + (kgBelakang.value || '');
+varianSelect.addEventListener('change', function(){
+  state.kodeItem = varianSelect.value || null;
   validate();
-}
-kgDepan.addEventListener('input', function(){
-  hanyaAngka_(kgDepan);
-  gabungKgSplit_();
-  if (kgDepan.value.length === 2) kgBelakang.focus();
 });
-kgBelakang.addEventListener('input', function(){
-  hanyaAngka_(kgBelakang);
-  gabungKgSplit_();
-});
-kgBelakang.addEventListener('keydown', function(e){
-  if (e.key === 'Backspace' && kgBelakang.value === '') kgDepan.focus();
-});
+warnaInput.addEventListener('input', function(){ state.warna = warnaInput.value; validate(); });
+kgInput.addEventListener('input', function(){ state.kg = kgInput.value; validate(); });
 rollInput.addEventListener('input', function(){ state.roll = rollInput.value; });
-
-comboPickerBtn.addEventListener('click', function(){
-  const showing = comboDropdown.style.display === 'block';
-  if (showing){ comboDropdown.style.display = 'none'; return; }
-  if (KOMBINASI_WARNA.length === 0){
-    showError('Sheet KOMBINASI WARNA masih kosong atau belum termuat. Coba Refresh Data.');
-    return;
-  }
-  comboDropdown.innerHTML = KOMBINASI_WARNA.map(function(c, idx){
-    return '<div class="combo-opt" data-idx="'+idx+'"><span>'+c.nama+'</span><span class="opt-sub">+ '+c.ketiga+'</span></div>';
-  }).join('');
-  comboDropdown.querySelectorAll('.combo-opt').forEach(function(el){
-    el.addEventListener('click', function(){
-      const c = KOMBINASI_WARNA[parseInt(el.dataset.idx,10)];
-      pilihKombinasi(c);
-      comboDropdown.style.display = 'none';
-    });
-  });
-  comboDropdown.style.display = 'block';
-});
-
-function pilihKombinasi(c){
-  const dua = c.nama.split(' ');
-  const tiga = [dua[0], dua[1], c.ketiga];
-  state.comboWarna = tiga;
-  warnaChips.innerHTML = tiga.map(function(w, i){
-    return '<div class="warna-chip"><div class="chip-order">'+(i+1)+'</div><div class="chip-text">'+w+'</div></div>';
-  }).join('');
-  comboPickerWrap.style.display = 'none';
-  comboHasil.style.display = 'block';
-
-  kgRollComboWrap.innerHTML = tiga.map(function(w, i){
-    return '<div class="combo-kgroll-label">Kg + Kode Roll - ' + w + '</div>' +
-      '<div class="combo-kgroll-row" style="align-items:center;">' +
-        '<div class="kg-split">' +
-          '<input type="text" inputmode="numeric" maxlength="2" class="comboKgDepan" data-idx="'+i+'">' +
-          '<span class="kg-split-dot">.</span>' +
-          '<input type="text" inputmode="numeric" maxlength="2" class="comboKgBelakang" data-idx="'+i+'">' +
-        '</div>' +
-        '<input type="text" class="comboRollInput" data-idx="'+i+'" placeholder="kode roll (opsional)">' +
-      '</div>';
-  }).join('');
-  kgRollComboRow.style.display = 'block';
-
-  function gabungComboKg_(idx){
-    const d = document.querySelector('.comboKgDepan[data-idx="'+idx+'"]');
-    const b = document.querySelector('.comboKgBelakang[data-idx="'+idx+'"]');
-    state.comboKg[idx] = (d.value || '') + '.' + (b.value || '');
-    validate();
-  }
-  document.querySelectorAll('.comboKgDepan').forEach(function(inp){
-    inp.addEventListener('input', function(){
-      hanyaAngka_(inp);
-      gabungComboKg_(parseInt(inp.dataset.idx,10));
-      if (inp.value.length === 2) {
-        document.querySelector('.comboKgBelakang[data-idx="'+inp.dataset.idx+'"]').focus();
-      }
-    });
-  });
-  document.querySelectorAll('.comboKgBelakang').forEach(function(inp){
-    inp.addEventListener('input', function(){ hanyaAngka_(inp); gabungComboKg_(parseInt(inp.dataset.idx,10)); });
-    inp.addEventListener('keydown', function(e){
-      if (e.key === 'Backspace' && inp.value === '') {
-        document.querySelector('.comboKgDepan[data-idx="'+inp.dataset.idx+'"]').focus();
-      }
-    });
-  });
-  document.querySelectorAll('.comboRollInput').forEach(function(inp){
-    inp.addEventListener('input', function(){ state.comboRoll[parseInt(inp.dataset.idx,10)] = inp.value; });
-  });
-  validate();
-}
-
-gantiKombinasi.addEventListener('click', function(){
-  resetComboUI();
-  validate();
-});
-
-document.addEventListener('click', function(e){
-  if (!comboPickerWrap.contains(e.target)) comboDropdown.style.display = 'none';
-});
 
 function validate(){
   const total = updateTotal();
-  let ok;
-  if (state.mode === 'kombinasi') {
-    const semuaKgLengkap = state.comboWarna ? [0,1,2].every(function(i){
-      const d = document.querySelector('.comboKgDepan[data-idx="'+i+'"]');
-      const b = document.querySelector('.comboKgBelakang[data-idx="'+i+'"]');
-      return d && b && d.value && b.value;
-    }) : false;
-    ok = state.kategori && state.kodeItem !== null && state.comboWarna &&
-      semuaKgLengkap && total > 0;
-  } else {
-    ok = state.kategori && state.kodeItem !== null && state.warna.trim() &&
-      kgDepan.value && kgBelakang.value && parseFloat(state.kg) > 0 && total > 0;
-  }
-  btnTambah.disabled = !ok;
+  const ok = state.kategori && state.kodeItem && state.warna.trim() &&
+    state.kg && parseFloat(state.kg) > 0 && total > 0;
+  setMainButton(ok);
 }
 
-function renderItemList(){
-  itemCountEl.textContent = daftarItem.length;
-  btnBuatTeks.textContent = 'Buat Teks (' + daftarItem.length + ')';
-  btnBuatTeks.disabled = daftarItem.length === 0;
-  document.getElementById('daftarItemSection').style.display = daftarItem.length === 0 ? 'none' : 'block';
-  if (daftarItem.length === 0){
-    itemList.innerHTML = '';
-    itemList.appendChild(emptyHint);
-    return;
-  }
-  itemList.innerHTML = '';
-  daftarItem.forEach(function(item, idx){
-    const qtyLines = Object.keys(item.qty).filter(function(s){return item.qty[s]>0;})
-      .map(function(s){ return s+item.qty[s]; }).join(' ');
-    let namaItem, subInfo;
-    if (item.mode === 'kombinasi') {
-      namaItem = item.kategori.toUpperCase() + ' ' + (item.adaPanjang ? 'PANJANG KOMBINASI ' : 'KOMBINASI ') +
-        item.warnaTiga[0].toUpperCase() + ' ' + item.warnaTiga[1].toUpperCase();
-      subInfo = item.warnaTiga.map(function(w,i){ return w+' '+item.kgTiga[i]+'kg'; }).join(', ');
-    } else {
-      namaItem = (item.kodeItem === '')
-        ? (item.kategori.toUpperCase() + ' ' + item.warna.toUpperCase())
-        : (item.kategori.toUpperCase() + ' ' + item.varianLabel.toUpperCase() + ' ' + item.warna.toUpperCase());
-      subInfo = item.kg + 'kg' + (item.roll ? ' (roll ' + item.roll + ')' : '');
-    }
-    const row = document.createElement('div');
-    row.className = 'item-row';
-    row.innerHTML =
-      '<div class="item-row-text"><span class="item-row-tag">'+item.kategori+'</span><b>' + namaItem + '</b> - ' +
-      subInfo + '<br>' + qtyLines + '</div>' +
-      '<div class="item-row-del" data-idx="' + idx + '">✕</div>';
-    itemList.appendChild(row);
-  });
-  itemList.querySelectorAll('.item-row-del').forEach(function(el){
-    el.addEventListener('click', function(){
-      daftarItem.splice(parseInt(el.dataset.idx,10), 1);
-      renderItemList();
-    });
-  });
+function setMainButton(enabled){
+  mainBtn.disabled = !enabled;
 }
 
-btnTambah.addEventListener('click', function(){
+mainBtn.addEventListener('click', function(){
   hideError();
-  const labelTerpilih = state.varianLabel;
-  if (state.mode === 'kombinasi') {
-    const adaPanjang = labelTerpilih.toLowerCase().indexOf('panjang') !== -1;
-    daftarItem.push({
-      mode: 'kombinasi',
-      kategori: state.kategori,
-      varianLabel: labelTerpilih,
-      adaPanjang: adaPanjang,
-      warnaTiga: state.comboWarna.slice(),
-      kgTiga: state.comboKg.slice(),
-      rollTiga: state.comboRoll.slice(),
-      qty: Object.assign({}, state.qty)
-    });
-  } else {
-    daftarItem.push({
-      mode: 'biasa',
-      kategori: state.kategori,
-      kodeItem: state.kodeItem,
-      varianLabel: labelTerpilih,
-      warna: state.warna,
-      kg: state.kg,
-      roll: state.roll,
-      qty: Object.assign({}, state.qty)
-    });
+  if (mainBtn.textContent.indexOf('Lanjut') !== -1){
+    showConfirm();
+  } else if (mainBtn.textContent.indexOf('Kirim') !== -1){
+    submitToServer();
   }
-  renderItemList();
-
-  // Reset field DETAIL ITEM (kategori TETAP, biar cepat isi item berikutnya kategori sama)
-  state.kodeItem = null; state.varianLabel = null; state.mode = 'biasa';
-  state.warna = ''; state.kg = ''; state.roll = '';
-  state.comboWarna = null; state.comboKg = ['','','']; state.comboRoll = ['','',''];
-  varianPickerLabel.textContent = '— pilih —';
-  varianPickerBtn.classList.add('placeholder');
-  warnaInput.value = ''; kgDepan.value = ''; kgBelakang.value = ''; rollInput.value = '';
-  biasaRows.style.display = 'block';
-  kombinasiRows.style.display = 'none';
-  resetComboUI();
-  resetQtyInputs();
-  state.qty = {};
-  validate();
-  window.scrollTo(0,0);
 });
 
-function escapeHtml_(s){
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-function generateTeksHtmlPreview_(){
-  return daftarItem.map(function(item){
-    const daftarSize = Object.keys(item.qty).filter(function(s){ return item.qty[s] > 0; });
-    const totalQtyItem = daftarSize.reduce(function(sum,s){ return sum + item.qty[s]; }, 0);
-    const qtyHtml = daftarSize.map(function(s){ return escapeHtml_(s) + '<b>' + item.qty[s] + '</b>'; }).join(' ') +
-      ' = <b>' + totalQtyItem + '</b>';
-
-    if (item.mode === 'kombinasi') {
-      // Format khusus KOMBINASI 3 warna - memanfaatkan mekanisme "RefStok"/breakdown yang
-      // SUDAH ADA di sistem lama: baris pertama = item utama (warna 1+2, kg warna pertama),
-      // 2 baris berikutnya = breakdown pemakaian kain warna ke-2 & ke-3 secara terpisah,
-      // baris terakhir = qty (berlaku buat 1 item gabungan ini).
-      const kataDepan = item.kategori.toUpperCase() + ' ' + (item.adaPanjang ? 'PANJANG KOMBINASI' : 'KOMBINASI');
-      const w = item.warnaTiga, kg = item.kgTiga, roll = item.rollTiga;
-      const line1 = escapeHtml_(kataDepan + ' ' + w[0].toUpperCase() + ' ' + w[1].toUpperCase() + ' ' + kg[0]) +
-        (roll[0] ? escapeHtml_(' / ' + roll[0]) : '');
-      const line2 = escapeHtml_(w[1].toUpperCase() + ' ' + kg[1]) + (roll[1] ? escapeHtml_(' / ' + roll[1]) : '');
-      const line3 = escapeHtml_(w[2].toUpperCase() + ' ' + kg[2]) + (roll[2] ? escapeHtml_(' / ' + roll[2]) : '');
-      return line1 + '\n' + line2 + '\n' + line3 + '\n' + qtyHtml;
-    }
-
-    // Kategori (ANAK/DEWASA) SENGAJA tetap ditulis literal di teks chat - konversi ke kode
-    // singkat (PJ/SET/dst) baru terjadi OTOMATIS belakangan di sheet lewat
-    // computeKodePenulisanDasar() yang SUDAH ADA, dan banyak aturannya BUTUH kata kategori ini
-    // supaya bisa ke-trigger dengan benar (mis. "Anak Panjang" baru -> PJ).
-    //
-    // Kalau Kode Item SENGAJA dikosongkan di sheet KATEGORI VARIAN (varian semacam
-    // "Pendek"/"Pendek Kombinasi"), Label Varian-nya TIDAK ikut ditulis, tapi kata Kategori
-    // tetap ada - jadi teksnya "ANAK MERAH" (bukan "PENDEK MERAH" ataupun "MERAH" doang).
-    const namaAwal = (item.kodeItem === '')
-      ? (item.kategori.toUpperCase() + ' ' + item.warna.toUpperCase())
-      : (item.kategori.toUpperCase() + ' ' + item.varianLabel.toUpperCase() + ' ' + item.warna.toUpperCase());
-    let line1Text;
-    if (item.roll) {
-      line1Text = namaAwal + ' ' + item.kg + ' / ' + item.roll;
-    } else {
-      line1Text = namaAwal + ' ' + item.kg + 'kg';
-    }
-    return escapeHtml_(line1Text) + '\n' + qtyHtml;
-  }).join('\n\n');
-}
-
-btnBuatTeks.addEventListener('click', function(){
-  if (daftarItem.length === 0) return;
-  document.getElementById('teksHasil').innerHTML = generateTeksHtmlPreview_();
+function showConfirm(){
   document.getElementById('formScreen').style.display = 'none';
-  document.getElementById('successScreen').style.display = 'block';
-  document.getElementById('btnRowForm').style.display = 'none';
-  document.getElementById('btnRowSukses').style.display = 'flex';
-  document.getElementById('copiedFlash').style.display = 'none';
-  window.scrollTo(0,0);
-});
-
-btnKembali.addEventListener('click', function(){
-  document.getElementById('formScreen').style.display = 'block';
-  document.getElementById('successScreen').style.display = 'none';
-  document.getElementById('btnRowForm').style.display = 'flex';
-  document.getElementById('btnRowSukses').style.display = 'none';
-});
-
-btnKirimChat.addEventListener('click', function(){
-  const teks = document.getElementById('teksHasil').textContent;
-  const shareUrl = 'https://t.me/share/url?url=&text=' + encodeURIComponent(teks);
-  if (tg && tg.openTelegramLink) {
-    tg.openTelegramLink(shareUrl);
-  } else {
-    window.open(shareUrl, '_blank');
-  }
-});
-
-btnSalin.addEventListener('click', function(){
-  const teks = document.getElementById('teksHasil').textContent;
-  const flash = document.getElementById('copiedFlash');
-  function tampilkanSukses(){
-    flash.style.display = 'block';
-    if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-  }
-  if (navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(teks).then(tampilkanSukses).catch(function(){
-      fallbackCopy(teks, tampilkanSukses);
-    });
-  } else {
-    fallbackCopy(teks, tampilkanSukses);
-  }
-});
-
-function fallbackCopy(teks, cb){
-  const ta = document.createElement('textarea');
-  ta.value = teks;
-  ta.style.position = 'fixed';
-  ta.style.opacity = '0';
-  document.body.appendChild(ta);
-  ta.focus(); ta.select();
-  try { document.execCommand('copy'); cb(); } catch(e){}
-  document.body.removeChild(ta);
+  document.getElementById('confirmScreen').style.display = 'block';
+  const qtyLines = Object.keys(state.qty).filter(function(s){ return state.qty[s]>0; })
+    .map(function(s){ return s+' '+state.qty[s]; }).join('  ');
+  document.getElementById('confirmBody').innerHTML =
+    '<div style="font-size:14px;line-height:2;">' +
+    '<div><span style="color:var(--text-muted)">Kategori:</span> <b>'+state.kategori+'</b></div>' +
+    '<div><span style="color:var(--text-muted)">Varian:</span> <b>'+varianSelect.options[varianSelect.selectedIndex].text+'</b></div>' +
+    '<div><span style="color:var(--text-muted)">Warna:</span> <b>'+state.warna.toUpperCase()+'</b></div>' +
+    '<div><span style="color:var(--text-muted)">Kg kain:</span> <b>'+state.kg+' kg</b></div>' +
+    '<div><span style="color:var(--text-muted)">Kode roll:</span> <b>'+(state.roll || '—')+'</b></div>' +
+    '<div><span style="color:var(--text-muted)">Qty:</span> <b>'+qtyLines+'</b></div>' +
+    '<div><span style="color:var(--text-muted)">Total:</span> <b>'+updateTotal()+' pcs</b></div>' +
+    '</div>';
+  mainBtn.textContent = '✅ Kirim ke Sheet';
+  mainBtn.classList.add('confirm');
 }
 
-function initUI(){
-  document.getElementById('loadingScreen').style.display = 'none';
-  document.getElementById('mainWrap').style.display = 'block';
-  renderKategori();
-  renderQtyGrid(qtyGrid, SIZES_UTAMA);
-  renderQtyGrid(qtyGridLain, SIZES_LAIN);
-  renderItemList();
-  validate();
-}
-
-function fetchFresh(isBackground){
-  return fetch(WEBAPP_URL + '?action=kategori', { cache: 'no-store' })
+function submitToServer(){
+  mainBtn.disabled = true;
+  mainBtn.textContent = 'Mengirim...';
+  const payload = {
+    source: 'miniapp_v1',
+    initData: tg ? tg.initData : '',
+    platform: tg ? tg.platform : 'tidak ada tg.WebApp',
+    version: tg ? tg.version : '?',
+    kategori: state.kategori,
+    kodeItem: state.kodeItem,
+    warna: state.warna,
+    kg: state.kg,
+    kodeRoll: state.roll,
+    qty: state.qty
+  };
+  fetch(WEBAPP_URL, { method: 'POST', body: JSON.stringify(payload) })
     .then(function(r){ return r.json(); })
-    .then(function(data){
-      KATEGORI_VARIAN = data;
-      try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data })); } catch(e){}
-      if (!isBackground) initUI();
+    .then(function(res){
+      if (res.ok){
+        document.getElementById('confirmScreen').style.display = 'none';
+        document.getElementById('mainBtnWrap').style.display = 'none';
+        document.getElementById('successScreen').style.display = 'flex';
+        if (tg){
+          if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+          setTimeout(function(){ tg.close(); }, 1600);
+        }
+      } else {
+        document.getElementById('confirmScreen').style.display = 'none';
+        document.getElementById('formScreen').style.display = 'block';
+        mainBtn.textContent = 'Lanjut ke Konfirmasi';
+        mainBtn.classList.remove('confirm');
+        showError(res.error || 'Gagal menyimpan, coba lagi');
+        validate();
+      }
     })
     .catch(function(err){
-      if (!isBackground) {
-        document.getElementById('loadingScreen').textContent = 'Gagal memuat data: ' + err.message + ' (cek WEBAPP_URL di kode)';
-      }
-    });
-}
-
-if (tg){ tg.ready(); tg.expand(); }
-
-// ---- Dropdown saran Warna CUSTOM (bukan <datalist> bawaan browser - itu berantakan &
-// gak konsisten posisinya di WebView Android). Ini murni div biasa yang kita kontrol sendiri
-// posisi & tampilannya, nempel PERSIS di bawah kolom Warna, gak nimpa kolom lain. ----
-let WARNA_LIST = [];
-const warnaDropdown = document.createElement('div');
-warnaDropdown.id = 'warnaDropdown';
-warnaDropdown.style.cssText = 'display:none;position:static;width:100%;box-sizing:border-box;margin-top:8px;background:#fff;border-radius:12px;' +
-  'border:1px solid var(--sep);max-height:200px;overflow-y:auto;';
-document.getElementById('warnaInputWrap').insertAdjacentElement('afterend', warnaDropdown);
-
-function tampilkanSaranWarna(){
-  if (WARNA_LIST.length === 0) { warnaDropdown.style.display = 'none'; return; }
-  const q = warnaInput.value.trim().toUpperCase();
-  const cocok = q ? WARNA_LIST.filter(function(w){ return w.toUpperCase().indexOf(q) !== -1; }) : WARNA_LIST;
-  if (cocok.length === 0) { warnaDropdown.style.display = 'none'; return; }
-  warnaDropdown.innerHTML = cocok.slice(0,8).map(function(w){
-    return '<div class="warna-opt" style="padding:10px 14px;font-size:14.5px;font-weight:500;' +
-      'border-bottom:0.5px solid #E5E5EA;">' + w + '</div>';
-  }).join('');
-  const opts = warnaDropdown.querySelectorAll('.warna-opt');
-  opts[opts.length-1].style.borderBottom = 'none';
-  opts.forEach(function(el){
-    el.addEventListener('mousedown', function(ev){ ev.preventDefault(); }); // biar blur gak duluan sebelum sempat ke-tap
-    el.addEventListener('click', function(){
-      warnaInput.value = el.textContent;
-      state.warna = el.textContent;
-      warnaDropdown.style.display = 'none';
+      document.getElementById('confirmScreen').style.display = 'none';
+      document.getElementById('formScreen').style.display = 'block';
+      mainBtn.textContent = 'Lanjut ke Konfirmasi';
+      mainBtn.classList.remove('confirm');
+      showError('Gagal terhubung: ' + err.message);
       validate();
     });
-  });
-  warnaDropdown.style.display = 'block';
 }
 
-function fetchWarnaFresh(){
-  fetch(WEBAPP_URL + '?action=warna', { cache: 'no-store' })
-    .then(function(r){ return r.json(); })
-    .then(function(list){
-      WARNA_LIST = list;
-      try { localStorage.setItem(WARNA_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: list })); } catch(e){}
-    })
-    .catch(function(){ /* diamkan - autocomplete cuma bonus, gak boleh ganggu form kalau gagal */ });
+// Init
+if (tg){
+  tg.ready();
+  tg.expand();
 }
-(function bootstrapWarna(){
-  try {
-    const cached = JSON.parse(localStorage.getItem(WARNA_CACHE_KEY) || 'null');
-    if (cached && cached.data && (Date.now() - cached.ts) < WARNA_CACHE_TTL_MS){
-      WARNA_LIST = cached.data;
-    }
-  } catch(e){}
-  fetchWarnaFresh(); // selalu refresh diam-diam juga, biar ikutan warna baru dari stok masuk
-})();
-
-function fetchKombinasiFresh(){
-  fetch(WEBAPP_URL + '?action=kombinasi', { cache: 'no-store' })
-    .then(function(r){ return r.json(); })
-    .then(function(list){
-      KOMBINASI_WARNA = list;
-      try { localStorage.setItem(KOMBINASI_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: list })); } catch(e){}
-    })
-    .catch(function(){ /* diamkan - kalau gagal, combo picker akan kasih pesan error saat dibuka */ });
-}
-(function bootstrapKombinasi(){
-  try {
-    const cached = JSON.parse(localStorage.getItem(KOMBINASI_CACHE_KEY) || 'null');
-    if (cached && cached.data && (Date.now() - cached.ts) < KOMBINASI_CACHE_TTL_MS){
-      KOMBINASI_WARNA = cached.data;
-    }
-  } catch(e){}
-  fetchKombinasiFresh();
-})();
-
-let dariCache = false;
-try {
-  const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
-  if (cached && cached.data && (Date.now() - cached.ts) < CACHE_TTL_MS){
-    KATEGORI_VARIAN = cached.data;
-    dariCache = true;
-    initUI();
-    fetchFresh(true);
-  }
-} catch(e){}
-if (!dariCache) fetchFresh(false);
-
-document.getElementById('refreshLink').addEventListener('click', function(){
-  try {
-    localStorage.removeItem(CACHE_KEY);
-    localStorage.removeItem(WARNA_CACHE_KEY);
-    localStorage.removeItem(KOMBINASI_CACHE_KEY);
-  } catch(e){}
-  document.getElementById('mainWrap').style.display = 'none';
-  const ls = document.getElementById('loadingScreen');
-  ls.style.display = 'block';
-  ls.textContent = 'Memuat ulang data terbaru...';
-  fetchFresh(false);
-  fetchWarnaFresh();
-  fetchKombinasiFresh();
-});
+renderKategori();
+renderQtyGrid(qtyGrid, SIZES_UTAMA);
+renderQtyGrid(qtyGridLain, SIZES_LAIN);
+validate();
 </script>
 </body>
-</html>
+</html>`;
+}
+
+// ============================================================
+// HAPUS INSTAN "/produksi" LAMA (rev.47) - beda dari sistem harian di bawah (yang nunggu jam 1
+// pagi): begitu ada request "/produksi" BARU masuk di 1 chat, pasangan pesan "/produksi" + balasan
+// tombolnya yang LAMA di chat ITU langsung dihapus saat itu juga. Dipakai bareng sistem harian
+// di bawah (yang tetap jalan sebagai jaring pengaman buat pesan /produksi TERAKHIR yang belum
+// sempat digantikan sampai keesokan harinya).
+// ============================================================
+
+function getLastProduksiKey_(chatId) {
+  return 'LAST_PRODUKSI_' + chatId;
+}
+
+function hapusProduksiSebelumnya_(chatId) {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const raw = props.getProperty(getLastProduksiKey_(chatId));
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    const botToken = getProp('TELEGRAM_BOT_TOKEN');
+    [data.userMsgId, data.botMsgId].forEach(function (msgId) {
+      if (!msgId) return;
+      UrlFetchApp.fetch('https://api.telegram.org/bot' + botToken + '/deleteMessage', {
+        method: 'post',
+        contentType: 'application/json',
+        payload: JSON.stringify({ chat_id: chatId, message_id: msgId }),
+        muteHttpExceptions: true
+      });
+    });
+  } catch (err) {
+    logDebug('hapusProduksiSebelumnya_ ERROR', err.message);
+  }
+}
+
+function simpanProduksiTerakhir_(chatId, userMsgId, botMsgId) {
+  try {
+    PropertiesService.getScriptProperties().setProperty(
+      getLastProduksiKey_(chatId),
+      JSON.stringify({ userMsgId: userMsgId, botMsgId: botMsgId })
+    );
+  } catch (err) {
+    logDebug('simpanProduksiTerakhir_ ERROR', err.message);
+  }
+}
+
+// ============================================================
+// AUTO-HAPUS PESAN "/produksi" + BALASAN TOMBOLNYA TIAP GANTI HARI (rev.47)
+// SYARAT: bot HARUS jadi admin grup dengan izin "Delete Messages", kalau tidak deleteMessage
+// akan gagal (gagalnya aman, cuma kecatat di DEBUG_LOG, TIDAK mempengaruhi data produksi sama
+// sekali - ini murni soal kerapian chat, bukan bagian dari alur data).
+// ============================================================
+
+function getTanggalKey_(date) {
+  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
+
+// Dipanggil tiap kali kirim/terima pesan "/produksi" ATAU balasan tombolnya - disimpan di Script
+// Properties (bukan sheet, biar ringan) sebagai daftar {chatId, messageId, tanggal} buat dihapus
+// belakangan begitu harinya sudah lewat.
+function catatPesanUntukDihapus(chatId, messageId) {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const raw = props.getProperty('PESAN_HAPUS_HARIAN');
+    const list = raw ? JSON.parse(raw) : [];
+    list.push({ chatId: chatId, messageId: messageId, tanggal: getTanggalKey_(new Date()) });
+    props.setProperty('PESAN_HAPUS_HARIAN', JSON.stringify(list));
+  } catch (err) {
+    logDebug('catatPesanUntukDihapus ERROR', err.message);
+  }
+}
+
+// Dipanggil OTOMATIS oleh trigger harian (lihat setupTriggerHapusPesanHarian di bawah) - hapus
+// SEMUA pesan yang tercatat dari HARI-HARI SEBELUMNYA (bukan hari ini, biar pesan hari yang
+// sedang berjalan tetap kelihatan/masih bisa dipakai).
+function hapusPesanHariSebelumnya() {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const raw = props.getProperty('PESAN_HAPUS_HARIAN');
+    if (!raw) { logDebug('Hapus pesan harian', 'Tidak ada data tersimpan'); return; }
+    const list = JSON.parse(raw);
+    const hariIni = getTanggalKey_(new Date());
+    const botToken = getProp('TELEGRAM_BOT_TOKEN');
+
+    const sisa = [];
+    let dihapusCount = 0;
+    let gagalCount = 0;
+    for (const entry of list) {
+      if (entry.tanggal === hariIni) {
+        sisa.push(entry); // punya hari ini, JANGAN dihapus dulu
+        continue;
+      }
+      const resp = UrlFetchApp.fetch('https://api.telegram.org/bot' + botToken + '/deleteMessage', {
+        method: 'post',
+        contentType: 'application/json',
+        payload: JSON.stringify({ chat_id: entry.chatId, message_id: entry.messageId }),
+        muteHttpExceptions: true
+      });
+      const ok = JSON.parse(resp.getContentText()).ok;
+      if (ok) { dihapusCount++; } else { gagalCount++; }
+    }
+    props.setProperty('PESAN_HAPUS_HARIAN', JSON.stringify(sisa));
+    logDebug('Hapus pesan harian selesai', dihapusCount + ' pesan terhapus, ' + gagalCount + ' gagal (cek izin admin bot), ' + sisa.length + ' sisa (punya hari ini)');
+  } catch (err) {
+    logDebug('hapusPesanHariSebelumnya ERROR', err.message + ' | Stack: ' + err.stack);
+  }
+}
+
+// Jalankan SEKALI SAJA dari editor ini buat masang trigger harian (mirip pola setupTrigger()
+// yang sudah ada untuk onTimPotongSheetEdit)
+function setupTriggerHapusPesanHarian() {
+  const triggers = ScriptApp.getProjectTriggers();
+  for (const t of triggers) {
+    if (t.getHandlerFunction() === 'hapusPesanHariSebelumnya') {
+      ScriptApp.deleteTrigger(t);
+    }
+  }
+  ScriptApp.newTrigger('hapusPesanHariSebelumnya')
+    .timeBased()
+    .everyDays(1)
+    .atHour(1)
+    .create();
+  Logger.log('Trigger harian hapusPesanHariSebelumnya terpasang, jalan tiap sekitar jam 1 pagi.');
+}
+
+// ============================================================
+// SETUP TRIGGER (jalankan 1 KALI SAJA secara manual dari editor ini)
+// Perlu ini karena project standalone tidak punya opsi "From spreadsheet" di UI Triggers
+// ============================================================
+function setupTrigger() {
+  const triggers = ScriptApp.getProjectTriggers();
+  for (const t of triggers) {
+    if (t.getHandlerFunction() === 'onTimPotongSheetEdit') {
+      ScriptApp.deleteTrigger(t);
+    }
+  }
+
+  const ss = getSpreadsheet();
+  ScriptApp.newTrigger('onTimPotongSheetEdit')
+    .forSpreadsheet(ss)
+    .onEdit()
+    .create();
+
+  Logger.log('Trigger berhasil dipasang untuk spreadsheet: ' + ss.getName());
+}
