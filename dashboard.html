@@ -1,22 +1,15 @@
 <!--
   DASHBOARD STOK KAIN - TIM POTONG (ver.01)
   Halaman statis, di-hosting di GitHub Pages yang sama dengan index.html (Mini App).
-  Baca data lewat doGet(?action=dashboard) di apps_script_tim_potong.js. Checkbox "selesai"
+  Baca data lewat doGet(?action=dashboard) di apps_script_tim_potong_revNN.js. Checkbox "selesai"
   di list Laporan Belum SELESAI menulis lewat doGet(?action=updateStatus&baris=N) - satu-satunya
   aksi di halaman ini yang mengubah data di Sheet.
 
-  CATATAN SKEMA PENOMORAN (BARU): nomor revisi sekarang ditulis di komentar ini (bukan lagi di
-  nama file), supaya nama file "dashboard.html" tetap sama terus - tinggal replace isinya tiap
-  ada revisi. Skema lama (rev.53/ver.01 lama) DIRESET, mulai dari ver.01 lagi per hari ini.
-
-  ver.01 (perubahan hari ini, lihat RINGKASAN_THREAD_DASHBOARD_STOK_KAIN.md utk detail alasan):
-  1. Nomor urut di kedua list (Stok per Warna & Laporan Belum SELESAI).
-  2. Swatch warna sekarang dicocokkan ke nama warnanya (bukan cuma hash) - lihat PETA_WARNA.
-  3. "Stok Tersisa" sekarang HANYA roll yang belum disentuh sama sekali (backend sudah filter
-     Kg Terpakai = 0) - list ini bisa DIKLIK utk expand detail per-roll (kode + kg).
-  4. "Laporan Belum SELESAI" sekarang HANYA laporan yang roll-nya sudah habis (Kg Sisa = 0,
-     backend sudah filter) - tampilkan tanggal (+nama hari, dari sheet), qty per ukuran, jumlah
-     total, dan checkbox utk tandai SELESAI (nulis balik ke Sheet via ?action=updateStatus).
+  CATATAN SKEMA PENOMORAN (BARU): nomor revisi ditulis di NAMA FILE (dashboard_ver01.html, lalu
+  ver02, ver03, dst) SEKALIGUS di komentar ini, biar selalu sinkron & gampang dicari di riwayat
+  download. Pas upload ke GitHub Pages, tetap simpan sebagai "dashboard.html" (nama file di
+  hosting HARUS tetap itu karena sudah dirujuk dari tombol Telegram) - penomoran di nama file
+  ini cuma buat riwayat lokal/download, bukan nama pas di-hosting.
 -->
 <!doctype html>
 <html lang="id">
