@@ -1,15 +1,17 @@
 <!--
-  DASHBOARD STOK KAIN - TIM POTONG (v.06)
+  DASHBOARD STOK KAIN - TIM POTONG (v.07)
   Halaman statis, di-hosting di GitHub Pages yang sama dengan index.html (Mini App).
-  Backend: apps_script_tim_potong_v06.js.
+  Backend: apps_script_tim_potong_v07.js.
 
-  v.06 (perubahan hari ini):
-  1. "Laporan Belum SELESAI" sekarang konsisten sama tab QC: laporan dengan Status "PROSES x/y"
-     (baru diisi sebagian sama QC) TETAP tampil di daftar aktif - yang disembunyikan cuma yang
-     Status-nya udah bener-bener "SELESAI".
-  2. Section BARU "📜 Arsip Selesai (3 hari terakhir)" di KEDUA tab (collapsed by default,
-     ketuk buat buka) - nampilin laporan yang baru SELESAI dalam 3 hari terakhir (dihitung dari
-     kapan statusnya jadi SELESAI, bukan tanggal produksi).
+  v.07 (simplifikasi - cuma 2 tab):
+  1. "📦 Stok Kain" - cuma nampilin warna yang rollnya masih ada sisa (belum disentuh sama
+     sekali). Stat card "Kain Sedang Diproses" dihapus dari sini (pindah konsepnya ke tab 2).
+  2. "✅ Proses & QC" - gabungan dari "Laporan Belum Selesai" + "QC Konfirmasi" yang dulu
+     terpisah, sekarang 1 list aja. Sumber datanya SEMUA baris TIM POTONG yang Status-nya BUKAN
+     "SELESAI" (kosong atau "PROSES x/y"), TANPA syarat roll harus habis lagi - biar jumlahnya
+     konsisten sama yang kelihatan langsung di kolom Status sheet TIM POTONG. Search & filter
+     sort (Paling lama/Jenis A-Z/Tanggal terbaru), Kirim Rekap, preview Telegram, dan Arsip
+     Selesai (3 hari terakhir) semua tetap ada, cuma sekarang di 1 tab ini.
 -->
 <!doctype html>
 <html lang="id">
@@ -270,22 +272,15 @@ input[type="number"]{ -moz-appearance:textfield; appearance:textfield; }
   </div>
 
   <div class="main-tabs">
-    <div class="main-tab-btn active" data-maintab="stok">📦 Stok &amp; Proses</div>
-    <div class="main-tab-btn" data-maintab="qc">✅ QC Konfirmasi</div>
+    <div class="main-tab-btn active" data-maintab="stok">📦 Stok Kain</div>
+    <div class="main-tab-btn" data-maintab="qc">✅ Proses &amp; QC</div>
   </div>
 
   <div id="panel-stok">
-    <div class="stats">
-      <div class="stat-card good">
-        <p class="label">Total Kain Tersisa</p>
-        <p class="value" id="stokValue">—<small>kg</small></p>
-        <p class="sub" id="stokSub">Memuat data…</p>
-      </div>
-      <div class="stat-card warn">
-        <p class="label">Kain Sedang Diproses</p>
-        <p class="value" id="prosesValue">—<small>kg</small></p>
-        <p class="sub" id="prosesSub">Memuat data…</p>
-      </div>
+    <div class="stat-card good" style="max-width:340px;">
+      <p class="label">Total Kain Tersisa</p>
+      <p class="value" id="stokValue">—<small>kg</small></p>
+      <p class="sub" id="stokSub">Memuat data…</p>
     </div>
 
     <h2 class="section-title">Stok Tersisa per Warna</h2>
@@ -297,27 +292,7 @@ input[type="number"]{ -moz-appearance:textfield; appearance:textfield; }
     </div>
     <div class="stok-grid" id="stok-list"><div class="empty-state">Memuat…</div></div>
 
-    <h2 class="section-title">Laporan Belum SELESAI</h2>
-    <div class="search-wrap">
-      <input type="text" id="searchProses" placeholder="Cari laporan/warna...">
-      <svg class="icon" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M21 21l-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-      <button class="search-clear" id="btnClearProses">✕</button>
-    </div>
-    <p class="section-summary" id="prosesSummary"></p>
-    <div class="filter-bar" id="prosesFilterBar">
-      <span class="filter-chip active" data-sort="hari">Paling lama</span>
-      <span class="filter-chip" data-sort="jenis">Jenis A-Z</span>
-      <span class="filter-chip" data-sort="tanggal">Tanggal terbaru</span>
-    </div>
-    <div class="proses-grid" id="proses-list"><div class="empty-state">Memuat…</div></div>
-
-    <p class="foot-note">Tarik ke bawah / muat ulang halaman untuk data terbaru. Roll utuh = belum disentuh sama sekali. Laporan cuma tampil kalau roll-nya sudah habis kepakai.</p>
-
-    <div class="arsip-toggle" data-arsip="stok">
-      <div class="left"><span>📜</span><div class="txt"><b>Arsip Selesai (3 hari terakhir)</b><span id="arsipSummary-stok">Ketuk buat lihat</span></div></div>
-      <svg class="arsip-chevron" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    </div>
-    <div class="arsip-body" id="arsipBody-stok"><div class="arsip-grid" id="arsipGrid-stok"></div></div>
+    <p class="foot-note">Cuma nampilin warna yang rollnya masih ada sisa dan belum disentuh sama sekali. Klik kartu buat lihat detail per-roll.</p>
   </div>
 
   <div id="panel-qc" style="display:none;">
@@ -329,6 +304,11 @@ input[type="number"]{ -moz-appearance:textfield; appearance:textfield; }
     <div class="qc-toolbar">
       <span id="qcCount"></span>
       <button class="btn-rekap" type="button" id="btnKirimRekap">📋 Kirim Rekap</button>
+    </div>
+    <div class="filter-bar" id="qcFilterBar">
+      <span class="filter-chip active" data-sort="hari">Paling lama</span>
+      <span class="filter-chip" data-sort="jenis">Jenis A-Z</span>
+      <span class="filter-chip" data-sort="tanggal">Tanggal terbaru</span>
     </div>
     <div class="preview-toggle" id="previewToggle">
       <span class="toggle-chip active" data-mode="per">Preview: Per Laporan</span>
@@ -404,23 +384,13 @@ document.querySelectorAll(".main-tab-btn").forEach(function(btn){
 
 // ============ STATE (data mentah, dipakai ulang tiap ganti filter/search) ============
 let stokItemsRaw = [];
-let prosesItemsRaw = [];
 let stokSortMode = "kg";
-let prosesSortMode = "hari";
-let prosesQuery = "";
 
 function urutkanStok(items, mode){
   const copy = items.slice();
   if (mode === "az") copy.sort(function(a,b){ return a.warna.localeCompare(b.warna, "id"); });
   else if (mode === "roll") copy.sort(function(a,b){ return (b.rolls||[]).length - (a.rolls||[]).length; });
   else copy.sort(function(a,b){ return b.kg - a.kg; });
-  return copy;
-}
-function urutkanProses(items, mode){
-  const copy = items.slice();
-  if (mode === "jenis") copy.sort(function(a,b){ return a.item.localeCompare(b.item, "id"); });
-  else if (mode === "tanggal") copy.sort(function(a,b){ return (a.hari===null?999:a.hari) - (b.hari===null?999:b.hari); });
-  else copy.sort(function(a,b){ return (b.hari===null?-1:b.hari) - (a.hari===null?-1:a.hari); });
   return copy;
 }
 
@@ -467,84 +437,7 @@ function renderStokList(items){
   });
 }
 
-// ============ RENDER: PROSES (grid + search + checkbox optimistic+antrian) ============
-function renderProses(proses){
-  document.getElementById("prosesValue").innerHTML = fmtKg(proses.totalKg) + "<small>kg</small>";
-  document.getElementById("prosesSub").innerHTML = "<b>" + (proses.totalCount||0) + " laporan</b> — roll-nya sudah habis, tinggal isi Status";
-  prosesItemsRaw = proses.items || [];
-  renderProsesList(urutkanProses(prosesItemsRaw.filter(cocokProsesQuery), prosesSortMode));
-}
-function cocokProsesQuery(p){ return !prosesQuery || p.item.toUpperCase().indexOf(prosesQuery.toUpperCase()) !== -1; }
-
-function renderProsesList(items){
-  const totalKg = items.reduce(function(s,p){ return s+p.kg; },0);
-  const totalRoll = new Set(items.map(function(p){ return p.roll; })).size;
-  document.getElementById("prosesSummary").innerHTML = items.length + " laporan · <b>"+totalRoll+" roll</b> · <b>"+fmtKg(totalKg)+" kg</b>";
-
-  const wrap = document.getElementById("proses-list");
-  if (!items.length) { wrap.innerHTML = '<div class="empty-state">'+(prosesQuery ? 'Gak ada laporan yang cocok dengan "'+prosesQuery+'".' : 'Tidak ada laporan yang menunggu konfirmasi selesai 🎉')+'</div>'; return; }
-
-  wrap.innerHTML = items.map(function(p, i){
-    const stale = p.hari !== null && p.hari >= 3;
-    const hariLabel = p.hari === null ? "-" : (p.hari === 0 ? "hari ini" : p.hari + " hari lalu");
-    const sizeChips = Object.keys(p.sizes||{}).map(function(k){ return '<span class="size-chip">'+k+' <b>'+p.sizes[k]+'</b></span>'; }).join("");
-    return '<div class="pcard" data-baris="'+p.baris+'">' +
-      '<div class="chk" data-baris="'+p.baris+'"><svg viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>' +
-      '<div class="p-main">' +
-        '<p class="p-title">'+p.item+'</p>' +
-        '<div class="p-meta"><span>'+(p.tanggal||'-')+'</span><span class="dot">·</span><span class="roll">Roll '+p.roll+'</span><span class="dot">·</span><span class="kg">'+fmtKg(p.kg)+' kg</span></div>' +
-        '<div class="p-sizes">'+sizeChips+'<span class="size-chip">Jml <b>'+(p.jumlah||0)+'</b></span></div>' +
-        '<div class="p-days'+(stale?' stale':'')+'">'+hariLabel+'</div>' +
-      '</div>' +
-    '</div>';
-  }).join("");
-
-  wrap.querySelectorAll(".chk").forEach(function(chk){
-    chk.addEventListener("click", function(){
-      if (chk.classList.contains("busy")) return;
-      const baris = chk.dataset.baris;
-      const prow = chk.closest(".pcard");
-      const akanDicentang = !chk.classList.contains("checked");
-      const nilai = akanDicentang ? "SELESAI" : "";
-      const errorLama = prow.querySelector(".p-error");
-      if (errorLama) errorLama.remove();
-      chk.classList.toggle("checked", akanDicentang);
-      prow.classList.toggle("done", akanDicentang);
-      antrianKirimStatus(baris, nilai, function(hasil){
-        if (!hasil || !hasil.ok) {
-          chk.classList.toggle("checked", !akanDicentang);
-          prow.classList.toggle("done", !akanDicentang);
-          const msg = document.createElement("p");
-          msg.className = "p-error";
-          msg.textContent = "Gagal: " + ((hasil && hasil.error) || "koneksi bermasalah");
-          prow.querySelector(".p-main").appendChild(msg);
-        }
-      });
-    });
-  });
-}
-
-// Antrian sekuensial buat checkbox (biar gak saling tabrakan kalau dicentang cepat berturut-turut)
-const antrianStatus = [];
-let antrianSedangJalan = false;
-function antrianKirimStatus(baris, nilai, onSelesai){
-  const idx = antrianStatus.findIndex(function(x){ return x.baris === baris; });
-  if (idx !== -1) antrianStatus.splice(idx, 1);
-  antrianStatus.push({ baris: baris, nilai: nilai, onSelesai: onSelesai });
-  prosesAntrianStatus();
-}
-function prosesAntrianStatus(){
-  if (antrianSedangJalan || antrianStatus.length === 0) return;
-  antrianSedangJalan = true;
-  const tugas = antrianStatus.shift();
-  fetch(WEBAPP_URL + "?action=updateStatus&baris=" + encodeURIComponent(tugas.baris) + "&nilai=" + encodeURIComponent(tugas.nilai), { cache: "no-store" })
-    .then(function(res){ return res.json(); })
-    .then(function(hasil){ tugas.onSelesai(hasil); })
-    .catch(function(err){ tugas.onSelesai({ ok:false, error: err.message }); })
-    .finally(function(){ antrianSedangJalan = false; prosesAntrianStatus(); });
-}
-
-// ============ FILTER SORT CHIPS ============
+// ============ FILTER SORT CHIPS (dipakai bareng Stok & tab Proses/QC) ============
 function pasangFilterBar(barId, onPilih){
   const bar = document.getElementById(barId);
   bar.addEventListener("click", function(ev){
@@ -556,21 +449,8 @@ function pasangFilterBar(barId, onPilih){
   });
 }
 pasangFilterBar("stokFilterBar", function(mode){ stokSortMode = mode; renderStokList(urutkanStok(stokItemsRaw, stokSortMode)); });
-pasangFilterBar("prosesFilterBar", function(mode){ prosesSortMode = mode; renderProsesList(urutkanProses(prosesItemsRaw.filter(cocokProsesQuery), prosesSortMode)); });
 
-const searchProses = document.getElementById("searchProses");
-const btnClearProses = document.getElementById("btnClearProses");
-searchProses.addEventListener("input", function(){
-  prosesQuery = searchProses.value.trim();
-  btnClearProses.style.display = prosesQuery ? "block" : "none";
-  renderProsesList(urutkanProses(prosesItemsRaw.filter(cocokProsesQuery), prosesSortMode));
-});
-btnClearProses.addEventListener("click", function(){
-  searchProses.value = ""; prosesQuery = ""; btnClearProses.style.display = "none";
-  renderProsesList(urutkanProses(prosesItemsRaw.filter(cocokProsesQuery), prosesSortMode));
-});
-
-// ============ MUAT DASHBOARD UTAMA (Stok + Proses) ============
+// ============ MUAT DASHBOARD UTAMA (Stok saja - Proses digabung ke tab QC) ============
 function muatDashboard(paksaRefresh){
   const btnRefresh = document.getElementById("btnRefresh");
   btnRefresh.classList.add("loading"); btnRefresh.disabled = true;
@@ -579,7 +459,6 @@ function muatDashboard(paksaRefresh){
     .then(function(res){ return res.json(); })
     .then(function(data){
       renderStok(data.stok || {});
-      renderProses(data.proses || {});
       const updated = data.updatedAt ? new Date(data.updatedAt) : new Date();
       const cacheTag = data.dariCache ? '<span class="cache-tag">· cache</span>' : '';
       document.getElementById("updatedAt").innerHTML =
@@ -588,7 +467,7 @@ function muatDashboard(paksaRefresh){
     })
     .catch(function(err){
       document.getElementById("updatedAt").textContent = "Gagal memuat";
-      ["stok-list","proses-list"].forEach(function(id){ document.getElementById(id).innerHTML = '<div class="error-state">Gagal memuat: '+err.message+'</div>'; });
+      document.getElementById("stok-list").innerHTML = '<div class="error-state">Gagal memuat: '+err.message+'</div>';
     })
     .finally(function(){ btnRefresh.classList.remove("loading"); btnRefresh.disabled = false; });
 }
@@ -598,6 +477,7 @@ muatDashboard(false);
 // ============ TAB QC ============
 let qcItemsRaw = [];
 let qcQuery = "";
+let qcSortMode = "hari";
 let qcSudahDimuat = false;
 const qcModeUI = {};
 let modeTelegram = "per";
@@ -609,6 +489,13 @@ function qcSisaUkuran(item, u){ const s = item.sizes[u]; return s.qty - s.selesa
 function qcLengkapUkuran(item, u){ return qcSisaUkuran(item, u) <= 0; }
 function qcLengkapSemua(item){ return qcDaftarUkuran(item).every(function(u){ return qcLengkapUkuran(item, u); }); }
 function cocokQCQuery(item){ return !qcQuery || item.item.toUpperCase().indexOf(qcQuery.toUpperCase()) !== -1; }
+function urutkanQC(items, mode){
+  const copy = items.slice();
+  if (mode === "jenis") copy.sort(function(a,b){ return a.item.localeCompare(b.item, "id"); });
+  else if (mode === "tanggal") copy.sort(function(a,b){ return (a.hari===null?999:a.hari) - (b.hari===null?999:b.hari); });
+  else copy.sort(function(a,b){ return (b.hari===null?-1:b.hari) - (a.hari===null?-1:a.hari); });
+  return copy;
+}
 
 function muatDashboardQC(){
   const list = document.getElementById("qc-list");
@@ -624,7 +511,7 @@ function muatDashboardQC(){
 }
 
 function renderQCCards(){
-  const filtered = qcItemsRaw.filter(cocokQCQuery);
+  const filtered = urutkanQC(qcItemsRaw.filter(cocokQCQuery), qcSortMode);
   document.getElementById("qcCount").textContent = filtered.length + " dari " + qcItemsRaw.length + " laporan";
   const wrap = document.getElementById("qc-list");
 
@@ -777,6 +664,7 @@ btnClearQC.addEventListener("click", function(){
   searchQC.value = ""; qcQuery = ""; btnClearQC.style.display = "none";
   renderQCCards();
 });
+pasangFilterBar("qcFilterBar", function(mode){ qcSortMode = mode; renderQCCards(); });
 
 // ============ PREVIEW TELEGRAM ============
 function renderTelegramPreview(){
