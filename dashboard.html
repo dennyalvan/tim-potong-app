@@ -1,17 +1,13 @@
 <!--
-  DASHBOARD STOK KAIN - TIM POTONG (v.07)
+  DASHBOARD STOK KAIN - TIM POTONG (v.08)
   Halaman statis, di-hosting di GitHub Pages yang sama dengan index.html (Mini App).
-  Backend: apps_script_tim_potong_v07.js.
+  Backend: apps_script_tim_potong_v08.js.
 
-  v.07 (simplifikasi - cuma 2 tab):
-  1. "📦 Stok Kain" - cuma nampilin warna yang rollnya masih ada sisa (belum disentuh sama
-     sekali). Stat card "Kain Sedang Diproses" dihapus dari sini (pindah konsepnya ke tab 2).
-  2. "✅ Proses & QC" - gabungan dari "Laporan Belum Selesai" + "QC Konfirmasi" yang dulu
-     terpisah, sekarang 1 list aja. Sumber datanya SEMUA baris TIM POTONG yang Status-nya BUKAN
-     "SELESAI" (kosong atau "PROSES x/y"), TANPA syarat roll harus habis lagi - biar jumlahnya
-     konsisten sama yang kelihatan langsung di kolom Status sheet TIM POTONG. Search & filter
-     sort (Paling lama/Jenis A-Z/Tanggal terbaru), Kirim Rekap, preview Telegram, dan Arsip
-     Selesai (3 hari terakhir) semua tetap ada, cuma sekarang di 1 tab ini.
+  v.08 (bug fix): tombol Refresh DULU cuma maksa hitung ulang data Stok, tab Proses & QC
+  gak ikut ke-refresh (masih baca cache lama). Sekarang tombol Refresh maksa refresh dua-duanya
+  sekaligus. Backend juga diperbaiki: baris yang Status-nya dihapus MANUAL di sheet (bukan lewat
+  tombol Undo) sekarang bisa balik muncul lagi setelah refresh - lihat detail di header
+  apps_script_tim_potong_v08.js.
 -->
 <!doctype html>
 <html lang="id">
@@ -471,7 +467,10 @@ function muatDashboard(paksaRefresh){
     })
     .finally(function(){ btnRefresh.classList.remove("loading"); btnRefresh.disabled = false; });
 }
-document.getElementById("btnRefresh").addEventListener("click", function(){ muatDashboard(true); });
+document.getElementById("btnRefresh").addEventListener("click", function(){
+  muatDashboard(true);
+  muatDashboardQC(true); // v.08: dulu cuma Stok yang ke-refresh, QC-nya kelupaan
+});
 muatDashboard(false);
 
 // ============ TAB QC ============
@@ -497,10 +496,11 @@ function urutkanQC(items, mode){
   return copy;
 }
 
-function muatDashboardQC(){
+function muatDashboardQC(paksaRefresh){
   const list = document.getElementById("qc-list");
   if (!qcSudahDimuat) list.innerHTML = '<div class="empty-state">Memuat…</div>';
-  fetch(WEBAPP_URL + "?action=dashboardQC", { cache: "no-store" })
+  const url = WEBAPP_URL + "?action=dashboardQC" + (paksaRefresh ? "&refresh=1" : "");
+  fetch(url, { cache: "no-store" })
     .then(function(res){ return res.json(); })
     .then(function(data){
       qcSudahDimuat = true;
