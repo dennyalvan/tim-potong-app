@@ -1,12 +1,23 @@
 <!--
-  DASHBOARD STOK KAIN - TIM POTONG (v.04)
+  DASHBOARD STOK KAIN - TIM POTONG (v.05)
   Halaman statis, di-hosting di GitHub Pages yang sama dengan index.html (Mini App).
+  Backend: apps_script_tim_potong_v05.js (baca detail perubahan performa & fitur di header file itu).
 
-  v.04 (fitur baru): tab "✅ QC Konfirmasi" - QC isi qty Selesai/Reject per laporan (mode
-  ringkas 2 angka atau rincian per ukuran), bisa submit bertahap (parsial), bisa di-undo submit
-  terakhir. Begitu 1 laporan lengkap 100%, otomatis kirim pesan Telegram. Tombol "Kirim Rekap"
-  kirim rekap semua laporan yang disentuh QC hari ini, kapan saja dipencet (manual).
-  Baca detail lengkap di header apps_script_tim_potong_v04.js.
+  v.05 (perubahan hari ini, gabungan dari beberapa preview yang sudah disetujui):
+  1. "Stok Tersisa per Warna" & "Laporan Belum SELESAI" sekarang GRID RESPONSIF (auto-fill/
+     minmax) - di HP otomatis 2 kolom, makin lebar layar makin nambah kolom sendiri. Tiap
+     section punya ringkasan "X warna/laporan · Y roll · Z kg" di bawah judulnya.
+  2. Search HANYA ada di "Laporan Belum SELESAI" (bukan di Stok) dan di tab QC Konfirmasi.
+  3. Stok Tersisa: tiap kartu bisa diklik expand detail per-roll (independen per kartu, gak
+     nutup kartu lain). Laporan Belum SELESAI: checkbox optimistic + antrian (sama seperti
+     sebelumnya), plus tanggal/hari, roll, kg, qty per ukuran semua tetap ada.
+  4. Tab QC Konfirmasi: kartu diperkaya (tanggal/hari, roll, kg, qty per ukuran, jumlah -
+     sama kayak Laporan Belum SELESAI), search sendiri, tombol Undo sejajar dgn Ringkas/Rincian
+     (hemat tempat), input Selesai/Reject tanpa panah stepper.
+  5. Preview pesan Telegram - toggle "Per Laporan" (pesan yang OTOMATIS terkirim begitu 1
+     laporan lengkap - preview brdasarkan laporan terakhir yang baru lengkap di sesi ini) dan
+     "Rekap Harian" (preview dari server dulu SEBELUM dikirim - ada tombol konfirmasi terpisah
+     "Kirim ke Telegram" biar gak kepencet salah kirim ke grup).
 -->
 <!doctype html>
 <html lang="id">
@@ -16,49 +27,31 @@
 <title>Dashboard Stok Kain — TIM POTONG</title>
 <style>
 :root{
-  --bg:#F6F3EC;
-  --surface:#FFFFFF;
-  --surface-2:#EFEAE0;
-  --ink:#1E2430;
-  --ink-muted:#726C60;
-  --line:#E4DDCE;
-  --accent:#2F6F68;
-  --accent-deep:#1E4B46;
-  --good:#2E7D5B;
-  --good-tint:#E3F1E9;
-  --warn:#B4790E;
-  --warn-tint:#FBEEDA;
+  --bg:#F6F3EC; --surface:#FFFFFF; --surface-2:#EFEAE0;
+  --ink:#1E2430; --ink-muted:#726C60; --line:#E4DDCE;
+  --accent:#2F6F68; --accent-deep:#1E4B46;
+  --good:#2E7D5B; --good-tint:#E3F1E9;
+  --warn:#B4790E; --warn-tint:#FBEEDA;
+  --bad:#B23B2E; --bad-tint:#F8E4E0;
   --shadow: 0 1px 2px rgba(30,36,48,0.04), 0 8px 24px -12px rgba(30,36,48,0.12);
 }
 :root[data-theme="dark"]{
-  --bg:#14181F;
-  --surface:#1B2129;
-  --surface-2:#212934;
-  --ink:#EDEBE4;
-  --ink-muted:#9B968A;
-  --line:#2B323D;
-  --accent:#59A79C;
-  --accent-deep:#8FCBC0;
-  --good:#5CB88A;
-  --good-tint:#1B2E24;
-  --warn:#E0A94D;
-  --warn-tint:#332510;
+  --bg:#14181F; --surface:#1B2129; --surface-2:#212934;
+  --ink:#EDEBE4; --ink-muted:#9B968A; --line:#2B323D;
+  --accent:#59A79C; --accent-deep:#8FCBC0;
+  --good:#5CB88A; --good-tint:#1B2E24;
+  --warn:#E0A94D; --warn-tint:#332510;
+  --bad:#E0736A; --bad-tint:#3A2320;
   --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 32px -16px rgba(0,0,0,0.5);
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#14181F;
-    --surface:#1B2129;
-    --surface-2:#212934;
-    --ink:#EDEBE4;
-    --ink-muted:#9B968A;
-    --line:#2B323D;
-    --accent:#59A79C;
-    --accent-deep:#8FCBC0;
-    --good:#5CB88A;
-    --good-tint:#1B2E24;
-    --warn:#E0A94D;
-    --warn-tint:#332510;
+    --bg:#14181F; --surface:#1B2129; --surface-2:#212934;
+    --ink:#EDEBE4; --ink-muted:#9B968A; --line:#2B323D;
+    --accent:#59A79C; --accent-deep:#8FCBC0;
+    --good:#5CB88A; --good-tint:#1B2E24;
+    --warn:#E0A94D; --warn-tint:#332510;
+    --bad:#E0736A; --bad-tint:#3A2320;
     --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 32px -16px rgba(0,0,0,0.5);
   }
 }
@@ -66,158 +59,54 @@
 *{box-sizing:border-box;}
 html,body{height:100%;}
 body{
-  margin:0;
-  background:var(--bg);
-  color:var(--ink);
+  margin:0; background:var(--bg); color:var(--ink);
   font-family:-apple-system,"SF Pro Display","SF Pro Text",system-ui,"Segoe UI",Roboto,sans-serif;
   -webkit-font-smoothing:antialiased;
 }
-.page{
-  max-width:980px;
-  margin:0 auto;
-  height:100vh;
-  padding:16px 16px 12px;
-  display:flex;
-  flex-direction:column;
-  min-height:0;
-}
+.page{ max-width:1000px; margin:0 auto; padding:16px 16px 32px; }
 
-.topbar{
-  display:flex;
-  align-items:baseline;
-  justify-content:space-between;
-  gap:12px;
-  padding:2px 4px 14px;
-  flex:0 0 auto;
-}
-.topbar h1{
-  font-size:22px;
-  font-weight:700;
-  letter-spacing:-0.01em;
-  margin:0;
-  text-wrap:balance;
-}
-.topbar .eyebrow{
-  display:block;
-  font-size:11px;
-  font-weight:600;
-  letter-spacing:0.08em;
-  text-transform:uppercase;
-  color:var(--accent);
-  margin-bottom:4px;
-}
-.topbar .updated{
-  font-size:12px;
-  color:var(--ink-muted);
-  font-variant-numeric:tabular-nums;
-  white-space:nowrap;
-}
-.topbar-right{
-  display:flex; flex-direction:column; align-items:flex-end; gap:0; flex:0 0 auto;
-}
-.topbar .updated .cache-tag{
-  font-size:10px; font-weight:700; color:var(--accent); margin-left:4px;
-}
+.topbar{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; padding:2px 4px 14px; }
+.topbar h1{ font-size:22px; font-weight:700; letter-spacing:-0.01em; margin:0; text-wrap:balance; }
+.topbar .eyebrow{ display:block; font-size:11px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--accent); margin-bottom:4px; }
+.topbar .updated{ font-size:12px; color:var(--ink-muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.topbar .updated .cache-tag{ font-size:10px; font-weight:700; color:var(--accent); margin-left:4px; }
+.topbar-right{ display:flex; flex-direction:column; align-items:flex-end; gap:0; flex:0 0 auto; }
 .refresh-btn{
-  display:flex; align-items:center; gap:5px; flex:0 0 auto;
-  font-size:11.5px; font-weight:700; color:var(--accent-deep);
-  background:var(--surface); border:1px solid var(--line); border-radius:999px;
-  padding:6px 12px; cursor:pointer; -webkit-tap-highlight-color:transparent;
-  margin-top:6px;
+  display:flex; align-items:center; gap:5px; flex:0 0 auto; font-size:11.5px; font-weight:700;
+  color:var(--accent-deep); background:var(--surface); border:1px solid var(--line); border-radius:999px;
+  padding:6px 12px; cursor:pointer; -webkit-tap-highlight-color:transparent; margin-top:6px;
 }
 .refresh-btn svg{ width:13px; height:13px; transition:transform .5s ease; }
 .refresh-btn.loading svg{ animation:spin .7s linear infinite; }
 .refresh-btn:disabled{ opacity:0.6; pointer-events:none; }
 @keyframes spin{ from{transform:rotate(0deg);} to{transform:rotate(360deg);} }
 
-.stats{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:12px;
-  margin-bottom:16px;
-  flex:0 0 auto;
+.main-tabs{ display:flex; gap:6px; margin:4px 0 16px; max-width:420px; }
+.main-tab-btn{
+  flex:1 1 auto; text-align:center; font-size:12.5px; font-weight:700; padding:10px;
+  border-radius:12px; border:1.4px solid var(--line); background:var(--surface); color:var(--ink-muted);
+  cursor:pointer; -webkit-tap-highlight-color:transparent;
 }
-@media (max-width:520px){
-  .stats{grid-template-columns:1fr;}
-}
-.stat-card{
-  position:relative;
-  background:var(--surface);
-  border:1px solid var(--line);
-  border-radius:18px;
-  padding:18px 18px 16px;
-  box-shadow:var(--shadow);
-  overflow:hidden;
-}
-.stat-card .label{
-  font-size:12.5px;
-  font-weight:600;
-  color:var(--ink-muted);
-  margin:0 0 10px;
-  max-width:70%;
-}
-.stat-card .value{
-  font-size:32px;
-  font-weight:750;
-  letter-spacing:-0.02em;
-  font-variant-numeric:tabular-nums;
-  line-height:1;
-  margin:0 0 6px;
-}
-.stat-card .value small{
-  font-size:16px;
-  font-weight:600;
-  color:var(--ink-muted);
-  margin-left:2px;
-}
-.stat-card .sub{
-  font-size:12.5px;
-  color:var(--ink-muted);
-  margin:0;
-}
-.stat-card.good{border-top:3px solid var(--good);}
-.stat-card.warn{border-top:3px solid var(--warn);}
+.main-tab-btn.active{ background:var(--accent-deep); border-color:var(--accent-deep); color:#fff; }
+
+.stats{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:18px; }
+@media (max-width:520px){ .stats{grid-template-columns:1fr;} }
+.stat-card{ position:relative; background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:18px 18px 16px; box-shadow:var(--shadow); overflow:hidden; }
+.stat-card .label{ font-size:12.5px; font-weight:600; color:var(--ink-muted); margin:0 0 10px; max-width:70%; }
+.stat-card .value{ font-size:32px; font-weight:750; letter-spacing:-0.02em; font-variant-numeric:tabular-nums; line-height:1; margin:0 0 6px; }
+.stat-card .value small{ font-size:16px; font-weight:600; color:var(--ink-muted); margin-left:2px; }
+.stat-card .sub{ font-size:12.5px; color:var(--ink-muted); margin:0; }
+.stat-card.good{border-top:3px solid var(--good);} .stat-card.warn{border-top:3px solid var(--warn);}
 .stat-card .sub b{color:var(--ink);font-weight:600;}
 
-.sections{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:16px;
-  flex:1 1 auto;
-  min-height:0;
+h2.section-title{
+  font-size:12.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em;
+  color:var(--ink-muted); margin:22px 0 4px; display:flex; justify-content:space-between; align-items:center;
 }
-@media (max-width:640px){
-  .sections{grid-template-columns:1fr;}
-}
-.section{
-  display:flex;
-  flex-direction:column;
-  min-height:0;
-}
-.section-head{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  padding:0 6px 8px;
-  flex:0 0 auto;
-}
-.section-head h2{
-  font-size:13px;
-  font-weight:700;
-  text-transform:uppercase;
-  letter-spacing:0.06em;
-  color:var(--ink-muted);
-  margin:0;
-}
-.section-head .count{
-  font-size:12px;
-  color:var(--ink-muted);
-  font-variant-numeric:tabular-nums;
-}
+.section-summary{ font-size:11.5px; color:var(--ink-muted); margin:0 0 8px; }
+.section-summary b{ color:var(--ink); font-weight:700; }
 
-.filter-bar{
-  display:flex; gap:6px; padding:0 6px 8px; flex:0 0 auto; flex-wrap:wrap;
-}
+.filter-bar{ display:flex; gap:6px; margin:0 0 8px; flex-wrap:wrap; }
 .filter-chip{
   font-size:10.5px; font-weight:600; padding:4px 10px; border-radius:999px;
   border:1px solid var(--line); background:var(--surface); color:var(--ink-muted);
@@ -225,202 +114,127 @@ body{
 }
 .filter-chip.active{ background:var(--accent); border-color:var(--accent); color:#fff; }
 
-.card-list{
-  background:var(--surface);
-  border:1px solid var(--line);
-  border-radius:14px;
-  box-shadow:var(--shadow);
-  overflow:hidden;
-  flex:1 1 auto;
-  min-height:0;
-  display:flex;
-  flex-direction:column;
-}
-.card-list-scroll{
-  flex:1 1 auto;
-  min-height:0;
-  overflow-y:auto;
-}
-.card-list-scroll::-webkit-scrollbar{width:8px;}
-.card-list-scroll::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px;}
+.search-wrap{ position:relative; margin:0 0 10px; }
+.search-wrap input{ width:100%; padding:10px 34px 10px 14px; border-radius:12px; border:1.4px solid var(--line); background:var(--surface); font-size:13.5px; color:var(--ink); }
+.search-wrap input:focus{ outline:2px solid var(--accent); outline-offset:1px; }
+.search-wrap .icon{ position:absolute; right:11px; top:50%; transform:translateY(-50%); width:16px; height:16px; color:var(--ink-muted); pointer-events:none; }
+.search-clear{ position:absolute; right:9px; top:50%; transform:translateY(-50%); font-size:11px; font-weight:700; color:var(--ink-muted); background:var(--surface-2); border:none; border-radius:999px; width:20px; height:20px; cursor:pointer; display:none; }
 
-/* ===== ROW STOK (klik utk expand detail roll) ===== */
-.row{ border-bottom:1px solid var(--line); }
-.row:last-child{ border-bottom:none; }
-.row-head{
-  display:flex; align-items:center; gap:9px; padding:7px 12px; cursor:pointer;
-  -webkit-tap-highlight-color:transparent;
-}
-.row-head:active{ background:var(--surface-2); }
+.empty-state, .error-state{ padding:20px; text-align:center; font-size:12px; color:var(--ink-muted); grid-column:1/-1; }
+.error-state{ color:var(--warn); }
 
-.num{
-  width:18px; height:18px; border-radius:50%; background:var(--surface-2);
-  color:var(--ink-muted); font-size:10px; font-weight:700; flex:0 0 auto;
-  display:flex; align-items:center; justify-content:center;
-}
-
-.swatch{
-  width:20px;height:20px;border-radius:6px;flex:0 0 auto;
-  border:1px solid rgba(0,0,0,0.08);
-}
-.row-main{flex:1 1 auto;min-width:0;}
-.row-title{
-  font-size:12.5px;
-  font-weight:600;
-  margin:0;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-.row-sub{
-  font-size:11px;
-  color:var(--ink-muted);
-  margin:0;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-.row-figure{
-  text-align:right;
-  flex:0 0 auto;
-}
-.row-figure .kg{
-  font-size:12.5px;
-  font-weight:700;
-  font-variant-numeric:tabular-nums;
-  white-space:nowrap;
-}
-.row-figure .kg small{font-size:10.5px;font-weight:600;color:var(--ink-muted);}
-
-.chevron{
-  flex:0 0 auto; width:14px; height:14px; color:var(--ink-muted);
-  transition:transform .2s ease;
-}
-.row-head.open .chevron{ transform:rotate(90deg); }
-
-.row-detail{
-  max-height:0; overflow:hidden; transition:max-height .22s ease;
-  background:var(--surface-2);
-}
-.row-detail-inner{ padding:2px 12px 10px 41px; }
-.roll-item{
-  display:flex; justify-content:space-between; padding:5px 0;
-  font-size:11.5px; border-bottom:1px dashed var(--line);
-}
+/* ===== STOK: grid 2+ kolom, expand per kartu ===== */
+.stok-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:8px; }
+.scard{ background:var(--surface); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); overflow:hidden; align-self:start; }
+.scard-head{ display:flex; align-items:center; gap:7px; padding:8px 9px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.scard-head:active{ background:var(--surface-2); }
+.num{ width:16px; height:16px; border-radius:50%; background:var(--surface-2); color:var(--ink-muted); font-size:9px; font-weight:700; flex:0 0 auto; display:flex; align-items:center; justify-content:center; }
+.swatch{ width:16px; height:16px; border-radius:5px; flex:0 0 auto; border:1px solid rgba(0,0,0,.08); }
+.scard-main{ flex:1 1 auto; min-width:0; }
+.scard-title{ font-size:11.5px; font-weight:600; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.scard-sub{ font-size:9.5px; color:var(--ink-muted); margin:0; }
+.scard-kg{ font-size:10.5px; font-weight:700; flex:0 0 auto; text-align:right; }
+.scard-chevron{ flex:0 0 auto; width:11px; height:11px; color:var(--ink-muted); transition:transform .2s ease; margin-left:2px; }
+.scard-head.open .scard-chevron{ transform:rotate(90deg); }
+.scard-detail{ max-height:0; overflow:hidden; transition:max-height .2s ease; background:var(--surface-2); }
+.scard-detail-inner{ padding:2px 9px 8px 32px; }
+.roll-item{ display:flex; justify-content:space-between; padding:4px 0; font-size:10px; border-bottom:1px dashed var(--line); }
 .roll-item:last-child{ border-bottom:none; }
 .roll-item .kode{ color:var(--ink-muted); }
-.roll-item .kg{ font-weight:600; font-variant-numeric:tabular-nums; }
-.roll-item.catatan{ color:var(--ink-muted); font-style:italic; border-bottom:none; }
+.roll-item .kg{ font-weight:600; }
 
-/* ===== ROW PROSES ===== */
-.prow{ display:flex; gap:9px; padding:9px 12px; border-bottom:1px solid var(--line); align-items:flex-start; }
-.prow:last-child{ border-bottom:none; }
-.prow.done{ opacity:0.45; }
-.prow.done .prow-title{ text-decoration:line-through; }
-
-.chk{
-  width:19px; height:19px; border-radius:6px; border:1.6px solid var(--line);
-  flex:0 0 auto; margin-top:1px; cursor:pointer; display:flex; align-items:center; justify-content:center;
-  background:var(--surface); transition:background .15s,border-color .15s;
-}
+/* ===== LAPORAN BELUM SELESAI: grid + checkbox ===== */
+.proses-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(215px, 1fr)); gap:8px; }
+.pcard{ background:var(--surface); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); padding:9px 10px 8px; display:flex; gap:8px; align-items:flex-start; }
+.pcard.done{ opacity:.45; }
+.pcard.done .p-title{ text-decoration:line-through; }
+.chk{ width:18px; height:18px; border-radius:6px; border:1.6px solid var(--line); flex:0 0 auto; margin-top:1px; cursor:pointer; display:flex; align-items:center; justify-content:center; background:var(--surface); transition:background .15s,border-color .15s; }
 .chk.checked{ background:var(--good); border-color:var(--good); }
-.chk.busy{ opacity:0.5; pointer-events:none; }
-.chk svg{ width:12px; height:12px; opacity:0; transition:opacity .1s; }
+.chk.busy{ opacity:.5; pointer-events:none; }
+.chk svg{ width:11px; height:11px; opacity:0; }
 .chk.checked svg{ opacity:1; }
-
-.prow-main{ flex:1 1 auto; min-width:0; }
-.prow-title{ font-size:12.5px; font-weight:600; margin:0; }
-.prow-meta{
-  display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px;
-  font-size:12px; font-weight:700; color:var(--ink); margin:3px 0 6px;
-  font-variant-numeric:tabular-nums;
-}
-.prow-meta .dot{ color:var(--line); font-weight:400; }
-.prow-meta .roll{ color:var(--accent-deep); }
-.prow-meta .kg{ color:var(--warn); }
-.prow-error{ font-size:11px; color:var(--warn); margin:4px 0 0; }
-
-.sizes{ display:flex; flex-wrap:wrap; gap:4px; }
-.size-chip{
-  font-size:10px; font-weight:600; background:var(--surface-2); color:var(--ink);
-  padding:1.5px 6px; border-radius:6px; font-variant-numeric:tabular-nums;
-}
+.p-main{ flex:1 1 auto; min-width:0; }
+.p-title{ font-size:11.5px; font-weight:700; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.p-meta{ font-size:10px; font-weight:700; color:var(--ink); margin:3px 0 5px; display:flex; flex-wrap:wrap; gap:3px 6px; }
+.p-meta .roll{ color:var(--accent-deep); }
+.p-meta .kg{ color:var(--warn); }
+.p-meta .dot{ color:var(--line); font-weight:400; }
+.p-sizes{ display:flex; flex-wrap:wrap; gap:3px; margin-bottom:3px; }
+.size-chip{ font-size:9px; font-weight:600; background:var(--surface-2); color:var(--ink); padding:1px 5px; border-radius:5px; }
 .size-chip b{ color:var(--accent); }
-
-.prow-right{ text-align:right; flex:0 0 auto; }
-.row-days{ font-size:10.5px; color:var(--ink-muted); font-variant-numeric:tabular-nums; }
-.row-days.stale{color:var(--warn);font-weight:700;}
-
-.empty-state, .error-state{
-  padding:24px 16px;
-  text-align:center;
-  font-size:12.5px;
-  color:var(--ink-muted);
-}
-.error-state{color:var(--warn);}
-
-.foot-note{
-  font-size:10.5px;
-  color:var(--ink-muted);
-  text-align:center;
-  margin:8px 0 0;
-  line-height:1.4;
-  flex:0 0 auto;
-}
-
-/* ===== TAB UTAMA (Stok&Proses vs QC) ===== */
-.main-tabs{ display:flex; gap:6px; margin-bottom:12px; flex:0 0 auto; }
-.main-tab-btn{
-  flex:1 1 auto; text-align:center; font-size:12.5px; font-weight:700; padding:9px;
-  border-radius:11px; border:1.4px solid var(--line); background:var(--surface);
-  color:var(--ink-muted); cursor:pointer; -webkit-tap-highlight-color:transparent;
-}
-.main-tab-btn.active{ background:var(--accent-deep); border-color:var(--accent-deep); color:#fff; }
-.tab-panel{ flex:1 1 auto; min-height:0; display:flex; flex-direction:column; }
+.p-days{ font-size:9.5px; color:var(--ink-muted); margin-top:2px; }
+.p-days.stale{ color:var(--warn); font-weight:700; }
+.p-error{ font-size:9.5px; color:var(--bad); margin-top:4px; }
 
 /* ===== QC ===== */
-.qc-toolbar{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex:0 0 auto; }
-.btn-rekap{
-  font-size:12px; font-weight:700; color:#fff; background:var(--accent);
+.qc-toolbar{ display:flex; justify-content:space-between; align-items:center; margin:0 0 10px; gap:8px; flex-wrap:wrap; }
+.qc-toolbar span{ font-size:11px; color:var(--ink-muted); }
+.btn-rekap{ font-size:11.5px; font-weight:700; color:#fff; background:var(--accent); border:none; border-radius:999px; padding:8px 14px; cursor:pointer; }
+.btn-rekap:disabled{ opacity:.6; pointer-events:none; }
+
+.preview-toggle{ display:flex; gap:6px; margin-bottom:10px; }
+.toggle-chip{ font-size:11px; font-weight:700; padding:6px 12px; border-radius:999px; border:1px solid var(--line); background:var(--surface); color:var(--ink-muted); cursor:pointer; }
+.toggle-chip.active{ background:var(--accent-deep); border-color:var(--accent-deep); color:#fff; }
+.telegram-mock{ background:#0E1621; border-radius:14px; padding:12px; margin-bottom:14px; }
+.bubble{ background:#1E2A38; color:#E8EDF2; border-radius:12px; padding:11px 13px; font-size:12px; line-height:1.5; white-space:pre-wrap; font-family:-apple-system,system-ui,sans-serif; }
+.bubble b{ color:#8FCBC0; }
+.bubble .waktu{ display:block; text-align:right; font-size:9.5px; color:#7C8A99; margin-top:6px; }
+.btn-kirim-beneran{
+  margin-top:10px; font-size:11.5px; font-weight:700; color:#0E1621; background:#8FCBC0;
   border:none; border-radius:999px; padding:8px 14px; cursor:pointer;
 }
-.btn-rekap:disabled{ opacity:0.6; pointer-events:none; }
-.qc-scroll{ flex:1 1 auto; min-height:0; overflow-y:auto; }
-.qc-card{
-  background:var(--surface); border:1px solid var(--line); border-radius:14px;
-  box-shadow:var(--shadow); padding:12px 12px 10px; margin-bottom:10px;
-}
+.btn-kirim-beneran:disabled{ opacity:.6; pointer-events:none; }
+
+.qc-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:9px; }
+.qc-card{ background:var(--surface); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); padding:9px 10px 8px; }
 .qc-card.lengkap{ border-color:var(--good); background:var(--good-tint); }
-.qc-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
-.qc-title{ font-size:13px; font-weight:700; margin:0; }
-.qc-meta{ font-size:11px; color:var(--ink-muted); margin:2px 0 0; }
-.qc-badge{ font-size:9.5px; font-weight:700; background:var(--good); color:#fff; padding:2px 8px; border-radius:999px; white-space:nowrap; }
-.qc-progress{ height:7px; border-radius:4px; background:var(--surface-2); overflow:hidden; display:flex; margin:9px 0 4px; }
+.qc-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:6px; }
+.qc-title{ font-size:12px; font-weight:700; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.qc-meta2{ font-size:9.5px; font-weight:700; color:var(--ink); margin:2px 0 5px; display:flex; flex-wrap:wrap; gap:2px 5px; }
+.qc-meta2 .roll{ color:var(--accent-deep); }
+.qc-meta2 .kg{ color:var(--warn); }
+.qc-meta2 .dot{ color:var(--line); font-weight:400; }
+.qc-badge{ font-size:9px; font-weight:700; background:var(--good); color:#fff; padding:2px 7px; border-radius:999px; white-space:nowrap; flex:0 0 auto; }
+.qc-days{ font-size:9px; font-weight:600; color:var(--ink-muted); white-space:nowrap; flex:0 0 auto; }
+.qc-days.stale{ color:var(--warn); font-weight:700; }
+.qc-sizes{ display:flex; flex-wrap:wrap; gap:3px; margin-bottom:6px; }
+.qc-progress{ height:5px; border-radius:3px; background:var(--surface-2); overflow:hidden; display:flex; margin:6px 0 3px; }
 .qc-progress .p-sel{ background:var(--good); height:100%; }
 .qc-progress .p-rej{ background:var(--warn); height:100%; }
-.qc-progress-label{ display:flex; justify-content:space-between; font-size:10px; color:var(--ink-muted); margin-bottom:7px; }
+.qc-progress-label{ display:flex; justify-content:space-between; font-size:9px; color:var(--ink-muted); margin-bottom:6px; }
 .qc-progress-label b{ color:var(--ink); }
-.qc-mode-switch{ display:flex; gap:6px; margin-bottom:8px; }
-.qc-mode-btn{ font-size:10px; font-weight:700; padding:3px 9px; border-radius:999px; border:1px solid var(--line); background:var(--surface); color:var(--ink-muted); cursor:pointer; }
+.qc-mode-switch{ display:flex; gap:5px; margin-bottom:6px; justify-content:space-between; align-items:center; }
+.mode-left{ display:flex; gap:5px; }
+.qc-mode-btn{ font-size:9px; font-weight:700; padding:2px 8px; border-radius:999px; border:1px solid var(--line); background:var(--surface); color:var(--ink-muted); cursor:pointer; }
 .qc-mode-btn.active{ background:var(--accent); border-color:var(--accent); color:#fff; }
-.qc-form-row{ display:flex; gap:7px; align-items:flex-end; }
-.qc-field{ flex:1 1 auto; }
-.qc-field label{ font-size:10px; font-weight:600; color:var(--ink-muted); display:block; margin-bottom:2px; }
-.qc-field input{ width:100%; padding:7px 8px; border-radius:8px; border:1.3px solid var(--line); font-size:13px; background:var(--surface); color:var(--ink); }
+.qc-form-row{ display:flex; gap:6px; align-items:flex-end; }
+.qc-field{ flex:1 1 auto; min-width:0; }
+.qc-field label{ font-size:9px; font-weight:600; color:var(--ink-muted); display:block; margin-bottom:2px; }
+.qc-field input{ width:100%; padding:6px 7px; border-radius:7px; border:1.3px solid var(--line); font-size:12px; background:var(--surface); color:var(--ink); }
+.qc-btn-submit{ background:var(--accent); color:#fff; border:none; border-radius:7px; font-size:11px; font-weight:700; padding:6px 11px; cursor:pointer; flex:0 0 auto; }
+.qc-btn-submit:disabled{ opacity:.6; }
 .qc-tabel{ width:100%; border-collapse:collapse; margin-bottom:5px; }
-.qc-tabel th{ font-size:9px; font-weight:700; text-transform:uppercase; color:var(--ink-muted); text-align:center; padding:3px 2px; border-bottom:1px solid var(--line); }
+.qc-tabel th{ font-size:8.5px; font-weight:700; text-transform:uppercase; color:var(--ink-muted); text-align:center; padding:3px 2px; border-bottom:1px solid var(--line); }
 .qc-tabel th:first-child{ text-align:left; }
-.qc-tabel td{ padding:4px 2px; text-align:center; border-bottom:1px dashed var(--line); font-size:11.5px; }
+.qc-tabel td{ padding:3px 2px; text-align:center; border-bottom:1px dashed var(--line); font-size:10.5px; }
 .qc-tabel td:first-child{ text-align:left; font-weight:700; }
 .qc-tabel tr.lengkap-u td{ color:var(--good); }
-.qc-tabel tr.lengkap-u td:first-child::after{ content:" ✓"; }
-.qc-tabel input{ width:38px; padding:4px; border-radius:6px; border:1.3px solid var(--line); font-size:11px; text-align:center; }
-.qc-btn-submit{ background:var(--accent); color:#fff; border:none; border-radius:8px; font-size:12px; font-weight:700; padding:7px 14px; cursor:pointer; margin-top:5px; }
-.qc-btn-submit:disabled{ opacity:0.5; }
-.qc-error{ font-size:10.5px; color:var(--bad,#B23B2E); margin:5px 0 0; font-weight:600; }
-.qc-riwayat{ margin:8px 0 0; border-top:1px dashed var(--line); padding-top:6px; }
-.qc-riwayat-item{ display:flex; justify-content:space-between; align-items:center; gap:6px; font-size:10px; color:var(--ink-muted); padding:2px 0; }
-.qc-btn-undo{ font-size:9.5px; font-weight:700; color:#B23B2E; background:#F8E4E0; border:none; border-radius:999px; padding:2px 8px; cursor:pointer; flex:0 0 auto; }
+.qc-tabel input{ width:32px; padding:3px; border-radius:5px; border:1.3px solid var(--line); font-size:10px; text-align:center; background:var(--surface); color:var(--ink); }
+.qc-undo{ font-size:9px; font-weight:700; color:var(--bad); background:var(--bad-tint); border:none; border-radius:999px; padding:3px 9px; cursor:pointer; flex:0 0 auto; }
+.qc-error{ font-size:9.5px; color:var(--bad); margin-top:4px; }
+
+/* Hilangkan panah stepper bawaan browser di semua input angka */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button{ -webkit-appearance:none; margin:0; }
+input[type="number"]{ -moz-appearance:textfield; appearance:textfield; }
+
+.foot-note{ font-size:10.5px; color:var(--ink-muted); margin-top:16px; line-height:1.5; }
+.toast{
+  position:fixed; left:16px; right:16px; bottom:18px; background:var(--accent-deep); color:#fff;
+  font-size:12.5px; font-weight:600; padding:11px 16px; border-radius:12px; text-align:center;
+  box-shadow:var(--shadow); opacity:0; transform:translateY(8px); transition:all .25s ease;
+  pointer-events:none; z-index:20; max-width:680px; margin:0 auto;
+}
 </style>
 </head>
 <body>
@@ -446,80 +260,110 @@ body{
     <div class="main-tab-btn" data-maintab="qc">✅ QC Konfirmasi</div>
   </div>
 
-  <div class="tab-panel" id="panel-stok">
-  <div class="stats">
-    <div class="stat-card good">
-      <p class="label">Total Kain Tersisa</p>
-      <p class="value" id="stokValue">—<small>kg</small></p>
-      <p class="sub" id="stokSub">Memuat data…</p>
+  <div id="panel-stok">
+    <div class="stats">
+      <div class="stat-card good">
+        <p class="label">Total Kain Tersisa</p>
+        <p class="value" id="stokValue">—<small>kg</small></p>
+        <p class="sub" id="stokSub">Memuat data…</p>
+      </div>
+      <div class="stat-card warn">
+        <p class="label">Kain Sedang Diproses</p>
+        <p class="value" id="prosesValue">—<small>kg</small></p>
+        <p class="sub" id="prosesSub">Memuat data…</p>
+      </div>
     </div>
-    <div class="stat-card warn">
-      <p class="label">Kain Sedang Diproses</p>
-      <p class="value" id="prosesValue">—<small>kg</small></p>
-      <p class="sub" id="prosesSub">Memuat data…</p>
+
+    <h2 class="section-title">Stok Tersisa per Warna</h2>
+    <p class="section-summary" id="stokSummary"></p>
+    <div class="filter-bar" id="stokFilterBar">
+      <span class="filter-chip active" data-sort="kg">Kg terbanyak</span>
+      <span class="filter-chip" data-sort="az">Nama A-Z</span>
+      <span class="filter-chip" data-sort="roll">Roll terbanyak</span>
     </div>
+    <div class="stok-grid" id="stok-list"><div class="empty-state">Memuat…</div></div>
+
+    <h2 class="section-title">Laporan Belum SELESAI</h2>
+    <div class="search-wrap">
+      <input type="text" id="searchProses" placeholder="Cari laporan/warna...">
+      <svg class="icon" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M21 21l-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <button class="search-clear" id="btnClearProses">✕</button>
+    </div>
+    <p class="section-summary" id="prosesSummary"></p>
+    <div class="filter-bar" id="prosesFilterBar">
+      <span class="filter-chip active" data-sort="hari">Paling lama</span>
+      <span class="filter-chip" data-sort="jenis">Jenis A-Z</span>
+      <span class="filter-chip" data-sort="tanggal">Tanggal terbaru</span>
+    </div>
+    <div class="proses-grid" id="proses-list"><div class="empty-state">Memuat…</div></div>
+
+    <p class="foot-note">Tarik ke bawah / muat ulang halaman untuk data terbaru. Roll utuh = belum disentuh sama sekali. Laporan cuma tampil kalau roll-nya sudah habis kepakai.</p>
   </div>
 
-  <div class="sections">
-    <div class="section">
-      <div class="section-head">
-        <h2>Stok Tersisa per Warna</h2>
-        <span class="count" id="stokCount"></span>
-      </div>
-      <div class="filter-bar" id="stokFilterBar">
-        <span class="filter-chip active" data-sort="kg">Kg terbanyak</span>
-        <span class="filter-chip" data-sort="az">Nama A-Z</span>
-        <span class="filter-chip" data-sort="roll">Roll terbanyak</span>
-      </div>
-      <div class="card-list">
-        <div class="card-list-scroll" id="stok-list">
-          <div class="empty-state">Memuat…</div>
-        </div>
-      </div>
+  <div id="panel-qc" style="display:none;">
+    <div class="search-wrap">
+      <input type="text" id="searchQC" placeholder="Cari laporan/warna...">
+      <svg class="icon" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M21 21l-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <button class="search-clear" id="btnClearQC">✕</button>
     </div>
-
-    <div class="section">
-      <div class="section-head">
-        <h2>Laporan Belum SELESAI</h2>
-        <span class="count" id="prosesCount"></span>
-      </div>
-      <div class="filter-bar" id="prosesFilterBar">
-        <span class="filter-chip active" data-sort="hari">Paling lama</span>
-        <span class="filter-chip" data-sort="jenis">Jenis A-Z</span>
-        <span class="filter-chip" data-sort="tanggal">Tanggal terbaru</span>
-      </div>
-      <div class="card-list">
-        <div class="card-list-scroll" id="proses-list">
-          <div class="empty-state">Memuat…</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <p class="foot-note">Tarik ke bawah / muat ulang halaman untuk data terbaru. Roll utuh = belum disentuh sama sekali. Laporan cuma tampil kalau roll-nya sudah habis kepakai.</p>
-  </div>
-
-  <div class="tab-panel" id="panel-qc" style="display:none;">
     <div class="qc-toolbar">
-      <span style="font-size:11.5px;color:var(--ink-muted);" id="qcCount"></span>
-      <button class="btn-rekap" id="btnKirimRekap" type="button">📋 Kirim Rekap Hari Ini</button>
+      <span id="qcCount"></span>
+      <button class="btn-rekap" type="button" id="btnKirimRekap">📋 Kirim Rekap</button>
     </div>
-    <div class="qc-scroll" id="qc-list">
-      <div class="empty-state">Memuat…</div>
+    <div class="preview-toggle" id="previewToggle">
+      <span class="toggle-chip active" data-mode="per">Preview: Per Laporan</span>
+      <span class="toggle-chip" data-mode="rekap">Preview: Rekap Harian</span>
     </div>
-    <p class="foot-note">Mode Ringkas: 2 angka total otomatis dituang ke ukuran yang masih kosong. Submit bisa bertahap (parsial) - sisanya tetap muncul lagi lain kali. Begitu 1 laporan lengkap 100%, otomatis kirim pesan Telegram.</p>
+    <div class="telegram-mock">
+      <div class="bubble" id="telegramPreview">Memuat…</div>
+      <button class="btn-kirim-beneran" id="btnKirimBeneran" type="button" style="display:none;">✈️ Kirim ke Telegram</button>
+    </div>
+    <div class="qc-grid" id="qc-list"><div class="empty-state">Memuat…</div></div>
+    <p class="foot-note">Mode Ringkas: 2 angka total otomatis dituang ke ukuran yang masih kosong. Submit bisa bertahap (parsial). Begitu 1 laporan lengkap 100%, otomatis kirim pesan Telegram - preview "Per Laporan" di atas nunjukin laporan yang paling terakhir lengkap di sesi ini.</p>
   </div>
 
 </div>
 
-<div class="toast" id="qcToast" style="position:fixed;left:16px;right:16px;bottom:18px;background:var(--accent-deep);color:#fff;font-size:12.5px;font-weight:600;padding:11px 16px;border-radius:12px;text-align:center;box-shadow:var(--shadow);opacity:0;transform:translateY(8px);transition:all .25s ease;pointer-events:none;z-index:20;max-width:680px;margin:0 auto;"></div>
+<div class="toast" id="toastEl"></div>
 
 <script>
-// Sama dengan WEBAPP_URL di index.html (Mini App) - satu Apps Script yang sama, cuma beda ?action=.
 const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzaWvCi3Vw2fnFgBPfn1qvFBSqYXOrdWi8yxvKc8WOtaIH78JN83dIMiQtQeockW6EDBw/exec";
 
-function fmtKg(n){
-  return (n || 0).toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+function fmtKg(n){ return (n || 0).toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 }); }
+function tampilkanToast(teks){
+  const el = document.getElementById("toastEl");
+  el.textContent = teks;
+  el.style.opacity = "1"; el.style.transform = "translateY(0)";
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(function(){ el.style.opacity = "0"; el.style.transform = "translateY(8px)"; }, 2600);
+}
+
+// ============ WARNA -> HEX (swatch sesuai nama warna) ============
+const PETA_WARNA = [
+  ["ABU MUDA","#B9B6AC"], ["ABU TUA","#5B5850"], ["MERAH MUDA","#E3899C"], ["HIJAU LUMUT","#5B6B3F"],
+  ["HITAM","#202020"], ["BLACK","#202020"], ["PUTIH","#F5F3EC"], ["WHITE","#F5F3EC"], ["NAVY","#1D2A47"],
+  ["ABU","#8C887E"], ["GREY","#8C887E"], ["GRAY","#8C887E"], ["MERAH","#C1372B"], ["RED","#C1372B"],
+  ["MAROON","#6B1E28"], ["BIRU","#2F5FA8"], ["BLUE","#2F5FA8"], ["KUNING","#E6B92E"], ["YELLOW","#E6B92E"],
+  ["MUSTARD","#C79A3A"], ["HIJAU","#3F7D52"], ["GREEN","#3F7D52"], ["TOSKA","#2E8B80"], ["TEAL","#2E8B80"],
+  ["COKLAT","#6B4A34"], ["COKELAT","#6B4A34"], ["BROWN","#6B4A34"], ["CREAM","#E8DCC0"], ["KREM","#E8DCC0"],
+  ["UNGU","#6E4E93"], ["PURPLE","#6E4E93"], ["PINK","#E28EA1"], ["ORANGE","#DD7A34"], ["ORANYE","#DD7A34"],
+  ["TERACOTA","#BE6640"], ["TERRACOTA","#BE6640"], ["TERRACOTTA","#BE6640"], ["SILVER","#B7B7B3"],
+  ["GOLD","#C6A24B"], ["EMAS","#C6A24B"], ["DENIM","#3C5A75"],
+];
+function cariWarnaCocok(namaUpper){
+  const found = []; let sisa = " " + namaUpper + " ";
+  for (const [kunci, hex] of PETA_WARNA) {
+    const token = " " + kunci + " ";
+    if (sisa.indexOf(token) !== -1) { found.push(hex); sisa = sisa.split(token).join("  "); if (found.length >= 2) break; }
+  }
+  return found;
+}
+function hashColor(nama){ let hash=0; for (let i=0;i<nama.length;i++) hash = nama.charCodeAt(i)+((hash<<5)-hash); return "hsl("+(Math.abs(hash)%360)+",30%,55%)"; }
+function swatchStyle(nama){
+  const cocok = cariWarnaCocok(String(nama||"").toUpperCase());
+  if (cocok.length === 2) return "background:linear-gradient(135deg,"+cocok[0]+" 50%,"+cocok[1]+" 50%)";
+  if (cocok.length === 1) return "background:"+cocok[0];
+  return "background:"+hashColor(String(nama||""));
 }
 
 document.querySelectorAll(".main-tab-btn").forEach(function(btn){
@@ -528,249 +372,141 @@ document.querySelectorAll(".main-tab-btn").forEach(function(btn){
     btn.classList.add("active");
     document.getElementById("panel-stok").style.display = btn.dataset.maintab === "stok" ? "" : "none";
     document.getElementById("panel-qc").style.display = btn.dataset.maintab === "qc" ? "" : "none";
-    if (btn.dataset.maintab === "qc") muatDashboardQC();
+    if (btn.dataset.maintab === "qc" && !qcSudahDimuat) muatDashboardQC();
   });
 });
 
-function tampilkanToastQC(teks){
-  const el = document.getElementById("qcToast");
-  el.textContent = teks;
-  el.classList.add("show");
-  el.style.opacity = "1"; el.style.transform = "translateY(0)";
-  clearTimeout(window._qcToastTimer);
-  window._qcToastTimer = setTimeout(function(){ el.style.opacity = "0"; el.style.transform = "translateY(8px)"; }, 2600);
-}
-
-
-// ============ WARNA -> HEX (swatch sesuai nama warna, bukan cuma hash) ============
-const PETA_WARNA = [
-  ["ABU MUDA","#B9B6AC"], ["ABU TUA","#5B5850"], ["MERAH MUDA","#E3899C"], ["HIJAU LUMUT","#5B6B3F"],
-  ["HITAM","#202020"], ["BLACK","#202020"],
-  ["PUTIH","#F5F3EC"], ["WHITE","#F5F3EC"],
-  ["NAVY","#1D2A47"],
-  ["ABU","#8C887E"], ["GREY","#8C887E"], ["GRAY","#8C887E"],
-  ["MERAH","#C1372B"], ["RED","#C1372B"], ["MAROON","#6B1E28"],
-  ["BIRU","#2F5FA8"], ["BLUE","#2F5FA8"],
-  ["KUNING","#E6B92E"], ["YELLOW","#E6B92E"], ["MUSTARD","#C79A3A"],
-  ["HIJAU","#3F7D52"], ["GREEN","#3F7D52"],
-  ["TOSKA","#2E8B80"], ["TEAL","#2E8B80"],
-  ["COKLAT","#6B4A34"], ["COKELAT","#6B4A34"], ["BROWN","#6B4A34"],
-  ["CREAM","#E8DCC0"], ["KREM","#E8DCC0"],
-  ["UNGU","#6E4E93"], ["PURPLE","#6E4E93"],
-  ["PINK","#E28EA1"],
-  ["ORANGE","#DD7A34"], ["ORANYE","#DD7A34"],
-  ["TERACOTA","#BE6640"], ["TERRACOTA","#BE6640"], ["TERRACOTTA","#BE6640"],
-  ["SILVER","#B7B7B3"],
-  ["GOLD","#C6A24B"], ["EMAS","#C6A24B"],
-  ["DENIM","#3C5A75"],
-];
-
-function cariWarnaCocok(namaUpper){
-  const found = [];
-  let sisa = " " + namaUpper + " ";
-  for (const pasangan of PETA_WARNA) {
-    const kunci = pasangan[0], hex = pasangan[1];
-    const token = " " + kunci + " ";
-    if (sisa.indexOf(token) !== -1) {
-      found.push(hex);
-      sisa = sisa.split(token).join("  ");
-      if (found.length >= 2) break;
-    }
-  }
-  return found;
-}
-
-function hashColor(nama){
-  let hash = 0;
-  for (let i = 0; i < nama.length; i++) hash = nama.charCodeAt(i) + ((hash << 5) - hash);
-  return "hsl(" + (Math.abs(hash) % 360) + ",30%,55%)";
-}
-
-function swatchStyle(nama){
-  const cocok = cariWarnaCocok(String(nama || "").toUpperCase());
-  if (cocok.length === 2) return "background:linear-gradient(135deg," + cocok[0] + " 50%," + cocok[1] + " 50%)";
-  if (cocok.length === 1) return "background:" + cocok[0];
-  return "background:" + hashColor(String(nama || ""));
-}
-
-// ============ STATE (data mentah hasil fetch, dipakai ulang tiap ganti filter) ============
+// ============ STATE (data mentah, dipakai ulang tiap ganti filter/search) ============
 let stokItemsRaw = [];
 let prosesItemsRaw = [];
-let stokSortMode = "kg";     // "kg" | "az" | "roll"
-let prosesSortMode = "hari"; // "hari" | "jenis" | "tanggal"
+let stokSortMode = "kg";
+let prosesSortMode = "hari";
+let prosesQuery = "";
 
 function urutkanStok(items, mode){
   const copy = items.slice();
-  if (mode === "az") {
-    copy.sort(function(a,b){ return a.warna.localeCompare(b.warna, "id"); });
-  } else if (mode === "roll") {
-    copy.sort(function(a,b){ return (b.rolls||[]).length - (a.rolls||[]).length; });
-  } else {
-    copy.sort(function(a,b){ return b.kg - a.kg; });
-  }
+  if (mode === "az") copy.sort(function(a,b){ return a.warna.localeCompare(b.warna, "id"); });
+  else if (mode === "roll") copy.sort(function(a,b){ return (b.rolls||[]).length - (a.rolls||[]).length; });
+  else copy.sort(function(a,b){ return b.kg - a.kg; });
   return copy;
 }
-
 function urutkanProses(items, mode){
   const copy = items.slice();
-  if (mode === "jenis") {
-    copy.sort(function(a,b){ return a.item.localeCompare(b.item, "id"); });
-  } else if (mode === "tanggal") {
-    copy.sort(function(a,b){ return (a.hari === null ? 999 : a.hari) - (b.hari === null ? 999 : b.hari); });
-  } else {
-    copy.sort(function(a,b){ return (b.hari === null ? -1 : b.hari) - (a.hari === null ? -1 : a.hari); });
-  }
+  if (mode === "jenis") copy.sort(function(a,b){ return a.item.localeCompare(b.item, "id"); });
+  else if (mode === "tanggal") copy.sort(function(a,b){ return (a.hari===null?999:a.hari) - (b.hari===null?999:b.hari); });
+  else copy.sort(function(a,b){ return (b.hari===null?-1:b.hari) - (a.hari===null?-1:a.hari); });
   return copy;
 }
 
-// ============ RENDER: STOK (klik = expand detail per-roll) ============
+// ============ RENDER: STOK (grid, expand independen per kartu) ============
 function renderStok(stok){
   document.getElementById("stokValue").innerHTML = fmtKg(stok.totalKg) + "<small>kg</small>";
-  document.getElementById("stokSub").innerHTML = "di <b>" + (stok.totalRoll || 0) + " roll</b> utuh · " + (stok.totalWarna || 0) + " warna";
-  document.getElementById("stokCount").textContent = (stok.totalWarna || 0) + " warna";
+  document.getElementById("stokSub").innerHTML = "di <b>" + (stok.totalRoll||0) + " roll</b> utuh · " + (stok.totalWarna||0) + " warna";
   stokItemsRaw = stok.items || [];
   renderStokList(urutkanStok(stokItemsRaw, stokSortMode));
 }
 
 function renderStokList(items){
-  const list = document.getElementById("stok-list");
-  list.innerHTML = "";
-  if (!items || items.length === 0) {
-    list.innerHTML = '<div class="empty-state">Belum ada roll yang masih utuh (belum disentuh sama sekali).</div>';
-    return;
-  }
-  items.forEach(function(s, i){
+  const totalKg = items.reduce(function(s,it){ return s+it.kg; },0);
+  const totalRoll = items.reduce(function(s,it){ return s+(it.rolls||[]).length; },0);
+  document.getElementById("stokSummary").innerHTML = items.length + " warna · <b>"+totalRoll+" roll</b> · <b>"+fmtKg(totalKg)+" kg</b>";
+
+  const wrap = document.getElementById("stok-list");
+  if (!items.length) { wrap.innerHTML = '<div class="empty-state">Belum ada roll yang masih utuh.</div>'; return; }
+
+  wrap.innerHTML = items.map(function(s, i){
     const rolls = s.rolls || [];
-    const row = document.createElement("div");
-    row.className = "row";
-    const detailId = "stokdetail-" + i;
-    row.innerHTML =
-      '<div class="row-head" data-target="'+detailId+'">' +
+    const detailId = "stokdetail-"+i;
+    return '<div class="scard">' +
+      '<div class="scard-head" data-target="'+detailId+'">' +
         '<span class="num">'+(i+1)+'</span>' +
         '<div class="swatch" style="'+swatchStyle(s.warna)+'"></div>' +
-        '<div class="row-main">' +
-          '<p class="row-title">'+s.warna+'</p>' +
-          '<p class="row-sub">'+rolls.length+' roll utuh</p>' +
-        '</div>' +
-        '<div class="row-figure"><div class="kg">'+fmtKg(s.kg)+' <small>kg</small></div></div>' +
-        '<svg class="chevron" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+        '<div class="scard-main"><p class="scard-title">'+s.warna+'</p><p class="scard-sub">'+rolls.length+' roll</p></div>' +
+        '<div class="scard-kg">'+fmtKg(s.kg)+'<br>kg</div>' +
+        '<svg class="scard-chevron" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
       '</div>' +
-      '<div class="row-detail" id="'+detailId+'"><div class="row-detail-inner">' +
-        (rolls.length
-          ? rolls.map(function(r){
-              return '<div class="roll-item"><span class="kode">Roll '+r.kodeRoll+'</span><span class="kg">'+fmtKg(r.kg)+' kg</span></div>';
-            }).join("")
-          : '<div class="roll-item catatan">Tidak ada detail roll.</div>') +
-      '</div></div>';
-    list.appendChild(row);
-  });
+      '<div class="scard-detail" id="'+detailId+'"><div class="scard-detail-inner">' +
+        (rolls.length ? rolls.map(function(r){ return '<div class="roll-item"><span class="kode">Roll '+r.kodeRoll+'</span><span class="kg">'+fmtKg(r.kg)+' kg</span></div>'; }).join("") : '<div class="roll-item">Tidak ada detail roll.</div>') +
+      '</div></div>' +
+    '</div>';
+  }).join("");
 
-  list.querySelectorAll(".row-head").forEach(function(head){
+  wrap.querySelectorAll(".scard-head").forEach(function(head){
     head.addEventListener("click", function(){
       const detail = document.getElementById(head.dataset.target);
       const isOpen = head.classList.contains("open");
-      list.querySelectorAll(".row-head.open").forEach(function(h){
-        h.classList.remove("open");
-        document.getElementById(h.dataset.target).style.maxHeight = null;
-      });
-      if (!isOpen) {
-        head.classList.add("open");
-        detail.style.maxHeight = detail.scrollHeight + "px";
-      }
+      head.classList.toggle("open", !isOpen);
+      detail.style.maxHeight = !isOpen ? detail.scrollHeight + "px" : null;
     });
   });
 }
 
-// ============ RENDER: PROSES (checkbox 2 arah, nulis balik ke Sheet) ============
+// ============ RENDER: PROSES (grid + search + checkbox optimistic+antrian) ============
 function renderProses(proses){
   document.getElementById("prosesValue").innerHTML = fmtKg(proses.totalKg) + "<small>kg</small>";
-  document.getElementById("prosesSub").innerHTML = "<b>" + (proses.totalCount || 0) + " laporan</b> — roll-nya sudah habis, tinggal isi Status";
-  document.getElementById("prosesCount").textContent = (proses.totalCount || 0) + " baris";
+  document.getElementById("prosesSub").innerHTML = "<b>" + (proses.totalCount||0) + " laporan</b> — roll-nya sudah habis, tinggal isi Status";
   prosesItemsRaw = proses.items || [];
-  renderProsesList(urutkanProses(prosesItemsRaw, prosesSortMode));
+  renderProsesList(urutkanProses(prosesItemsRaw.filter(cocokProsesQuery), prosesSortMode));
 }
+function cocokProsesQuery(p){ return !prosesQuery || p.item.toUpperCase().indexOf(prosesQuery.toUpperCase()) !== -1; }
 
 function renderProsesList(items){
-  const list = document.getElementById("proses-list");
-  list.innerHTML = "";
-  if (!items || items.length === 0) {
-    list.innerHTML = '<div class="empty-state">Tidak ada laporan yang menunggu konfirmasi selesai 🎉</div>';
-    return;
-  }
-  items.forEach(function(p, i){
+  const totalKg = items.reduce(function(s,p){ return s+p.kg; },0);
+  const totalRoll = new Set(items.map(function(p){ return p.roll; })).size;
+  document.getElementById("prosesSummary").innerHTML = items.length + " laporan · <b>"+totalRoll+" roll</b> · <b>"+fmtKg(totalKg)+" kg</b>";
+
+  const wrap = document.getElementById("proses-list");
+  if (!items.length) { wrap.innerHTML = '<div class="empty-state">'+(prosesQuery ? 'Gak ada laporan yang cocok dengan "'+prosesQuery+'".' : 'Tidak ada laporan yang menunggu konfirmasi selesai 🎉')+'</div>'; return; }
+
+  wrap.innerHTML = items.map(function(p, i){
     const stale = p.hari !== null && p.hari >= 3;
     const hariLabel = p.hari === null ? "-" : (p.hari === 0 ? "hari ini" : p.hari + " hari lalu");
-    const sizeChips = Object.keys(p.sizes || {}).map(function(k){
-      return '<span class="size-chip">'+k+' <b>'+p.sizes[k]+'</b></span>';
-    }).join("");
-
-    const row = document.createElement("div");
-    row.className = "prow";
-    row.dataset.baris = p.baris;
-    row.innerHTML =
-      '<span class="num">'+(i+1)+'</span>' +
+    const sizeChips = Object.keys(p.sizes||{}).map(function(k){ return '<span class="size-chip">'+k+' <b>'+p.sizes[k]+'</b></span>'; }).join("");
+    return '<div class="pcard" data-baris="'+p.baris+'">' +
       '<div class="chk" data-baris="'+p.baris+'"><svg viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>' +
-      '<div class="prow-main">' +
-        '<p class="prow-title">'+p.item+'</p>' +
-        '<div class="prow-meta">' +
-          '<span>'+(p.tanggal || '-')+'</span>' +
-          '<span class="dot">·</span><span class="roll">Roll '+p.roll+'</span>' +
-          '<span class="dot">·</span><span class="kg">'+fmtKg(p.kg)+' kg</span>' +
-        '</div>' +
-        '<div class="sizes">'+sizeChips+'<span class="size-chip">Jumlah <b>'+(p.jumlah||0)+'</b></span></div>' +
+      '<div class="p-main">' +
+        '<p class="p-title">'+p.item+'</p>' +
+        '<div class="p-meta"><span>'+(p.tanggal||'-')+'</span><span class="dot">·</span><span class="roll">Roll '+p.roll+'</span><span class="dot">·</span><span class="kg">'+fmtKg(p.kg)+' kg</span></div>' +
+        '<div class="p-sizes">'+sizeChips+'<span class="size-chip">Jml <b>'+(p.jumlah||0)+'</b></span></div>' +
+        '<div class="p-days'+(stale?' stale':'')+'">'+hariLabel+'</div>' +
       '</div>' +
-      '<div class="prow-right">' +
-        '<div class="row-days'+(stale?' stale':'')+'">'+hariLabel+'</div>' +
-      '</div>';
-    list.appendChild(row);
-  });
+    '</div>';
+  }).join("");
 
-  list.querySelectorAll(".chk").forEach(function(chk){
+  wrap.querySelectorAll(".chk").forEach(function(chk){
     chk.addEventListener("click", function(){
-      // Optimistic: langsung ubah tampilan duluan, TANPA nunggu server. Penulisan sebenarnya
-      // ke Sheet dikirim ke antrianKirimStatus() di bawah, diproses satu-per-satu di background.
+      if (chk.classList.contains("busy")) return;
       const baris = chk.dataset.baris;
-      const prow = chk.closest(".prow");
+      const prow = chk.closest(".pcard");
       const akanDicentang = !chk.classList.contains("checked");
       const nilai = akanDicentang ? "SELESAI" : "";
-
-      const errorLama = prow.querySelector(".prow-error");
+      const errorLama = prow.querySelector(".p-error");
       if (errorLama) errorLama.remove();
-
       chk.classList.toggle("checked", akanDicentang);
       prow.classList.toggle("done", akanDicentang);
-
       antrianKirimStatus(baris, nilai, function(hasil){
         if (!hasil || !hasil.ok) {
-          // Gagal beneran ditulis ke Sheet -> batalkan tampilan optimistic-nya, kasih tau kenapa
           chk.classList.toggle("checked", !akanDicentang);
           prow.classList.toggle("done", !akanDicentang);
           const msg = document.createElement("p");
-          msg.className = "prow-error";
-          msg.textContent = "Gagal update: " + ((hasil && hasil.error) || "koneksi bermasalah") + ". Coba lagi.";
-          prow.querySelector(".prow-main").appendChild(msg);
+          msg.className = "p-error";
+          msg.textContent = "Gagal: " + ((hasil && hasil.error) || "koneksi bermasalah");
+          prow.querySelector(".p-main").appendChild(msg);
         }
       });
     });
   });
 }
 
-// ============ ANTRIAN PENULISAN STATUS (background, sekuensial) ============
-// Klik checkbox langsung terasa instan (optimistic di atas), tapi permintaan tulis ke Sheet
-// yang sebenarnya dimasukkan ke sini dan diproses SATU PER SATU (bukan bersamaan) - supaya
-// kalau beberapa laporan dicentang cepat berturut-turut, gak saling tabrakan/rebutan lock
-// di Apps Script. Kalau baris yang sama diklik lagi sebelum antrian sebelumnya kelar, entri
-// lama utk baris itu ditimpa (yang dikirim cuma status TERAKHIR, bukan tiap-tiap klik).
+// Antrian sekuensial buat checkbox (biar gak saling tabrakan kalau dicentang cepat berturut-turut)
 const antrianStatus = [];
 let antrianSedangJalan = false;
-
 function antrianKirimStatus(baris, nilai, onSelesai){
-  const existingIdx = antrianStatus.findIndex(function(x){ return x.baris === baris; });
-  if (existingIdx !== -1) antrianStatus.splice(existingIdx, 1); // ganti yang lama, bukan numpuk
+  const idx = antrianStatus.findIndex(function(x){ return x.baris === baris; });
+  if (idx !== -1) antrianStatus.splice(idx, 1);
   antrianStatus.push({ baris: baris, nilai: nilai, onSelesai: onSelesai });
   prosesAntrianStatus();
 }
-
 function prosesAntrianStatus(){
   if (antrianSedangJalan || antrianStatus.length === 0) return;
   antrianSedangJalan = true;
@@ -779,13 +515,10 @@ function prosesAntrianStatus(){
     .then(function(res){ return res.json(); })
     .then(function(hasil){ tugas.onSelesai(hasil); })
     .catch(function(err){ tugas.onSelesai({ ok:false, error: err.message }); })
-    .finally(function(){
-      antrianSedangJalan = false;
-      prosesAntrianStatus(); // lanjut ke tugas berikutnya di antrian, kalau ada
-    });
+    .finally(function(){ antrianSedangJalan = false; prosesAntrianStatus(); });
 }
 
-// ============ FILTER CHIP (event delegation, dipasang sekali) ============
+// ============ FILTER SORT CHIPS ============
 function pasangFilterBar(barId, onPilih){
   const bar = document.getElementById(barId);
   bar.addEventListener("click", function(ev){
@@ -796,20 +529,25 @@ function pasangFilterBar(barId, onPilih){
     onPilih(chip.dataset.sort);
   });
 }
-pasangFilterBar("stokFilterBar", function(mode){
-  stokSortMode = mode;
-  renderStokList(urutkanStok(stokItemsRaw, stokSortMode));
+pasangFilterBar("stokFilterBar", function(mode){ stokSortMode = mode; renderStokList(urutkanStok(stokItemsRaw, stokSortMode)); });
+pasangFilterBar("prosesFilterBar", function(mode){ prosesSortMode = mode; renderProsesList(urutkanProses(prosesItemsRaw.filter(cocokProsesQuery), prosesSortMode)); });
+
+const searchProses = document.getElementById("searchProses");
+const btnClearProses = document.getElementById("btnClearProses");
+searchProses.addEventListener("input", function(){
+  prosesQuery = searchProses.value.trim();
+  btnClearProses.style.display = prosesQuery ? "block" : "none";
+  renderProsesList(urutkanProses(prosesItemsRaw.filter(cocokProsesQuery), prosesSortMode));
 });
-pasangFilterBar("prosesFilterBar", function(mode){
-  prosesSortMode = mode;
-  renderProsesList(urutkanProses(prosesItemsRaw, prosesSortMode));
+btnClearProses.addEventListener("click", function(){
+  searchProses.value = ""; prosesQuery = ""; btnClearProses.style.display = "none";
+  renderProsesList(urutkanProses(prosesItemsRaw.filter(cocokProsesQuery), prosesSortMode));
 });
 
+// ============ MUAT DASHBOARD UTAMA (Stok + Proses) ============
 function muatDashboard(paksaRefresh){
   const btnRefresh = document.getElementById("btnRefresh");
-  btnRefresh.classList.add("loading");
-  btnRefresh.disabled = true;
-
+  btnRefresh.classList.add("loading"); btnRefresh.disabled = true;
   const url = WEBAPP_URL + "?action=dashboard" + (paksaRefresh ? "&refresh=1" : "");
   fetch(url, { cache: "no-store" })
     .then(function(res){ return res.json(); })
@@ -819,31 +557,32 @@ function muatDashboard(paksaRefresh){
       const updated = data.updatedAt ? new Date(data.updatedAt) : new Date();
       const cacheTag = data.dariCache ? '<span class="cache-tag">· cache</span>' : '';
       document.getElementById("updatedAt").innerHTML =
-        "Diperbarui " + updated.toLocaleDateString("id-ID", { day: "numeric", month: "short" }) +
-        ", " + updated.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + cacheTag;
+        "Diperbarui " + updated.toLocaleDateString("id-ID", { day:"numeric", month:"short" }) + ", " +
+        updated.toLocaleTimeString("id-ID", { hour:"2-digit", minute:"2-digit" }) + cacheTag;
     })
     .catch(function(err){
       document.getElementById("updatedAt").textContent = "Gagal memuat";
-      ["stok-list", "proses-list"].forEach(function(id){
-        document.getElementById(id).innerHTML = '<div class="error-state">Gagal memuat data: ' + err.message + '</div>';
-      });
+      ["stok-list","proses-list"].forEach(function(id){ document.getElementById(id).innerHTML = '<div class="error-state">Gagal memuat: '+err.message+'</div>'; });
     })
-    .finally(function(){
-      btnRefresh.classList.remove("loading");
-      btnRefresh.disabled = false;
-    });
+    .finally(function(){ btnRefresh.classList.remove("loading"); btnRefresh.disabled = false; });
 }
-
-document.getElementById("btnRefresh").addEventListener("click", function(){
-  muatDashboard(true); // tombol refresh manual SELALU maksa hitung ulang, lewati cache
-});
-
+document.getElementById("btnRefresh").addEventListener("click", function(){ muatDashboard(true); });
 muatDashboard(false);
 
 // ============ TAB QC ============
 let qcItemsRaw = [];
-const qcModeUI = {}; // baris -> "ringkas" | "detail"
+let qcQuery = "";
 let qcSudahDimuat = false;
+const qcModeUI = {};
+let modeTelegram = "per";
+let laporanTerakhirLengkap = null;
+let rekapTeksTerakhir = null;
+
+function qcDaftarUkuran(item){ return Object.keys(item.sizes); }
+function qcSisaUkuran(item, u){ const s = item.sizes[u]; return s.qty - s.selesai - s.reject; }
+function qcLengkapUkuran(item, u){ return qcSisaUkuran(item, u) <= 0; }
+function qcLengkapSemua(item){ return qcDaftarUkuran(item).every(function(u){ return qcLengkapUkuran(item, u); }); }
+function cocokQCQuery(item){ return !qcQuery || item.item.toUpperCase().indexOf(qcQuery.toUpperCase()) !== -1; }
 
 function muatDashboardQC(){
   const list = document.getElementById("qc-list");
@@ -853,38 +592,34 @@ function muatDashboardQC(){
     .then(function(data){
       qcSudahDimuat = true;
       qcItemsRaw = data.items || [];
-      document.getElementById("qcCount").textContent = qcItemsRaw.length + " laporan menunggu";
       renderQCCards();
     })
-    .catch(function(err){
-      list.innerHTML = '<div class="error-state">Gagal memuat data QC: ' + err.message + '</div>';
-    });
+    .catch(function(err){ list.innerHTML = '<div class="error-state">Gagal memuat data QC: '+err.message+'</div>'; });
 }
 
-function qcDaftarUkuran(item){ return Object.keys(item.sizes); }
-function qcSisaUkuran(item, u){ const s = item.sizes[u]; return s.qty - s.selesai - s.reject; }
-function qcLengkapUkuran(item, u){ return qcSisaUkuran(item, u) <= 0; }
-function qcLengkapSemua(item){ return qcDaftarUkuran(item).every(function(u){ return qcLengkapUkuran(item, u); }); }
-
 function renderQCCards(){
+  const filtered = qcItemsRaw.filter(cocokQCQuery);
+  document.getElementById("qcCount").textContent = filtered.length + " dari " + qcItemsRaw.length + " laporan";
   const wrap = document.getElementById("qc-list");
-  wrap.innerHTML = "";
-  if (qcItemsRaw.length === 0) {
-    wrap.innerHTML = '<div class="empty-state">Tidak ada laporan yang menunggu konfirmasi QC 🎉</div>';
+
+  if (!filtered.length) {
+    wrap.innerHTML = '<div class="empty-state">' + (qcQuery ? 'Gak ada laporan yang cocok dengan "'+qcQuery+'".' : 'Tidak ada laporan yang menunggu konfirmasi QC 🎉') + '</div>';
     return;
   }
-  qcItemsRaw.forEach(function(item){
+
+  wrap.innerHTML = filtered.map(function(item){
     const lengkap = qcLengkapSemua(item);
     const sel = item.totalSelesai, rej = item.totalReject, asli = item.totalAsli;
     const pctSel = Math.round((sel/asli)*100), pctRej = Math.round((rej/asli)*100);
     if (!qcModeUI[item.baris]) qcModeUI[item.baris] = "ringkas";
+    const adaUndo = (sel + rej) > 0;
+    const undoBtn = adaUndo ? '<button class="qc-undo" data-baris="'+item.baris+'">↩ Undo</button>' : '';
 
     let formHtml = "";
     if (!lengkap) {
       if (qcModeUI[item.baris] === "detail") {
-        const baris = qcDaftarUkuran(item).map(function(u){
-          const s = item.sizes[u];
-          const done = qcLengkapUkuran(item, u);
+        const barisTabel = qcDaftarUkuran(item).map(function(u){
+          const s = item.sizes[u]; const done = qcLengkapUkuran(item, u);
           return '<tr class="'+(done?'lengkap-u':'')+'">' +
             '<td>'+u+'</td><td>'+s.qty+'</td>' +
             '<td>'+(done? s.selesai : '<input type="number" min="0" id="qcSel-'+item.baris+'-'+u+'" placeholder="0">')+'</td>' +
@@ -892,45 +627,42 @@ function renderQCCards(){
             '<td>'+Math.max(qcSisaUkuran(item,u),0)+'</td>' +
           '</tr>';
         }).join("");
-        formHtml =
-          '<table class="qc-tabel"><thead><tr><th>Ukuran</th><th>Qty</th><th>Selesai</th><th>Reject</th><th>Sisa</th></tr></thead><tbody>'+baris+'</tbody></table>' +
+        formHtml = '<table class="qc-tabel"><thead><tr><th>Uk</th><th>Qty</th><th>Sel</th><th>Rej</th><th>Sisa</th></tr></thead><tbody>'+barisTabel+'</tbody></table>' +
           '<button class="qc-btn-submit" data-mode="detail" data-baris="'+item.baris+'">Submit Rincian</button>';
       } else {
-        formHtml =
-          '<div class="qc-form-row">' +
-            '<div class="qc-field"><label>Total Selesai</label><input type="number" min="0" id="qcTotSel-'+item.baris+'" placeholder="0"></div>' +
-            '<div class="qc-field"><label>Total Reject</label><input type="number" min="0" id="qcTotRej-'+item.baris+'" placeholder="0"></div>' +
-            '<button class="qc-btn-submit" data-mode="ringkas" data-baris="'+item.baris+'">Submit</button>' +
+        formHtml = '<div class="qc-form-row">' +
+            '<div class="qc-field"><label>Selesai</label><input type="number" min="0" id="qcTotSel-'+item.baris+'" placeholder="0"></div>' +
+            '<div class="qc-field"><label>Reject</label><input type="number" min="0" id="qcTotRej-'+item.baris+'" placeholder="0"></div>' +
+            '<button class="qc-btn-submit" data-mode="ringkas" data-baris="'+item.baris+'">✓</button>' +
           '</div>';
       }
     }
 
-    const card = document.createElement("div");
-    card.className = "qc-card" + (lengkap ? " lengkap" : "");
-    card.innerHTML =
-      '<div class="qc-top">' +
-        '<div><p class="qc-title">'+item.item+'</p><p class="qc-meta">'+(item.tanggal||'-')+' · Roll '+item.roll+' · '+asli+' pcs</p></div>' +
-        (lengkap ? '<span class="qc-badge">✅ Lengkap</span>' : '') +
-      '</div>' +
+    const sizeChips = qcDaftarUkuran(item).map(function(u){ return '<span class="size-chip">'+u+' <b>'+item.sizes[u].qty+'</b></span>'; }).join("");
+    const stale = item.hari !== null && item.hari >= 3;
+    const hariLabel = item.hari === null ? "-" : (item.hari === 0 ? "hari ini" : item.hari + " hari lalu");
+
+    const modeSwitchRow = lengkap
+      ? (adaUndo ? '<div class="qc-mode-switch"><span></span>'+undoBtn+'</div>' : '')
+      : '<div class="qc-mode-switch"><span class="mode-left">' +
+          '<span class="qc-mode-btn'+(qcModeUI[item.baris]==="ringkas"?" active":"")+'" data-switch="ringkas" data-baris="'+item.baris+'">Ringkas</span>' +
+          '<span class="qc-mode-btn'+(qcModeUI[item.baris]==="detail"?" active":"")+'" data-switch="detail" data-baris="'+item.baris+'">Rincian</span>' +
+        '</span>'+undoBtn+'</div>';
+
+    return '<div class="qc-card'+(lengkap?' lengkap':'')+'" data-baris="'+item.baris+'">' +
+      '<div class="qc-top"><div><p class="qc-title">'+item.item+'</p>' +
+        '<div class="qc-meta2"><span>'+(item.tanggal||'-')+'</span><span class="dot">·</span><span class="roll">Roll '+item.roll+'</span><span class="dot">·</span><span class="kg">'+fmtKg(item.kg||0)+' kg</span></div>' +
+      '</div>' + (lengkap ? '<span class="qc-badge">✅</span>' : '<span class="qc-days'+(stale?' stale':'')+'">'+hariLabel+'</span>') + '</div>' +
+      '<div class="qc-sizes">'+sizeChips+'<span class="size-chip">Jml <b>'+(item.jumlah||asli)+'</b></span></div>' +
       '<div class="qc-progress"><div class="p-sel" style="width:'+pctSel+'%"></div><div class="p-rej" style="width:'+pctRej+'%"></div></div>' +
-      '<div class="qc-progress-label"><span>Selesai <b>'+sel+'</b></span><span>Reject <b>'+rej+'</b></span><span>Sisa <b>'+Math.max(asli-sel-rej,0)+'</b></span></div>' +
-      (lengkap ? "" :
-        '<div class="qc-mode-switch">' +
-          '<span class="qc-mode-btn'+(qcModeUI[item.baris]==="ringkas"?" active":"")+'" data-switch="ringkas" data-baris="'+item.baris+'">Ringkas (total)</span>' +
-          '<span class="qc-mode-btn'+(qcModeUI[item.baris]==="detail"?" active":"")+'" data-switch="detail" data-baris="'+item.baris+'">Rincian per Ukuran</span>' +
-        '</div>'
-      ) +
-      formHtml +
+      '<div class="qc-progress-label"><span>Sel <b>'+sel+'</b></span><span>Rej <b>'+rej+'</b></span><span>Sisa <b>'+Math.max(asli-sel-rej,0)+'</b></span></div>' +
+      modeSwitchRow + formHtml +
       '<p class="qc-error" id="qcErr-'+item.baris+'" style="display:none;"></p>' +
-      '<div class="qc-riwayat-item"><span></span>' + (sel+rej>0 ? '<button class="qc-btn-undo" data-baris="'+item.baris+'">↩ Undo submit terakhir</button>' : '') + '</div>';
-    wrap.appendChild(card);
-  });
+    '</div>';
+  }).join("");
 
   wrap.querySelectorAll(".qc-mode-btn").forEach(function(btn){
-    btn.addEventListener("click", function(){
-      qcModeUI[parseInt(btn.dataset.baris,10)] = btn.dataset.switch;
-      renderQCCards();
-    });
+    btn.addEventListener("click", function(){ qcModeUI[parseInt(btn.dataset.baris,10)] = btn.dataset.switch; renderQCCards(); });
   });
 
   wrap.querySelectorAll(".qc-btn-submit").forEach(function(btn){
@@ -941,20 +673,20 @@ function renderQCCards(){
       errEl.style.display = "none";
       btn.disabled = true;
 
-      let url;
+      let url, deltaSel = 0, deltaRej = 0;
       if (btn.dataset.mode === "ringkas") {
         const totSel = parseInt((document.getElementById("qcTotSel-"+baris)||{}).value, 10) || 0;
         const totRej = parseInt((document.getElementById("qcTotRej-"+baris)||{}).value, 10) || 0;
         if (totSel + totRej <= 0) { errEl.style.display="block"; errEl.textContent="Isi minimal salah satu angka."; btn.disabled=false; return; }
+        deltaSel = totSel; deltaRej = totRej;
         url = WEBAPP_URL + "?action=submitQC&baris="+baris+"&mode=ringkas&totalSelesai="+totSel+"&totalReject="+totRej;
       } else {
-        const perUkuran = {};
-        let adaIsi = false;
+        const perUkuran = {}; let adaIsi = false;
         for (const u of qcDaftarUkuran(item)) {
           if (qcLengkapUkuran(item, u)) continue;
           const s = parseInt((document.getElementById("qcSel-"+baris+"-"+u)||{}).value, 10) || 0;
           const r = parseInt((document.getElementById("qcRej-"+baris+"-"+u)||{}).value, 10) || 0;
-          if (s+r > 0) { perUkuran[u] = { selesai: s, reject: r }; adaIsi = true; }
+          if (s+r > 0) { perUkuran[u] = { selesai:s, reject:r }; adaIsi = true; deltaSel += s; deltaRej += r; }
         }
         if (!adaIsi) { errEl.style.display="block"; errEl.textContent="Isi minimal 1 ukuran."; btn.disabled=false; return; }
         url = WEBAPP_URL + "?action=submitQC&baris="+baris+"&mode=detail&ukuran="+encodeURIComponent(JSON.stringify(perUkuran));
@@ -965,22 +697,29 @@ function renderQCCards(){
         .then(function(hasil){
           btn.disabled = false;
           if (hasil && hasil.ok) {
-            tampilkanToastQC("✓ Tersimpan");
+            tampilkanToast("✓ Tersimpan");
+            const asli = item.totalAsli;
+            const selBaru = item.totalSelesai + deltaSel;
+            const rejBaru = item.totalReject + deltaRej;
+            if (selBaru + rejBaru >= asli) {
+              // Baru aja lengkap 100% - simpan snapshot lengkap buat preview "Per Laporan"
+              laporanTerakhirLengkap = {
+                baris: baris, item: item.item, roll: item.roll, kg: item.kg,
+                ukuranList: qcDaftarUkuran(item), selesai: selBaru, reject: rejBaru, asli: asli
+              };
+              if (modeTelegram === "per") renderTelegramPreview();
+            }
             muatDashboardQC();
           } else {
             errEl.style.display = "block";
             errEl.textContent = (hasil && hasil.error) || "Gagal menyimpan, coba lagi.";
           }
         })
-        .catch(function(err){
-          btn.disabled = false;
-          errEl.style.display = "block";
-          errEl.textContent = "Gagal menyimpan: " + err.message;
-        });
+        .catch(function(err){ btn.disabled = false; errEl.style.display="block"; errEl.textContent="Gagal: "+err.message; });
     });
   });
 
-  wrap.querySelectorAll(".qc-btn-undo").forEach(function(btn){
+  wrap.querySelectorAll(".qc-undo").forEach(function(btn){
     btn.addEventListener("click", function(){
       const baris = parseInt(btn.dataset.baris, 10);
       btn.disabled = true;
@@ -988,38 +727,106 @@ function renderQCCards(){
         .then(function(res){ return res.json(); })
         .then(function(hasil){
           if (hasil && hasil.ok) {
-            tampilkanToastQC("↩ Submit terakhir dibatalkan");
+            tampilkanToast("↩ Submit terakhir dibatalkan");
+            if (laporanTerakhirLengkap && laporanTerakhirLengkap.baris === baris) { laporanTerakhirLengkap = null; renderTelegramPreview(); }
             muatDashboardQC();
           } else {
-            tampilkanToastQC("Gagal undo: " + ((hasil && hasil.error) || "tidak diketahui"));
+            tampilkanToast("Gagal undo: " + ((hasil && hasil.error) || "tidak diketahui"));
             btn.disabled = false;
           }
         })
-        .catch(function(err){
-          tampilkanToastQC("Gagal undo: " + err.message);
-          btn.disabled = false;
-        });
+        .catch(function(err){ tampilkanToast("Gagal undo: "+err.message); btn.disabled = false; });
     });
   });
 }
 
-document.getElementById("btnKirimRekap").addEventListener("click", function(){
-  const btn = document.getElementById("btnKirimRekap");
-  btn.disabled = true;
-  btn.textContent = "Mengirim…";
+const searchQC = document.getElementById("searchQC");
+const btnClearQC = document.getElementById("btnClearQC");
+searchQC.addEventListener("input", function(){
+  qcQuery = searchQC.value.trim();
+  btnClearQC.style.display = qcQuery ? "block" : "none";
+  renderQCCards();
+});
+btnClearQC.addEventListener("click", function(){
+  searchQC.value = ""; qcQuery = ""; btnClearQC.style.display = "none";
+  renderQCCards();
+});
+
+// ============ PREVIEW TELEGRAM ============
+function renderTelegramPreview(){
+  const previewEl = document.getElementById("telegramPreview");
+  const btnKirim = document.getElementById("btnKirimBeneran");
+  btnKirim.style.display = "none";
+
+  if (modeTelegram === "per") {
+    if (!laporanTerakhirLengkap) {
+      previewEl.innerHTML = "Belum ada laporan yang lengkap 100% di sesi ini - pesan ini OTOMATIS terkirim begitu ada laporan yang lengkap, gak perlu pencet apapun.<span class='waktu'>info</span>";
+      return;
+    }
+    const l = laporanTerakhirLengkap;
+    previewEl.innerHTML =
+      "✅ <b>LAPORAN QC SELESAI</b>\n" +
+      l.item + " · Roll " + l.roll + "\n" +
+      "Ukuran: " + l.ukuranList.join(", ") + "\n" +
+      "Selesai: " + l.selesai + " pcs\n" +
+      "Reject: " + l.reject + " pcs\n" +
+      "Total qty: " + l.asli + " pcs" +
+      "<span class='waktu'>sudah otomatis terkirim ke grup Telegram</span>";
+    return;
+  }
+
+  // rekap: ambil preview dari SERVER (tanpa kirim dulu)
+  previewEl.textContent = "Memuat preview rekap…";
   fetch(WEBAPP_URL + "?action=kirimRekapQC", { cache: "no-store" })
     .then(function(res){ return res.json(); })
     .then(function(hasil){
-      btn.disabled = false;
-      btn.textContent = "📋 Kirim Rekap Hari Ini";
-      tampilkanToastQC(hasil && hasil.ok ? "✓ Rekap terkirim ke grup" : "Gagal kirim: " + ((hasil && hasil.error) || "tidak diketahui"));
+      if (hasil && hasil.ok && hasil.teks) {
+        rekapTeksTerakhir = hasil.teks;
+        previewEl.innerHTML = hasil.teks.replace(/\n/g, "\n") + "<span class='waktu'>preview - klik \"Kirim ke Telegram\" utk kirim beneran</span>";
+        btnKirim.style.display = "inline-block";
+      } else {
+        rekapTeksTerakhir = null;
+        previewEl.textContent = (hasil && hasil.error) || "Belum ada laporan yang bisa direkap.";
+      }
     })
-    .catch(function(err){
-      btn.disabled = false;
-      btn.textContent = "📋 Kirim Rekap Hari Ini";
-      tampilkanToastQC("Gagal kirim: " + err.message);
-    });
+    .catch(function(err){ previewEl.textContent = "Gagal memuat preview: " + err.message; });
+}
+
+document.getElementById("previewToggle").addEventListener("click", function(ev){
+  const chip = ev.target.closest(".toggle-chip");
+  if (!chip) return;
+  document.querySelectorAll("#previewToggle .toggle-chip").forEach(function(c){ c.classList.remove("active"); });
+  chip.classList.add("active");
+  modeTelegram = chip.dataset.mode;
+  renderTelegramPreview();
 });
+
+document.getElementById("btnKirimRekap").addEventListener("click", function(){
+  document.querySelectorAll("#previewToggle .toggle-chip").forEach(function(c){ c.classList.remove("active"); });
+  document.querySelector('#previewToggle .toggle-chip[data-mode="rekap"]').classList.add("active");
+  modeTelegram = "rekap";
+  renderTelegramPreview();
+});
+
+document.getElementById("btnKirimBeneran").addEventListener("click", function(){
+  const btn = document.getElementById("btnKirimBeneran");
+  btn.disabled = true; btn.textContent = "Mengirim…";
+  fetch(WEBAPP_URL + "?action=kirimRekapQC&kirim=1", { cache: "no-store" })
+    .then(function(res){ return res.json(); })
+    .then(function(hasil){
+      btn.disabled = false; btn.textContent = "✈️ Kirim ke Telegram";
+      if (hasil && hasil.ok) {
+        tampilkanToast("✓ Rekap terkirim ke grup Telegram");
+        document.getElementById("telegramPreview").innerHTML += "<span class='waktu'>✓ terkirim barusan</span>";
+        btn.style.display = "none";
+      } else {
+        tampilkanToast("Gagal kirim: " + ((hasil && hasil.error) || "tidak diketahui"));
+      }
+    })
+    .catch(function(err){ btn.disabled = false; btn.textContent = "✈️ Kirim ke Telegram"; tampilkanToast("Gagal kirim: "+err.message); });
+});
+
+renderTelegramPreview();
 </script>
 </body>
 </html>
