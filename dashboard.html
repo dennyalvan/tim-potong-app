@@ -1,13 +1,19 @@
 <!--
-  DASHBOARD STOK KAIN - TIM POTONG (v.08)
+  DASHBOARD STOK KAIN - TIM POTONG (v.09)
   Halaman statis, di-hosting di GitHub Pages yang sama dengan index.html (Mini App).
-  Backend: apps_script_tim_potong_v08.js.
+  Backend: apps_script_tim_potong_v09.js.
 
-  v.08 (bug fix): tombol Refresh DULU cuma maksa hitung ulang data Stok, tab Proses & QC
-  gak ikut ke-refresh (masih baca cache lama). Sekarang tombol Refresh maksa refresh dua-duanya
-  sekaligus. Backend juga diperbaiki: baris yang Status-nya dihapus MANUAL di sheet (bukan lewat
-  tombol Undo) sekarang bisa balik muncul lagi setelah refresh - lihat detail di header
-  apps_script_tim_potong_v08.js.
+  v.09 (perubahan hari ini):
+  1. Nomor urut STABIL di tiap kartu QC - ditentukan sekali dari nomor baris sheet (ascending),
+     BUKAN dihitung ulang tiap kali filter sort diganti. Jadi nomornya nempel ke laporannya,
+     bukan ke posisi tampilnya.
+  2. Submit & Undo QC sekarang OPTIMISTIC + ANTRIAN: klik langsung kelihatan hasilnya di
+     tampilan (tanpa nunggu server), permintaan ke server dikirim di belakang layar satu per
+     satu (gak saling tabrakan kalau beberapa laporan disubmit cepat berturut-turut). Kalau
+     ternyata gagal ditulis ke sheet, otomatis dibatalkan lagi + muncul pesan error.
+  3. Setiap submit yang BELUM bikin laporan lengkap 100% sekarang juga otomatis kirim pesan
+     "🔵 Update Progress QC" ke Telegram (sebelumnya cuma yang lengkap 100% yang lapor) - biar
+     tim QC lain yang gak pegang input tetap bisa ngikutin progress real-time.
 -->
 <!doctype html>
 <html lang="id">
@@ -176,10 +182,16 @@ h2.section-title{
 .btn-kirim-beneran:disabled{ opacity:.6; pointer-events:none; }
 
 .qc-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:9px; }
-.qc-card{ background:var(--surface); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); padding:9px 10px 8px; }
+.qc-card{ background:var(--surface); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); padding:9px 10px 8px; position:relative; }
+.qc-card.mengirim::after{
+  content:"● menyimpan…"; position:absolute; top:7px; right:8px; font-size:8px; font-weight:700;
+  color:var(--accent-deep); background:var(--surface); border:1px solid var(--line);
+  border-radius:999px; padding:2px 7px;
+}
 .qc-card.lengkap{ border-color:var(--good); background:var(--good-tint); }
 .qc-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:6px; }
-.qc-title{ font-size:12px; font-weight:700; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.qc-title{ font-size:12px; font-weight:700; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:flex; align-items:center; gap:5px; }
+.qc-num{ display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border-radius:50%; background:var(--surface-2); color:var(--ink-muted); font-size:9px; font-weight:700; flex:0 0 auto; }
 .qc-meta2{ font-size:9.5px; font-weight:700; color:var(--ink); margin:2px 0 5px; display:flex; flex-wrap:wrap; gap:2px 5px; }
 .qc-meta2 .roll{ color:var(--accent-deep); }
 .qc-meta2 .kg{ color:var(--warn); }
@@ -505,6 +517,11 @@ function muatDashboardQC(paksaRefresh){
     .then(function(data){
       qcSudahDimuat = true;
       qcItemsRaw = data.items || [];
+      // v.09: nomor urut STABIL - ditentukan dari baris (sheet row) ascending SEKALI di sini,
+      // BUKAN dihitung ulang tiap render/sort. Jadi walau tampilan diurutkan ulang (filter sort
+      // chip), nomor yang nempel di tiap kartu gak ikut berubah posisi.
+      qcItemsRaw.slice().sort(function(a,b){ return a.baris - b.baris; })
+        .forEach(function(item, i){ item.num = i + 1; });
       renderQCCards();
     })
     .catch(function(err){ list.innerHTML = '<div class="error-state">Gagal memuat data QC: '+err.message+'</div>'; });
@@ -563,7 +580,7 @@ function renderQCCards(){
         '</span>'+undoBtn+'</div>';
 
     return '<div class="qc-card'+(lengkap?' lengkap':'')+'" data-baris="'+item.baris+'">' +
-      '<div class="qc-top"><div><p class="qc-title">'+item.item+'</p>' +
+      '<div class="qc-top"><div><p class="qc-title"><span class="qc-num">'+(item.num||'')+'</span>'+item.item+'</p>' +
         '<div class="qc-meta2"><span>'+(item.tanggal||'-')+'</span><span class="dot">·</span><span class="roll">Roll '+item.roll+'</span><span class="dot">·</span><span class="kg">'+fmtKg(item.kg||0)+' kg</span></div>' +
       '</div>' + (lengkap ? '<span class="qc-badge">✅</span>' : '<span class="qc-days'+(stale?' stale':'')+'">'+hariLabel+'</span>') + '</div>' +
       '<div class="qc-sizes">'+sizeChips+'<span class="size-chip">Jml <b>'+(item.jumlah||asli)+'</b></span></div>' +
@@ -584,13 +601,29 @@ function renderQCCards(){
       const item = qcItemsRaw.find(function(x){ return x.baris === baris; });
       const errEl = document.getElementById("qcErr-"+baris);
       errEl.style.display = "none";
-      btn.disabled = true;
 
-      let url, deltaSel = 0, deltaRej = 0;
+      let url, deltaSel = 0, deltaRej = 0, deltaPerUkuran = {};
       if (btn.dataset.mode === "ringkas") {
         const totSel = parseInt((document.getElementById("qcTotSel-"+baris)||{}).value, 10) || 0;
         const totRej = parseInt((document.getElementById("qcTotRej-"+baris)||{}).value, 10) || 0;
-        if (totSel + totRej <= 0) { errEl.style.display="block"; errEl.textContent="Isi minimal salah satu angka."; btn.disabled=false; return; }
+        if (totSel + totRej <= 0) { errEl.style.display="block"; errEl.textContent="Isi minimal salah satu angka."; return; }
+        // v.09: alokasi client-side (buat optimistic update) - SAMA persis logicnya kayak
+        // server (tuang ke ukuran yg masih sisa, urut DAFTAR_UKURAN_TIMPOTONG). Server tetap
+        // yang MEMUTUSKAN beneran di belakang layar - ini cuma buat tampilan langsung.
+        let sisaSel = totSel, sisaRej = totRej;
+        for (const u of qcDaftarUkuran(item)) {
+          const kapAwal = qcSisaUkuran(item, u);
+          if (kapAwal <= 0) continue;
+          let kap = kapAwal;
+          const aSel = Math.min(sisaSel, kap);
+          if (aSel > 0) deltaPerUkuran[u] = { sel: aSel, rej: 0 };
+          sisaSel -= aSel; kap -= aSel;
+          const aRej = Math.min(sisaRej, kap);
+          if (aRej > 0) { deltaPerUkuran[u] = deltaPerUkuran[u] || { sel:0, rej:0 }; deltaPerUkuran[u].rej = aRej; }
+          sisaRej -= aRej; kap -= aRej;
+          if (sisaSel<=0 && sisaRej<=0) break;
+        }
+        if (sisaSel > 0 || sisaRej > 0) { errEl.style.display="block"; errEl.textContent="Total melebihi sisa yang ada."; return; }
         deltaSel = totSel; deltaRej = totRej;
         url = WEBAPP_URL + "?action=submitQC&baris="+baris+"&mode=ringkas&totalSelesai="+totSel+"&totalReject="+totRej;
       } else {
@@ -599,58 +632,124 @@ function renderQCCards(){
           if (qcLengkapUkuran(item, u)) continue;
           const s = parseInt((document.getElementById("qcSel-"+baris+"-"+u)||{}).value, 10) || 0;
           const r = parseInt((document.getElementById("qcRej-"+baris+"-"+u)||{}).value, 10) || 0;
-          if (s+r > 0) { perUkuran[u] = { selesai:s, reject:r }; adaIsi = true; deltaSel += s; deltaRej += r; }
+          if (s+r > 0) { perUkuran[u] = { selesai:s, reject:r }; deltaPerUkuran[u] = { sel:s, rej:r }; adaIsi = true; deltaSel += s; deltaRej += r; }
         }
-        if (!adaIsi) { errEl.style.display="block"; errEl.textContent="Isi minimal 1 ukuran."; btn.disabled=false; return; }
+        if (!adaIsi) { errEl.style.display="block"; errEl.textContent="Isi minimal 1 ukuran."; return; }
         url = WEBAPP_URL + "?action=submitQC&baris="+baris+"&mode=detail&ukuran="+encodeURIComponent(JSON.stringify(perUkuran));
       }
 
-      fetch(url, { cache: "no-store" })
-        .then(function(res){ return res.json(); })
-        .then(function(hasil){
-          btn.disabled = false;
-          if (hasil && hasil.ok) {
-            tampilkanToast("✓ Tersimpan");
-            const asli = item.totalAsli;
-            const selBaru = item.totalSelesai + deltaSel;
-            const rejBaru = item.totalReject + deltaRej;
-            if (selBaru + rejBaru >= asli) {
-              // Baru aja lengkap 100% - simpan snapshot lengkap buat preview "Per Laporan"
-              laporanTerakhirLengkap = {
-                baris: baris, item: item.item, roll: item.roll, kg: item.kg,
-                ukuranList: qcDaftarUkuran(item), selesai: selBaru, reject: rejBaru, asli: asli
-              };
-              if (modeTelegram === "per") renderTelegramPreview();
-            }
-            muatDashboardQC();
-          } else {
-            errEl.style.display = "block";
-            errEl.textContent = (hasil && hasil.error) || "Gagal menyimpan, coba lagi.";
-          }
-        })
-        .catch(function(err){ btn.disabled = false; errEl.style.display="block"; errEl.textContent="Gagal: "+err.message; });
+      // === OPTIMISTIC: update tampilan LANGSUNG, tanpa nunggu server ===
+      const asliSebelum = item.totalAsli;
+      const sudahLengkapSebelum = qcLengkapSemua(item);
+      Object.keys(deltaPerUkuran).forEach(function(u){
+        item.sizes[u].selesai += deltaPerUkuran[u].sel;
+        item.sizes[u].reject += deltaPerUkuran[u].rej;
+      });
+      item.totalSelesai += deltaSel;
+      item.totalReject += deltaRej;
+      item.lastDelta = { sel: deltaSel, rej: deltaRej, perUkuran: deltaPerUkuran }; // buat Undo optimistic
+      const baruLengkap = !sudahLengkapSebelum && (item.totalSelesai + item.totalReject) >= asliSebelum;
+      if (baruLengkap) {
+        laporanTerakhirLengkap = {
+          baris: baris, item: item.item, roll: item.roll, kg: item.kg,
+          ukuranList: qcDaftarUkuran(item), selesai: item.totalSelesai, reject: item.totalReject, asli: asliSebelum
+        };
+        if (modeTelegram === "per") renderTelegramPreview();
+      }
+      renderQCCards();
+      tampilkanToast("✓ Tersimpan");
+
+      // === Kirim ke server DI BELAKANG LAYAR lewat antrian (gak blokir klik berikutnya) ===
+      antrianKirimQC(url, function(hasil){
+        if (!hasil || !hasil.ok) {
+          // Gagal beneran - batalkan optimistic update-nya
+          Object.keys(deltaPerUkuran).forEach(function(u){
+            if (!item.sizes[u]) return;
+            item.sizes[u].selesai -= deltaPerUkuran[u].sel;
+            item.sizes[u].reject -= deltaPerUkuran[u].rej;
+          });
+          item.totalSelesai -= deltaSel;
+          item.totalReject -= deltaRej;
+          if (item.lastDelta && item.lastDelta.sel === deltaSel && item.lastDelta.rej === deltaRej) item.lastDelta = null;
+          renderQCCards();
+          const errElBaru = document.getElementById("qcErr-"+baris);
+          if (errElBaru) { errElBaru.style.display = "block"; errElBaru.textContent = (hasil && hasil.error) || "Gagal menyimpan, dibatalkan lagi."; }
+          tampilkanToast("Gagal menyimpan - perubahan dibatalkan");
+        }
+      }, baris);
     });
   });
 
   wrap.querySelectorAll(".qc-undo").forEach(function(btn){
     btn.addEventListener("click", function(){
       const baris = parseInt(btn.dataset.baris, 10);
-      btn.disabled = true;
-      fetch(WEBAPP_URL + "?action=undoQC&baris="+baris, { cache: "no-store" })
-        .then(function(res){ return res.json(); })
-        .then(function(hasil){
-          if (hasil && hasil.ok) {
-            tampilkanToast("↩ Submit terakhir dibatalkan");
-            if (laporanTerakhirLengkap && laporanTerakhirLengkap.baris === baris) { laporanTerakhirLengkap = null; renderTelegramPreview(); }
-            muatDashboardQC();
-          } else {
-            tampilkanToast("Gagal undo: " + ((hasil && hasil.error) || "tidak diketahui"));
-            btn.disabled = false;
+      const item = qcItemsRaw.find(function(x){ return x.baris === baris; });
+
+      if (item && item.lastDelta) {
+        // === OPTIMISTIC: kita tau persis delta submit terakhir di sesi ini, langsung batalkan ===
+        const d = item.lastDelta;
+        Object.keys(d.perUkuran).forEach(function(u){
+          if (!item.sizes[u]) return;
+          item.sizes[u].selesai -= d.perUkuran[u].sel;
+          item.sizes[u].reject -= d.perUkuran[u].rej;
+        });
+        item.totalSelesai -= d.sel;
+        item.totalReject -= d.rej;
+        item.lastDelta = null;
+        if (laporanTerakhirLengkap && laporanTerakhirLengkap.baris === baris) { laporanTerakhirLengkap = null; renderTelegramPreview(); }
+        renderQCCards();
+        tampilkanToast("↩ Dibatalkan");
+        antrianKirimQC(WEBAPP_URL + "?action=undoQC&baris="+baris, function(hasil){
+          if (!hasil || !hasil.ok) {
+            tampilkanToast("Gagal undo di server - muat ulang data…");
+            muatDashboardQC(true); // gak tau lagi cara balikin optimistic-nya, tarik data asli
           }
-        })
-        .catch(function(err){ tampilkanToast("Gagal undo: "+err.message); btn.disabled = false; });
+        }, baris);
+      } else {
+        // Gak ada catatan delta lokal (baris ini belum disentuh sesi ini) - gak bisa optimistic
+        // dgn aman, jadi nunggu respons server dulu kayak biasa.
+        btn.disabled = true;
+        fetch(WEBAPP_URL + "?action=undoQC&baris="+baris, { cache: "no-store" })
+          .then(function(res){ return res.json(); })
+          .then(function(hasil){
+            if (hasil && hasil.ok) {
+              tampilkanToast("↩ Submit terakhir dibatalkan");
+              if (laporanTerakhirLengkap && laporanTerakhirLengkap.baris === baris) { laporanTerakhirLengkap = null; renderTelegramPreview(); }
+              muatDashboardQC();
+            } else {
+              tampilkanToast("Gagal undo: " + ((hasil && hasil.error) || "tidak diketahui"));
+              btn.disabled = false;
+            }
+          })
+          .catch(function(err){ tampilkanToast("Gagal undo: "+err.message); btn.disabled = false; });
+      }
     });
   });
+}
+
+// v.09: antrian sekuensial buat submit/undo QC - permintaan ke server dikirim SATU PER SATU
+// di belakang layar (gak nunggu selesai buat lanjut klik berikutnya), biar aman kalau beberapa
+// laporan disubmit cepat berturut-turut.
+const antrianQC = [];
+let antrianQCJalan = false;
+function antrianKirimQC(url, onSelesai, baris){
+  antrianQC.push({ url: url, onSelesai: onSelesai, baris: baris });
+  prosesAntrianQC();
+}
+function prosesAntrianQC(){
+  if (antrianQCJalan || antrianQC.length === 0) return;
+  antrianQCJalan = true;
+  const tugas = antrianQC.shift();
+  const cardEl = tugas.baris ? document.querySelector('.qc-card[data-baris="'+tugas.baris+'"]') : null;
+  if (cardEl) cardEl.classList.add("mengirim");
+  fetch(tugas.url, { cache: "no-store" })
+    .then(function(res){ return res.json(); })
+    .then(function(hasil){ tugas.onSelesai(hasil); })
+    .catch(function(err){ tugas.onSelesai({ ok:false, error: err.message }); })
+    .finally(function(){
+      if (cardEl) cardEl.classList.remove("mengirim");
+      antrianQCJalan = false; prosesAntrianQC();
+    });
 }
 
 const searchQC = document.getElementById("searchQC");
