@@ -1,38 +1,29 @@
 <!--
-  DASHBOARD STOK KAIN - TIM POTONG (v.10 PREVIEW - belum final, buat direview Denny dulu)
-  Halaman statis, di-hosting di GitHub Pages yang sama dengan index.html (Mini App).
-  Backend: apps_script_tim_potong_v09.js (BELUM diubah - lihat catatan "PERLU BACKEND" di bawah).
+  DASHBOARD STOK KAIN - TIM POTONG (v.10)
+  Halaman statis, di-hosting di GitHub Pages yang sama dengan index.html (Mini App), diupload
+  sebagai "dashboard.html". Backend: apps_script_tim_potong_v10.js (?action=kirimRekapQCBatch).
 
-  ⚠️ INI FILE PREVIEW. Data QC dimuat NYATA dari server (read-only, aman), TAPI semua aksi yang
-  nulis/ubah data (Tambah ke Daftar, Kirim Rekap, Undo) di file ini SEMUA DISIMULASIKAN di
-  browser saja - TIDAK ada yang benar-benar mengubah Google Sheet atau mengirim ke Telegram.
-  Tujuannya biar polanya bisa dicoba & disetujui dulu sebelum kita sambungkan ke backend beneran.
-
-  v.10 (perubahan dari v.09, sesuai permintaan):
-  1. Tombol "Submit"/"✓" di tiap kartu QC diganti jadi "+ Tambah ke Daftar" (persis pola di Mini
-     App Tim Potong) - klik itu TIDAK langsung kirim ke server, cuma masuk ke array antrian lokal
-     `qcAntrian`. Form di kartu itu reset, kartu lain tetap bisa diisi juga.
+  v.10 (perubahan dari v.09, sesuai permintaan - pola antrian, persis Mini App Tim Potong):
+  1. Tombol "Submit"/"✓" di tiap kartu QC diganti jadi "+ Tambah ke Daftar" - klik itu TIDAK
+     langsung kirim ke server, cuma masuk ke array antrian lokal `qcAntrian`. Form di kartu itu
+     reset, kartu lain tetap bisa diisi juga.
   2. Kartu yang sudah punya antrian nunjukin badge "🕓 menunggu dikirim" + progress bar udah
      memperhitungkan angka yang masih di antrian (biar gak kelebihan input dari sisa yang ada).
-  3. Section "Daftar Antrian" baru (di atas bubble preview) - daftar SEMUA laporan yang sudah
-     ditambah dari kartu manapun, tiap baris bisa dihapus (✕) kalau salah, SEBELUM dikirim.
+     Mode Rincian: ukuran yang penuh CUMA karena antrian (belum dikirim) ditandai "N ANTRE",
+     beda dari yang BENERAN sudah tersimpan di server.
+  3. Section "Daftar Antrian" (di atas bubble preview) - daftar SEMUA laporan yang sudah
+     ditambah dari kartu manapun, tiap baris bisa dihapus (✕) kalau salah, SEBELUM dikirim -
+     begitu dihapus, qty di kartu terkait otomatis balik ke semula (dihitung ulang tiap render).
   4. Toggle preview "Per Laporan" vs "Rekap Harian" DIHAPUS. Sekarang cuma 1 mode: bubble
      Telegram menampilkan gabungan SEMUA isi `qcAntrian` saat ini (dibuat di browser, real-time,
      tanpa perlu tanya ke server dulu).
-  5. Tombol "Kirim Rekap" sekarang jadi SATU-SATUNYA jalan data masuk ke server: tombol itu yang
-     bakal (nanti, setelah backend diupdate) menulis SEMUA item di antrian ke Sheet SEKALIGUS,
-     lalu kirim SATU pesan rekap gabungan ke Telegram. Di file PREVIEW ini prosesnya disimulasikan
-     (delay tiruan + toast sukses), lihat komentar "PERLU BACKEND" di fungsi `kirimRekapBeneran()`.
+  5. Tombol "Kirim Rekap" SATU-SATUNYA jalan data masuk ke server: memanggil
+     ?action=kirimRekapQCBatch (backend v.10) yang menulis SEMUA item di antrian ke Sheet
+     SEKALIGUS (1 lock), baru kirim SATU pesan rekap gabungan ke Telegram. Kalau ADA yang gagal
+     (mis. sisa sudah berubah duluan), yang gagal SAJA disisain di antrian (dicocokkan lewat
+     index balikan server) - yang sukses langsung hilang dari daftar, data terbaru ditarik ulang.
   6. Undo untuk laporan yang SUDAH lengkap 100% dari sesi-sesi sebelumnya (sudah tersimpan di
-     Sheet) tetap ada, tapi di preview ini juga disimulasikan (tidak memanggil server beneran),
-     biar aman dicoba-coba tanpa risiko ubah data asli.
-
-  📌 PERLU BACKEND (belum dikerjakan, nunggu preview ini disetujui):
-  - `apps_script_tim_potong_v09.js` perlu action baru (mis. `kirimRekapQCBatch`) yang nerima
-    SATU payload berisi array laporan (tiap elemen = { baris, mode, totalSelesai/totalReject
-    ATAU rincian per ukuran }), proses SEMUA nya jadi 1 transaksi tulis ke Sheet, baru kirim
-    1 pesan Telegram gabungan, balikin hasil sukses/gagal (idealnya per-item biar antrian yang
-    gagal aja yang tetap nyangkut di UI, gak ilang semua kalau cuma 1 yang gagal).
+     Sheet) tetap ada, manggil ?action=undoQC seperti biasa.
 -->
 <!doctype html>
 <html lang="id">
@@ -199,11 +190,6 @@ h2.section-title{
 .antrian-del{ flex:0 0 auto; width:22px; height:22px; border-radius:50%; border:none; background:var(--bad-tint); color:var(--bad); font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; }
 .antrian-count{ font-size:11px; font-weight:700; color:var(--ink); margin:0 0 6px; }
 .antrian-count span{ color:var(--accent-deep); }
-.preview-banner{
-  background:var(--warn-tint); border:1.4px dashed var(--warn); color:var(--warn); border-radius:12px;
-  padding:10px 14px; font-size:11.5px; font-weight:600; line-height:1.5; margin:0 0 16px;
-}
-.preview-banner b{ font-weight:800; }
 .telegram-mock{ background:#0E1621; border-radius:14px; padding:12px; margin-bottom:14px; }
 .bubble{ background:#1E2A38; color:#E8EDF2; border-radius:12px; padding:11px 13px; font-size:12px; line-height:1.5; white-space:pre-wrap; font-family:-apple-system,system-ui,sans-serif; }
 .bubble b{ color:#8FCBC0; }
@@ -313,11 +299,6 @@ input[type="number"]{ -moz-appearance:textfield; appearance:textfield; }
         Refresh
       </button>
     </div>
-  </div>
-
-  <div class="preview-banner">
-    🔧 <b>MODE PREVIEW v.10</b> — data QC dimuat asli (read-only), tapi "Tambah ke Daftar", "Kirim Rekap",
-    dan "Undo" di sini SEMUA cuma simulasi tampilan. Belum ada yang beneran ditulis ke Sheet atau dikirim ke Telegram.
   </div>
 
   <div class="main-tabs">
@@ -571,80 +552,24 @@ function urutkanQC(items, mode){
   return copy;
 }
 
-// ============ v.10 PREVIEW: 12 DATA DUMMY buat simulasi ============
-// Sengaja dibikin macam-macam kondisinya: ada yang 0% (belum disentuh), partial (sebagian
-// ukuran sudah), sudah lengkap 100% dari sesi sebelumnya (buat tes tombol "↩ Undo"), dan yang
-// "hampir penuh" (buat tes 1x "Tambah ke Daftar" langsung bikin lengkap + masuk rekap).
-// `sizes` di sini cuma qty/selesai/reject - total (asli/selesai/reject/jumlah) dihitung otomatis
-// di `bangunDummyQCItems()` biar gak salah jumlah manual.
-const DUMMY_QC_RAW = [
-  { baris: 2,  item: "ONESET DEWASA",         roll: "A12", kg: 24.5, tanggal: "18 Jul", hari: 2,
-    sizes: { S:{qty:8,selesai:0,reject:0}, M:{qty:12,selesai:0,reject:0}, L:{qty:10,selesai:0,reject:0}, XL:{qty:5,selesai:0,reject:0} } },
-  { baris: 3,  item: "SPEN ANAK",              roll: "B07", kg: 11.2, tanggal: "17 Jul", hari: 3,
-    sizes: { S:{qty:10,selesai:5,reject:0}, M:{qty:10,selesai:5,reject:1}, L:{qty:5,selesai:0,reject:0} } },
-  { baris: 4,  item: "CELANA JOGGER DEWASA",   roll: "C21", kg: 18.0, tanggal: "15 Jul", hari: 5,
-    sizes: { M:{qty:15,selesai:15,reject:0}, L:{qty:15,selesai:15,reject:0}, XL:{qty:10,selesai:8,reject:1} } },
-  { baris: 5,  item: "RFL KOMBINASI ANAK",     roll: "D03", kg: 9.6,  tanggal: "14 Jul", hari: 6,
-    sizes: { S:{qty:6,selesai:6,reject:0}, M:{qty:6,selesai:6,reject:0} } }, // sudah 100% - buat tes Undo
-  { baris: 6,  item: "SET. ANAK PENDEK",       roll: "E15", kg: 14.3, tanggal: "19 Jul", hari: 1,
-    sizes: { S:{qty:10,selesai:0,reject:0}, M:{qty:10,selesai:0,reject:0}, L:{qty:8,selesai:0,reject:0} } },
-  { baris: 7,  item: "ONESET PANJANG DEWASA",  roll: "F09", kg: 20.1, tanggal: "16 Jul", hari: 4,
-    sizes: { M:{qty:12,selesai:6,reject:0}, L:{qty:12,selesai:4,reject:2}, XL:{qty:8,selesai:0,reject:0} } },
-  { baris: 8,  item: "CELANA PENDEK ANAK",     roll: "G22", kg: 7.8,  tanggal: "19 Jul", hari: 1,
-    sizes: { S:{qty:12,selesai:0,reject:0}, M:{qty:12,selesai:0,reject:0} } },
-  { baris: 9,  item: "SPEN DEWASA",            roll: "H14", kg: 16.4, tanggal: "13 Jul", hari: 7,
-    sizes: { M:{qty:10,selesai:10,reject:0}, L:{qty:10,selesai:9,reject:1}, XL:{qty:5,selesai:5,reject:0} } }, // sudah 100% - buat tes Undo
-  { baris: 10, item: "RFL DEWASA",             roll: "I31", kg: 22.0, tanggal: "12 Jul", hari: 8,
-    sizes: { S:{qty:5,selesai:0,reject:0}, M:{qty:10,selesai:0,reject:0}, L:{qty:10,selesai:0,reject:0}, XL:{qty:5,selesai:0,reject:0} } }, // stale (>=3 hari)
-  { baris: 11, item: "ONESET KOMBINASI ANAK",  roll: "J05", kg: 13.5, tanggal: "19 Jul", hari: 0,
-    sizes: { S:{qty:8,selesai:0,reject:0}, M:{qty:8,selesai:0,reject:0} } },
-  { baris: 12, item: "CELANA PANJANG DEWASA",  roll: "K18", kg: 19.9, tanggal: "11 Jul", hari: 9,
-    sizes: { M:{qty:10,selesai:2,reject:0}, L:{qty:10,selesai:0,reject:0}, XL:{qty:10,selesai:0,reject:0}, XXL:{qty:5,selesai:0,reject:0} } }, // stale
-  { baris: 13, item: "SET. DEWASA",            roll: "L27", kg: 15.7, tanggal: "19 Jul", hari: 0,
-    sizes: { S:{qty:6,selesai:0,reject:0}, M:{qty:8,selesai:0,reject:0}, L:{qty:8,selesai:0,reject:0} } }
-];
-function bangunDummyQCItems(){
-  return DUMMY_QC_RAW.map(function(d){
-    let asli=0, sel=0, rej=0;
-    Object.keys(d.sizes).forEach(function(u){ asli += d.sizes[u].qty; sel += d.sizes[u].selesai; rej += d.sizes[u].reject; });
-    return {
-      baris: d.baris, item: d.item, roll: d.roll, kg: d.kg, tanggal: d.tanggal, hari: d.hari,
-      sizes: JSON.parse(JSON.stringify(d.sizes)), // copy - biar tiap "Refresh" data dummy balik segar
-      totalAsli: asli, totalSelesai: sel, totalReject: rej, jumlah: asli
-    };
-  });
-}
-
 function muatDashboardQC(paksaRefresh){
   const list = document.getElementById("qc-list");
   if (!qcSudahDimuat) list.innerHTML = '<div class="empty-state">Memuat…</div>';
-
-  // === v.10 PREVIEW: pakai 12 DATA DUMMY di atas, BUKAN fetch ke server asli, biar bisa ===
-  // === disimulasikan bebas tanpa risiko/ketergantungan ke sheet beneran. ===
-  // Kalau mau balik ke data asli lagi nanti, tinggal aktifkan blok fetch yang di-comment di bawah.
-  setTimeout(function(){
-    qcSudahDimuat = true;
-    qcAntrian = []; // refresh = reset simulasi, antrian ikut dikosongkan lagi
-    qcItemsRaw = bangunDummyQCItems();
-    qcItemsRaw.slice().sort(function(a,b){ return a.baris - b.baris; })
-      .forEach(function(item, i){ item.num = i + 1; });
-    renderQCCards();
-    renderDaftarAntrian();
-  }, 200);
-
-  /* ==== FETCH ASLI (nonaktif selama mode preview) ====
   const url = WEBAPP_URL + "?action=dashboardQC" + (paksaRefresh ? "&refresh=1" : "");
   fetch(url, { cache: "no-store" })
     .then(function(res){ return res.json(); })
     .then(function(data){
       qcSudahDimuat = true;
       qcItemsRaw = data.items || [];
+      // v.09: nomor urut STABIL - ditentukan dari baris (sheet row) ascending SEKALI di sini,
+      // BUKAN dihitung ulang tiap render/sort. Jadi walau tampilan diurutkan ulang (filter sort
+      // chip), nomor yang nempel di tiap kartu gak ikut berubah posisi.
       qcItemsRaw.slice().sort(function(a,b){ return a.baris - b.baris; })
         .forEach(function(item, i){ item.num = i + 1; });
       renderQCCards();
+      renderDaftarAntrian();
     })
     .catch(function(err){ list.innerHTML = '<div class="error-state">Gagal memuat data QC: '+err.message+'</div>'; });
-  ==== */
 }
 
 function renderQCCards(){
@@ -801,17 +726,19 @@ function renderQCCards(){
   wrap.querySelectorAll(".qc-undo").forEach(function(btn){
     btn.addEventListener("click", function(){
       const baris = parseInt(btn.dataset.baris, 10);
-      const item = qcItemsRaw.find(function(x){ return x.baris === baris; });
-      if (!item) return;
-      btn.disabled = true; btn.textContent = "Membatalkan (simulasi)…";
-      // PERLU BACKEND: nanti di sini panggil fetch(WEBAPP_URL+"?action=undoQC&baris="+baris)
-      // beneran. Untuk preview, cuma disimulasikan pakai delay pendek.
-      setTimeout(function(){
-        Object.keys(item.sizes).forEach(function(u){ item.sizes[u].selesai = 0; item.sizes[u].reject = 0; });
-        item.totalSelesai = 0; item.totalReject = 0;
-        renderQCCards();
-        tampilkanToast("↩ (SIMULASI) Submit terakhir dibatalkan");
-      }, 400);
+      btn.disabled = true; btn.textContent = "Membatalkan…";
+      fetch(WEBAPP_URL + "?action=undoQC&baris="+baris, { cache: "no-store" })
+        .then(function(res){ return res.json(); })
+        .then(function(hasil){
+          if (hasil && hasil.ok) {
+            tampilkanToast("↩ Submit terakhir dibatalkan");
+            muatDashboardQC(true);
+          } else {
+            tampilkanToast("Gagal undo: " + ((hasil && hasil.error) || "tidak diketahui"));
+            btn.disabled = false; btn.textContent = "↩ Undo";
+          }
+        })
+        .catch(function(err){ tampilkanToast("Gagal undo: "+err.message); btn.disabled = false; btn.textContent = "↩ Undo"; });
     });
   });
 }
@@ -879,30 +806,47 @@ function renderTelegramPreview(){
   previewEl.innerHTML = teks + "<span class='waktu'>preview - klik \"Kirim Rekap\" utk kirim beneran</span>";
 }
 
-// PERLU BACKEND: fungsi ini yang nanti diganti jadi fetch beneran ke action baru
-// (mis. `kirimRekapQCBatch`) yang mengirim SELURUH isi qcAntrian sebagai satu payload,
-// nulis ke Sheet, lalu kirim 1 pesan Telegram. Untuk sekarang cuma disimulasikan.
+// Kirim SELURUH isi qcAntrian sebagai 1 payload ke ?action=kirimRekapQCBatch - server yang
+// nulis semuanya ke Sheet + kirim 1 pesan Telegram gabungan. Balikannya { ok, terkirim,
+// gagal:[{index,error}], teks } - "index" itu posisi di array `payload` (SAMA urutan qcAntrian
+// saat payload dibuat), dipakai buat nyisain cuma item yg gagal di antrian.
 function kirimRekapBeneran(){
-  return new Promise(function(resolve){
-    setTimeout(function(){ resolve({ ok: true }); }, 700);
+  const payload = qcAntrian.map(function(a){
+    const item = { baris: a.baris, mode: a.mode, totalSelesai: a.totSel, totalReject: a.totRej };
+    if (a.mode === "detail") item.ukuran = a.perUkuran;
+    return item;
   });
+  const url = WEBAPP_URL + "?action=kirimRekapQCBatch&data=" + encodeURIComponent(JSON.stringify(payload));
+  return fetch(url, { cache: "no-store" }).then(function(res){ return res.json(); });
 }
 
 document.getElementById("btnKirimRekap").addEventListener("click", function(){
   if (!qcAntrian.length) { tampilkanToast("Daftar antrian masih kosong."); return; }
   const btn = document.getElementById("btnKirimRekap");
-  btn.disabled = true; btn.textContent = "Mengirim (simulasi)…";
+  btn.disabled = true; btn.textContent = "Mengirim…";
+  const antrianSaatKirim = qcAntrian.slice(); // snapshot urutan - dipakai cocokkan index "gagal"
 
   kirimRekapBeneran().then(function(hasil){
     btn.disabled = false; btn.textContent = "✈️ Kirim Rekap";
     if (hasil && hasil.ok) {
-      tampilkanToast("✓ (SIMULASI) Rekap "+qcAntrian.length+" laporan terkirim ke Telegram");
-      qcAntrian = [];
-      renderQCCards();
+      const gagalIdx = (hasil.gagal || []).map(function(g){ return g.index; });
+      if (gagalIdx.length === 0) {
+        tampilkanToast("✓ Rekap "+antrianSaatKirim.length+" laporan terkirim ke Telegram");
+        qcAntrian = [];
+      } else {
+        // sisain cuma item yang GAGAL di antrian (yg sukses sudah beneran tersimpan di server)
+        qcAntrian = antrianSaatKirim.filter(function(_, i){ return gagalIdx.indexOf(i) !== -1; });
+        const pesanGagal = hasil.gagal.map(function(g){ return "· " + g.error; }).join(" ");
+        tampilkanToast((hasil.terkirim||0)+" terkirim, "+gagalIdx.length+" gagal - "+pesanGagal);
+      }
+      muatDashboardQC(true); // tarik data terbaru dari server (angka yg beneran tersimpan)
       renderDaftarAntrian();
     } else {
       tampilkanToast("Gagal kirim: " + ((hasil && hasil.error) || "tidak diketahui"));
     }
+  }).catch(function(err){
+    btn.disabled = false; btn.textContent = "✈️ Kirim Rekap";
+    tampilkanToast("Gagal kirim: " + err.message);
   });
 });
 
