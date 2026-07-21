@@ -246,6 +246,23 @@ h2.section-title{
 .qc-field input{ width:100%; padding:6px 7px; border-radius:7px; border:1.3px solid var(--line); font-size:13.5px; background:var(--surface); color:var(--ink); }
 .qc-btn-submit{ background:var(--accent); color:#fff; border:none; border-radius:6px; font-size:10px; font-weight:700; padding:4.5px 9px; cursor:pointer; flex:0 0 auto; white-space:nowrap; }
 .qc-btn-submit:disabled{ opacity:.6; }
+.btn-atur-tampilan{ background:var(--surface-2); color:var(--ink); border:1px solid var(--line); border-radius:8px; font-size:11px; font-weight:700; padding:6px 10px; cursor:pointer; white-space:nowrap; }
+.cfg-overlay{ position:fixed; inset:0; background:rgba(20,17,10,.45); display:flex; align-items:flex-end; justify-content:center; z-index:50; }
+.cfg-sheet{ background:var(--surface); width:100%; max-width:460px; border-radius:16px 16px 0 0; padding:16px 16px 20px; max-height:82vh; overflow-y:auto; box-shadow:0 -8px 30px rgba(0,0,0,.25); }
+.cfg-sheet h3{ margin:0 0 3px; font-size:15px; }
+.cfg-sheet .cfg-sub{ font-size:11.5px; color:var(--ink-muted); margin:0 0 14px; }
+.cfg-row{ display:flex; align-items:center; gap:9px; padding:9px 8px; border:1px solid var(--line); border-radius:10px; margin-bottom:7px; background:var(--surface); }
+.cfg-row label{ flex:1 1 auto; display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700; cursor:pointer; }
+.cfg-row input[type="checkbox"]{ width:17px; height:17px; accent-color:var(--accent); flex:0 0 auto; }
+.cfg-row.off label{ color:var(--ink-muted); }
+.cfg-move{ display:flex; gap:3px; flex:0 0 auto; }
+.cfg-move button{ width:26px; height:26px; border-radius:7px; border:1px solid var(--line); background:var(--surface-2); color:var(--ink); font-size:12px; cursor:pointer; }
+.cfg-move button:disabled{ opacity:.35; cursor:default; }
+.cfg-actions{ display:flex; gap:8px; margin-top:14px; }
+.cfg-actions button{ flex:1 1 auto; border:none; border-radius:9px; padding:10px; font-size:13px; font-weight:700; cursor:pointer; }
+.cfg-btn-batal{ background:var(--surface-2); color:var(--ink); }
+.cfg-btn-simpan{ background:var(--accent); color:#fff; }
+.cfg-btn-simpan:disabled{ opacity:.6; }
 .qc-pending-badge{ font-size:10.5px; font-weight:700; color:var(--accent-deep); background:var(--surface-2); border:1px dashed var(--accent); border-radius:999px; padding:3px 8px; margin:0 0 6px; display:inline-block; }
 .pending-val{ color:var(--accent-deep); font-weight:700; }
 .pending-val i{ font-size:8px; font-weight:700; font-style:normal; opacity:.75; margin-left:3px; text-transform:uppercase; }
@@ -345,6 +362,7 @@ input[type="number"]{ -moz-appearance:textfield; appearance:textfield; }
     </div>
     <div class="qc-toolbar">
       <span id="qcCount"></span>
+      <button class="btn-atur-tampilan" type="button" id="btnAturTampilan">✏️ Atur Tampilan</button>
     </div>
     <div class="filter-bar" id="qcFilterBar">
       <span class="filter-chip active" data-sort="hari">Paling lama</span>
@@ -375,6 +393,18 @@ input[type="number"]{ -moz-appearance:textfield; appearance:textfield; }
 </div>
 
 <div class="toast" id="toastEl"></div>
+
+<div class="cfg-overlay" id="cfgOverlay" style="display:none;">
+  <div class="cfg-sheet">
+    <h3>Atur Tampilan Kartu QC</h3>
+    <p class="cfg-sub">Pilih info yang mau ditampilkan di kartu + urutannya. Berlaku buat SEMUA orang yang buka dashboard ini.</p>
+    <div id="cfgRows"></div>
+    <div class="cfg-actions">
+      <button class="cfg-btn-batal" type="button" id="cfgBatal">Batal</button>
+      <button class="cfg-btn-simpan" type="button" id="cfgSimpan">Simpan</button>
+    </div>
+  </div>
+</div>
 
 <script>
 // v.11: kalau halaman ini dibuka sebagai Mini App Telegram beneran (lewat link Mini App, bukan
@@ -537,6 +567,30 @@ let qcSortMode = "hari";
 let qcSudahDimuat = false;
 const qcModeUI = {};
 
+// v.13: konfigurasi field mana yang tampil di baris meta kartu (+ urutannya) - datang dari
+// server (dashboardQC payload, field cardConfig), disimpan bareng lewat panel "Atur Tampilan".
+// Default di sini CUMA fallback sebelum data pertama kali kemuat / kalau server belum pernah
+// menyimpan pengaturan - begitu fetch pertama sukses, langsung ditimpa sama punya server.
+let qcCardConfig = [
+  { key: "tanggal", label: "Tanggal", show: true },
+  { key: "roll", label: "Kode Roll", show: true },
+  { key: "kg", label: "Kg Terpakai", show: true },
+  { key: "status", label: "Status", show: true }
+];
+
+function metaFieldHtml(key, item, badgeKanan){
+  if (key === "tanggal") return "<span>"+(item.tanggal||"-")+"</span>";
+  if (key === "roll") return '<span class="roll">Roll '+item.roll+'</span>';
+  if (key === "kg") return '<span class="kg">'+fmtKg(item.kg||0)+' kg</span>';
+  if (key === "status") return badgeKanan;
+  return "";
+}
+function buildMetaLine(item, badgeKanan){
+  const visible = (qcCardConfig||[]).filter(function(f){ return f.show; });
+  if (!visible.length) return "";
+  return visible.map(function(f){ return metaFieldHtml(f.key, item, badgeKanan); }).join('<span class="dot">·</span>');
+}
+
 // v.10: antrian lokal - laporan yang sudah "Tambah ke Daftar" tapi BELUM dikirim ke server.
 // Tiap elemen: { tempId, baris, item, roll, kg, mode, totSel, totRej, perUkuran, deltaPerUkuran, deltaSel, deltaRej }
 let qcAntrian = [];
@@ -582,6 +636,7 @@ function muatDashboardQC(paksaRefresh){
     .then(function(data){
       qcSudahDimuat = true;
       qcItemsRaw = data.items || [];
+      if (data.cardConfig && Array.isArray(data.cardConfig) && data.cardConfig.length) qcCardConfig = data.cardConfig;
       // v.09: nomor urut STABIL - ditentukan dari baris (sheet row) ascending SEKALI di sini,
       // BUKAN dihitung ulang tiap render/sort. Jadi walau tampilan diurutkan ulang (filter sort
       // chip), nomor yang nempel di tiap kartu gak ikut berubah posisi.
@@ -674,7 +729,7 @@ function renderQCCards(){
 
     return '<div class="qc-card'+(lengkapEfektif?' lengkap':'')+'" data-baris="'+item.baris+'">' +
       '<div class="qc-top"><div class="qc-top-left"><p class="qc-title"><span class="qc-num">'+(item.num||'')+'</span>'+item.item+'</p>' +
-        '<div class="qc-meta2"><span>'+(item.tanggal||'-')+'</span><span class="dot">·</span><span class="roll">Roll '+item.roll+'</span><span class="dot">·</span><span class="kg">'+fmtKg(item.kg||0)+' kg</span><span class="dot">·</span>'+badgeKanan+'</div>' +
+        '<div class="qc-meta2">'+buildMetaLine(item, badgeKanan)+'</div>' +
       '</div>' + qtyBadge + '</div>' +
       '<div class="qc-sizes">'+sizeChips+'</div>' +
       (pendingBadge ? '<div>'+pendingBadge+'</div>' : '') +
@@ -778,6 +833,74 @@ btnClearQC.addEventListener("click", function(){
   renderQCCards();
 });
 pasangFilterBar("qcFilterBar", function(mode){ qcSortMode = mode; renderQCCards(); });
+
+// ============ PANEL "ATUR TAMPILAN" (v.13 - konfigurasi kartu QC, tersimpan di server) ============
+let cfgDraft = []; // copy kerja sementara selama modal terbuka - qcCardConfig BARU ketimpa pas Simpan sukses
+
+function renderCfgRows(){
+  const wrap = document.getElementById("cfgRows");
+  wrap.innerHTML = cfgDraft.map(function(f, i){
+    return '<div class="cfg-row'+(f.show?'':' off')+'" data-key="'+f.key+'">' +
+        '<label><input type="checkbox" data-idx="'+i+'"'+(f.show?' checked':'')+'>'+f.label+'</label>' +
+        '<div class="cfg-move">' +
+          '<button type="button" data-move="up" data-idx="'+i+'"'+(i===0?' disabled':'')+'>▲</button>' +
+          '<button type="button" data-move="down" data-idx="'+i+'"'+(i===cfgDraft.length-1?' disabled':'')+'>▼</button>' +
+        '</div>' +
+      '</div>';
+  }).join("");
+
+  wrap.querySelectorAll('input[type="checkbox"]').forEach(function(cb){
+    cb.addEventListener("change", function(){
+      cfgDraft[parseInt(cb.dataset.idx,10)].show = cb.checked;
+      renderCfgRows();
+    });
+  });
+  wrap.querySelectorAll('button[data-move]').forEach(function(btn){
+    btn.addEventListener("click", function(){
+      const i = parseInt(btn.dataset.idx, 10);
+      const j = btn.dataset.move === "up" ? i-1 : i+1;
+      if (j < 0 || j >= cfgDraft.length) return;
+      const tmp = cfgDraft[i]; cfgDraft[i] = cfgDraft[j]; cfgDraft[j] = tmp;
+      renderCfgRows();
+    });
+  });
+}
+
+document.getElementById("btnAturTampilan").addEventListener("click", function(){
+  cfgDraft = qcCardConfig.map(function(f){ return { key:f.key, label:f.label, show:f.show }; }); // deep-ish copy
+  renderCfgRows();
+  document.getElementById("cfgOverlay").style.display = "flex";
+});
+document.getElementById("cfgOverlay").addEventListener("click", function(ev){
+  if (ev.target.id === "cfgOverlay") document.getElementById("cfgOverlay").style.display = "none";
+});
+document.getElementById("cfgBatal").addEventListener("click", function(){
+  document.getElementById("cfgOverlay").style.display = "none";
+});
+document.getElementById("cfgSimpan").addEventListener("click", function(){
+  const btn = document.getElementById("cfgSimpan");
+  btn.disabled = true; btn.textContent = "Menyimpan…";
+  const body = new URLSearchParams();
+  body.set("action", "saveCardConfig");
+  body.set("data", JSON.stringify(cfgDraft));
+  fetch(WEBAPP_URL, { method:"POST", body: body })
+    .then(function(res){ return res.json(); })
+    .then(function(hasil){
+      btn.disabled = false; btn.textContent = "Simpan";
+      if (hasil && hasil.ok) {
+        qcCardConfig = hasil.config || cfgDraft;
+        document.getElementById("cfgOverlay").style.display = "none";
+        renderQCCards();
+        tampilkanToast("✓ Tampilan kartu disimpan - berlaku buat semua yang buka dashboard ini");
+      } else {
+        tampilkanToast("Gagal simpan: " + ((hasil && hasil.error) || "tidak diketahui"));
+      }
+    })
+    .catch(function(err){
+      btn.disabled = false; btn.textContent = "Simpan";
+      tampilkanToast("Gagal simpan: " + err.message);
+    });
+});
 
 // ============ v.10: DAFTAR ANTRIAN + PREVIEW TELEGRAM GABUNGAN ============
 function renderDaftarAntrian(){
