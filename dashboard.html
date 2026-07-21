@@ -1,7 +1,16 @@
 <!--
-  DASHBOARD STOK KAIN - TIM POTONG (v.10)
+  DASHBOARD STOK KAIN - TIM POTONG (v.11)
   Halaman statis, di-hosting di GitHub Pages yang sama dengan index.html (Mini App), diupload
-  sebagai "dashboard.html". Backend: apps_script_tim_potong_v10.js (?action=kirimRekapQCBatch).
+  sebagai "dashboard.html". Backend: apps_script_tim_potong_v11.js.
+
+  v.11 (perubahan hari ini): tambah tg.ready()/tg.expand() (Telegram WebApp API), sama pola
+  yang sudah dipakai Mini App Tim Potong (index_v07.html) - biar kalau halaman ini dibuka lewat
+  link Mini App (bukan link browser biasa), tampilannya "menyatu" ke Telegram dan GAK jadi
+  floating window yang nutupin chat pas di-minimize. Syaratnya: Script Property
+  DASHBOARD_MINIAPP_SHORT_NAME sudah didaftarkan di backend (lihat catatan lengkap di header
+  apps_script_tim_potong_v11.js) - kalau belum, tombol "/stok" masih fallback ke link browser
+  biasa seperti sebelumnya (kode di file ini tetap aman jalan di kedua kasus, tg jadi null kalau
+  bukan dibuka dari Telegram/bukan sbg Mini App).
 
   v.10 (perubahan dari v.09, sesuai permintaan - pola antrian, persis Mini App Tim Potong):
   1. Tombol "Submit"/"✓" di tiap kartu QC diganti jadi "+ Tambah ke Daftar" - klik itu TIDAK
@@ -31,6 +40,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Dashboard Stok Kain — TIM POTONG</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
 :root{
   --bg:#F6F3EC; --surface:#FFFFFF; --surface-2:#EFEAE0;
@@ -365,6 +375,15 @@ input[type="number"]{ -moz-appearance:textfield; appearance:textfield; }
 <div class="toast" id="toastEl"></div>
 
 <script>
+// v.11: kalau halaman ini dibuka sebagai Mini App Telegram beneran (lewat link Mini App, bukan
+// link browser biasa - lihat catatan DASHBOARD_MINIAPP_SHORT_NAME di backend), tg.ready()/
+// tg.expand() bikin tampilannya "menyatu" ke Telegram (gak jadi floating window pas
+// di-minimize) - PERSIS pola yang sudah dipakai di Mini App Tim Potong (index_v07.html).
+// Kalau dibuka lewat link browser biasa (window.Telegram gak ada), `tg` jadi null dan baris ini
+// dilewati - aman, halaman tetap jalan seperti biasa.
+const tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
+if (tg) { tg.ready(); tg.expand(); }
+
 const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzaWvCi3Vw2fnFgBPfn1qvFBSqYXOrdWi8yxvKc8WOtaIH78JN83dIMiQtQeockW6EDBw/exec";
 
 function fmtKg(n){ return (n || 0).toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 }); }
