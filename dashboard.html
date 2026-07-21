@@ -1,9 +1,24 @@
 <!--
-  DASHBOARD STOK KAIN - TIM POTONG (v.11)
+  DASHBOARD STOK KAIN - TIM POTONG (v.16)
   Halaman statis, di-hosting di GitHub Pages yang sama dengan index.html (Mini App), diupload
-  sebagai "dashboard.html". Backend: apps_script_tim_potong_v11.js.
+  sebagai "dashboard.html". Backend: apps_script_tim_potong_v15.js.
 
-  v.11 (perubahan hari ini): tambah tg.ready()/tg.expand() (Telegram WebApp API), sama pola
+  v.16 (hari ini):
+  1. Reposisi bagian tab QC - Kartu QC / Daftar Antrian / Preview & Kirim Rekap sekarang masing2
+     dibungkus 1 blok yang bisa diatur urutan tampil + show/hide-nya lewat panel "Atur Tampilan"
+     (grup "Urutan Bagian"). Section Arsip Selesai TETAP dikunci di posisi paling bawah. Tombol
+     "Atur Tampilan" dipindah ke baris yang SELALU kelihatan (di luar blok manapun) - supaya
+     kalau salah satu blok disembunyikan, gak sampai kekunci gak bisa buka panel lagi.
+  2. Adjuster ukuran font per bagian (Kartu QC / Daftar Antrian / Preview) - 4 preset (Kecil/
+     Sedang/Besar/Sangat Besar), diterapkan lewat CSS var --scale-card/--scale-antrian/
+     --scale-preview + calc() di tiap rule font-size terkait.
+  3. OPTIMASI LOADING - dulu (v.15) Stok & QC selalu dimuat BARENGAN begitu dashboard dibuka.
+     Sekarang dipecah 2 tahap: (a) ?action=dashboardCfg - CUMA baca pengaturan dari Script
+     Properties, gak nyentuh Sheet sama sekali, jauh lebih cepat; (b) berdasarkan "Tab dibuka
+     pertama kali", CUMA tab itu yang dimuat datanya duluan - tab satunya tetap lazy (baru
+     dimuat kalau diklik).
+
+  v.11 (sebelumnya): tambah tg.ready()/tg.expand() (Telegram WebApp API), sama pola
   yang sudah dipakai Mini App Tim Potong (index_v07.html) - biar kalau halaman ini dibuka lewat
   link Mini App (bukan link browser biasa), tampilannya "menyatu" ke Telegram dan GAK jadi
   floating window yang nutupin chat pas di-minimize. Syaratnya: Script Property
@@ -50,6 +65,7 @@
   --warn:#B4790E; --warn-tint:#FBEEDA;
   --bad:#B23B2E; --bad-tint:#F8E4E0;
   --shadow: 0 1px 2px rgba(30,36,48,0.04), 0 8px 24px -12px rgba(30,36,48,0.12);
+  --scale-card:1; --scale-antrian:1; --scale-preview:1;
 }
 :root[data-theme="dark"]{
   --bg:#14181F; --surface:#1B2129; --surface-2:#212934;
@@ -176,7 +192,7 @@ h2.section-title{
 .p-meta .kg{ color:var(--warn); }
 .p-meta .dot{ color:var(--line); font-weight:400; }
 .p-sizes{ display:flex; flex-wrap:wrap; gap:3px; margin-bottom:3px; }
-.size-chip{ font-size:10.5px; font-weight:600; background:var(--surface-2); color:var(--ink); padding:2px 6px; border-radius:5px; }
+.size-chip{ font-size:calc(10.5px * var(--scale-card)); font-weight:600; background:var(--surface-2); color:var(--ink); padding:2px 6px; border-radius:5px; }
 .size-chip b{ color:var(--accent); }
 .p-days{ font-size:9.5px; color:var(--ink-muted); margin-top:2px; }
 .p-days.stale{ color:var(--warn); font-weight:700; }
@@ -185,23 +201,23 @@ h2.section-title{
 /* ===== QC ===== */
 .qc-toolbar{ display:flex; justify-content:space-between; align-items:center; margin:0 0 10px; gap:8px; flex-wrap:wrap; }
 .qc-toolbar span{ font-size:11px; color:var(--ink-muted); }
-.btn-rekap{ font-size:11.5px; font-weight:700; color:#fff; background:var(--accent); border:none; border-radius:999px; padding:8px 14px; cursor:pointer; }
+.btn-rekap{ font-size:calc(11.5px * var(--scale-preview)); font-weight:700; color:#fff; background:var(--accent); border:none; border-radius:999px; padding:8px 14px; cursor:pointer; }
 .btn-rekap:disabled{ opacity:.6; pointer-events:none; }
 
 .antrian-wrap{ margin-bottom:12px; }
-.antrian-empty{ font-size:11.5px; color:var(--ink-muted); background:var(--surface); border:1px dashed var(--line); border-radius:12px; padding:12px 14px; text-align:center; }
+.antrian-empty{ font-size:calc(11.5px * var(--scale-antrian)); color:var(--ink-muted); background:var(--surface); border:1px dashed var(--line); border-radius:12px; padding:12px 14px; text-align:center; }
 .antrian-list{ display:flex; flex-direction:column; gap:6px; }
 .antrian-item{ display:flex; align-items:center; gap:8px; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:8px 10px; box-shadow:var(--shadow); }
 .antrian-item .a-info{ flex:1 1 auto; min-width:0; }
-.antrian-item .a-name{ font-size:11.5px; font-weight:700; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.antrian-item .a-detail{ font-size:10px; color:var(--ink-muted); margin:2px 0 0; }
+.antrian-item .a-name{ font-size:calc(11.5px * var(--scale-antrian)); font-weight:700; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.antrian-item .a-detail{ font-size:calc(10px * var(--scale-antrian)); color:var(--ink-muted); margin:2px 0 0; }
 .antrian-item .a-detail b{ color:var(--good); }
 .antrian-item .a-detail b.rej{ color:var(--warn); }
 .antrian-del{ flex:0 0 auto; width:22px; height:22px; border-radius:50%; border:none; background:var(--bad-tint); color:var(--bad); font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; }
-.antrian-count{ font-size:11px; font-weight:700; color:var(--ink); margin:0 0 6px; }
+.antrian-count{ font-size:calc(11px * var(--scale-antrian)); font-weight:700; color:var(--ink); margin:0 0 6px; }
 .antrian-count span{ color:var(--accent-deep); }
 .telegram-mock{ background:#0E1621; border-radius:14px; padding:12px; margin-bottom:14px; }
-.bubble{ background:#1E2A38; color:#E8EDF2; border-radius:12px; padding:11px 13px; font-size:12px; line-height:1.5; white-space:pre-wrap; font-family:-apple-system,system-ui,sans-serif; }
+.bubble{ background:#1E2A38; color:#E8EDF2; border-radius:12px; padding:11px 13px; font-size:calc(12px * var(--scale-preview)); line-height:1.5; white-space:pre-wrap; font-family:-apple-system,system-ui,sans-serif; }
 .bubble b{ color:#8FCBC0; }
 .bubble .waktu{ display:block; text-align:right; font-size:9.5px; color:#7C8A99; margin-top:6px; }
 .btn-kirim-beneran{
@@ -220,33 +236,34 @@ h2.section-title{
 .qc-card.lengkap{ border-color:var(--good); background:var(--good-tint); }
 .qc-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:6px; }
 .qc-top-left{ min-width:0; flex:1 1 auto; }
-.qc-title{ font-size:16px; font-weight:800; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:flex; align-items:center; gap:6px; }
+.qc-title{ font-size:calc(16px * var(--scale-card)); font-weight:800; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:flex; align-items:center; gap:6px; }
 .qc-num{ display:inline-flex; align-items:center; justify-content:center; width:17px; height:17px; border-radius:50%; background:var(--surface-2); color:var(--ink-muted); font-size:9.5px; font-weight:700; flex:0 0 auto; }
-.qc-qty-badge{ display:inline-flex; align-items:center; justify-content:center; min-width:38px; height:38px; padding:0 7px; border-radius:50%; background:#111; color:#fff; font-size:18px; font-weight:800; line-height:1; flex:0 0 auto; box-shadow:0 2px 6px rgba(0,0,0,.28); }
-.qc-meta2{ font-size:11.5px; font-weight:700; color:var(--ink); margin:3px 0 6px; display:flex; flex-wrap:wrap; align-items:center; gap:3px 6px; }
+.qc-qty-badge{ display:inline-flex; align-items:center; justify-content:center; min-width:38px; height:38px; padding:0 7px; border-radius:50%; background:#111; color:#fff; font-size:calc(18px * var(--scale-card)); font-weight:800; line-height:1; flex:0 0 auto; box-shadow:0 2px 6px rgba(0,0,0,.28); }
+.qc-meta2{ font-size:calc(11.5px * var(--scale-card)); font-weight:700; color:var(--ink); margin:3px 0 6px; display:flex; flex-wrap:wrap; align-items:center; gap:3px 6px; }
 .qc-meta2 .roll{ color:var(--accent-deep); }
 .qc-meta2 .kg{ color:var(--warn); }
 .qc-meta2 .dot{ color:var(--line); font-weight:400; }
-.qc-badge{ font-size:10.5px; font-weight:700; background:var(--good); color:#fff; padding:2px 8px; border-radius:999px; white-space:nowrap; flex:0 0 auto; }
-.qc-days{ font-size:10.5px; font-weight:600; color:var(--ink-muted); white-space:nowrap; flex:0 0 auto; }
+.qc-badge{ font-size:calc(10.5px * var(--scale-card)); font-weight:700; background:var(--good); color:#fff; padding:2px 8px; border-radius:999px; white-space:nowrap; flex:0 0 auto; }
+.qc-days{ font-size:calc(10.5px * var(--scale-card)); font-weight:600; color:var(--ink-muted); white-space:nowrap; flex:0 0 auto; }
 .qc-days.stale{ color:var(--warn); font-weight:700; }
 .qc-sizes{ display:flex; flex-wrap:wrap; gap:3px; margin-bottom:6px; }
 .qc-progress{ height:5px; border-radius:3px; background:var(--surface-2); overflow:hidden; display:flex; margin:6px 0 3px; }
 .qc-progress .p-sel{ background:var(--good); height:100%; }
 .qc-progress .p-rej{ background:var(--warn); height:100%; }
-.qc-progress-label{ display:flex; justify-content:space-between; font-size:10.5px; color:var(--ink-muted); margin-bottom:6px; }
+.qc-progress-label{ display:flex; justify-content:space-between; font-size:calc(10.5px * var(--scale-card)); color:var(--ink-muted); margin-bottom:6px; }
 .qc-progress-label b{ color:var(--ink); }
 .qc-mode-switch{ display:flex; gap:5px; margin-bottom:6px; justify-content:space-between; align-items:center; }
 .mode-left{ display:flex; gap:5px; }
-.qc-mode-btn{ font-size:10.5px; font-weight:700; padding:3px 9px; border-radius:999px; border:1px solid var(--line); background:var(--surface); color:var(--ink-muted); cursor:pointer; }
+.qc-mode-btn{ font-size:calc(10.5px * var(--scale-card)); font-weight:700; padding:3px 9px; border-radius:999px; border:1px solid var(--line); background:var(--surface); color:var(--ink-muted); cursor:pointer; }
 .qc-mode-btn.active{ background:var(--accent); border-color:var(--accent); color:#fff; }
 .qc-form-row{ display:flex; gap:6px; align-items:flex-end; }
 .qc-field{ flex:1 1 auto; min-width:0; }
-.qc-field label{ font-size:10.5px; font-weight:600; color:var(--ink-muted); display:block; margin-bottom:2px; }
-.qc-field input{ width:100%; padding:6px 7px; border-radius:7px; border:1.3px solid var(--line); font-size:13.5px; background:var(--surface); color:var(--ink); }
-.qc-btn-submit{ background:var(--accent); color:#fff; border:none; border-radius:6px; font-size:10px; font-weight:700; padding:4.5px 9px; cursor:pointer; flex:0 0 auto; white-space:nowrap; }
+.qc-field label{ font-size:calc(10.5px * var(--scale-card)); font-weight:600; color:var(--ink-muted); display:block; margin-bottom:2px; }
+.qc-field input{ width:100%; padding:6px 7px; border-radius:7px; border:1.3px solid var(--line); font-size:calc(13.5px * var(--scale-card)); background:var(--surface); color:var(--ink); }
+.qc-btn-submit{ background:var(--accent); color:#fff; border:none; border-radius:6px; font-size:calc(10px * var(--scale-card)); font-weight:700; padding:4.5px 9px; cursor:pointer; flex:0 0 auto; white-space:nowrap; }
 .qc-btn-submit:disabled{ opacity:.6; }
 .btn-atur-tampilan{ background:var(--surface-2); color:var(--ink); border:1px solid var(--line); border-radius:8px; font-size:11px; font-weight:700; padding:6px 10px; cursor:pointer; white-space:nowrap; }
+.settings-row{ display:flex; justify-content:flex-end; margin:8px 0 14px; }
 .cfg-overlay{ position:fixed; inset:0; background:rgba(20,17,10,.45); display:flex; align-items:flex-end; justify-content:center; z-index:50; }
 .cfg-sheet{ background:var(--surface); width:100%; max-width:460px; border-radius:16px 16px 0 0; padding:16px 16px 20px; max-height:82vh; overflow-y:auto; box-shadow:0 -8px 30px rgba(0,0,0,.25); }
 .cfg-sheet h3{ margin:0 0 3px; font-size:15px; }
@@ -263,18 +280,31 @@ h2.section-title{
 .cfg-btn-batal{ background:var(--surface-2); color:var(--ink); }
 .cfg-btn-simpan{ background:var(--accent); color:#fff; }
 .cfg-btn-simpan:disabled{ opacity:.6; }
-.qc-pending-badge{ font-size:10.5px; font-weight:700; color:var(--accent-deep); background:var(--surface-2); border:1px dashed var(--accent); border-radius:999px; padding:3px 8px; margin:0 0 6px; display:inline-block; }
+.cfg-group-title{ font-size:11.5px; font-weight:800; text-transform:uppercase; letter-spacing:.3px; color:var(--ink-muted); margin:16px 0 7px; }
+.cfg-group-title:first-of-type{ margin-top:0; }
+.cfg-group-note{ font-size:10.5px; color:var(--ink-muted); margin:-3px 0 8px; }
+.cfg-row{ position:relative; }
+.cfg-row .cfg-chk{ width:17px; height:17px; accent-color:var(--accent); flex:0 0 auto; margin-right:2px; }
+.cfg-row-label{ flex:1 1 auto; font-size:13px; font-weight:700; min-width:0; }
+.cfg-label-input{ flex:1 1 auto; min-width:0; font-size:13px; font-weight:700; padding:5px 7px; border-radius:6px; border:1.3px solid var(--line); background:var(--surface); color:var(--ink); }
+.cfg-inline-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 2px; }
+.cfg-inline-row label{ font-size:13px; font-weight:700; }
+.cfg-inline-row select, .cfg-inline-row input[type="number"]{ font-size:13px; padding:6px 8px; border-radius:8px; border:1.3px solid var(--line); background:var(--surface); color:var(--ink); }
+.cfg-swatch-row{ display:flex; gap:9px; padding:4px 2px 2px; }
+.cfg-swatch{ width:34px; height:34px; border-radius:50%; border:2.5px solid transparent; cursor:pointer; padding:0; }
+.cfg-swatch.active{ border-color:var(--ink); }
+.qc-pending-badge{ font-size:calc(10.5px * var(--scale-card)); font-weight:700; color:var(--accent-deep); background:var(--surface-2); border:1px dashed var(--accent); border-radius:999px; padding:3px 8px; margin:0 0 6px; display:inline-block; }
 .pending-val{ color:var(--accent-deep); font-weight:700; }
 .pending-val i{ font-size:8px; font-weight:700; font-style:normal; opacity:.75; margin-left:3px; text-transform:uppercase; }
 .qc-tabel{ width:100%; border-collapse:collapse; margin-bottom:5px; }
-.qc-tabel th{ font-size:10px; font-weight:700; text-transform:uppercase; color:var(--ink-muted); text-align:center; padding:3px 2px; border-bottom:1px solid var(--line); }
+.qc-tabel th{ font-size:calc(10px * var(--scale-card)); font-weight:700; text-transform:uppercase; color:var(--ink-muted); text-align:center; padding:3px 2px; border-bottom:1px solid var(--line); }
 .qc-tabel th:first-child{ text-align:left; }
-.qc-tabel td{ padding:4px 2px; text-align:center; border-bottom:1px dashed var(--line); font-size:12px; }
+.qc-tabel td{ padding:4px 2px; text-align:center; border-bottom:1px dashed var(--line); font-size:calc(12px * var(--scale-card)); }
 .qc-tabel td:first-child{ text-align:left; font-weight:700; }
 .qc-tabel tr.lengkap-u td{ color:var(--good); }
-.qc-tabel input{ width:34px; padding:3px; border-radius:5px; border:1.3px solid var(--line); font-size:11.5px; text-align:center; background:var(--surface); color:var(--ink); }
-.qc-undo{ font-size:10.5px; font-weight:700; color:var(--bad); background:var(--bad-tint); border:none; border-radius:999px; padding:3px 9px; cursor:pointer; flex:0 0 auto; }
-.qc-error{ font-size:11px; color:var(--bad); margin-top:4px; }
+.qc-tabel input{ width:34px; padding:3px; border-radius:5px; border:1.3px solid var(--line); font-size:calc(11.5px * var(--scale-card)); text-align:center; background:var(--surface); color:var(--ink); }
+.qc-undo{ font-size:calc(10.5px * var(--scale-card)); font-weight:700; color:var(--bad); background:var(--bad-tint); border:none; border-radius:999px; padding:3px 9px; cursor:pointer; flex:0 0 auto; }
+.qc-error{ font-size:calc(11px * var(--scale-card)); color:var(--bad); margin-top:4px; }
 
 /* Hilangkan panah stepper bawaan browser di semua input angka */
 input[type="number"]::-webkit-inner-spin-button,
@@ -334,6 +364,9 @@ input[type="number"]{ -moz-appearance:textfield; appearance:textfield; }
     <div class="main-tab-btn active" data-maintab="stok">📦 Stok Kain</div>
     <div class="main-tab-btn" data-maintab="qc">✅ Proses &amp; QC</div>
   </div>
+  <div class="settings-row">
+    <button class="btn-atur-tampilan" type="button" id="btnAturTampilan">✏️ Atur Tampilan</button>
+  </div>
 
   <div id="panel-stok">
     <div class="stat-card good" style="max-width:340px;">
@@ -355,39 +388,42 @@ input[type="number"]{ -moz-appearance:textfield; appearance:textfield; }
   </div>
 
   <div id="panel-qc" style="display:none;">
-    <div class="search-wrap">
-      <input type="text" id="searchQC" placeholder="Cari laporan/warna...">
-      <svg class="icon" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M21 21l-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-      <button class="search-clear" id="btnClearQC">✕</button>
-    </div>
-    <div class="qc-toolbar">
-      <span id="qcCount"></span>
-      <button class="btn-atur-tampilan" type="button" id="btnAturTampilan">✏️ Atur Tampilan</button>
-    </div>
-    <div class="filter-bar" id="qcFilterBar">
-      <span class="filter-chip active" data-sort="hari">Paling lama</span>
-      <span class="filter-chip" data-sort="jenis">Jenis A-Z</span>
-      <span class="filter-chip" data-sort="tanggal">Tanggal terbaru</span>
-    </div>
-    <div class="qc-grid" id="qc-list"><div class="empty-state">Memuat…</div></div>
-    <p class="foot-note">Mode Ringkas: 2 angka total otomatis dituang ke ukuran yang masih kosong. Isi form di kartu lalu tekan "+ Tambah ke Daftar" - belum kekirim, masih bisa dihapus dulu di "Daftar Antrian" di bawah. Kalau semua sudah benar, baru tekan "Kirim Rekap" sekali buat kirim semuanya sekaligus.</p>
-
-    <h2 class="section-title" style="margin-top:22px;">Daftar Antrian</h2>
-    <div class="antrian-wrap" id="antrian-wrap"></div>
-
-    <div class="qc-toolbar" style="margin-top:4px;">
-      <span></span>
-      <button class="btn-rekap" type="button" id="btnKirimRekap">✈️ Kirim Rekap</button>
-    </div>
-    <div class="telegram-mock">
-      <div class="bubble" id="telegramPreview">Belum ada laporan di daftar antrian.</div>
+    <div id="blockKartuQC">
+      <div class="search-wrap" id="secSearchQC">
+        <input type="text" id="searchQC" placeholder="Cari laporan/warna...">
+        <svg class="icon" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M21 21l-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <button class="search-clear" id="btnClearQC">✕</button>
+      </div>
+      <div class="qc-toolbar">
+        <span id="qcCount"></span>
+      </div>
+      <div class="filter-bar" id="qcFilterBar"></div>
+      <div class="qc-grid" id="qc-list"><div class="empty-state">Memuat…</div></div>
+      <p class="foot-note">Mode Ringkas: 2 angka total otomatis dituang ke ukuran yang masih kosong. Isi form di kartu lalu tekan "+ Tambah ke Daftar" - belum kekirim, masih bisa dihapus dulu di "Daftar Antrian" di bawah. Kalau semua sudah benar, baru tekan "Kirim Rekap" sekali buat kirim semuanya sekaligus.</p>
     </div>
 
-    <div class="arsip-toggle" data-arsip="qc">
-      <div class="left"><span>📜</span><div class="txt"><b>Arsip Selesai (3 hari terakhir)</b><span id="arsipSummary-qc">Ketuk buat lihat</span></div></div>
-      <svg class="arsip-chevron" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <div id="blockAntrian">
+      <h2 class="section-title" style="margin-top:22px;">Daftar Antrian</h2>
+      <div class="antrian-wrap" id="antrian-wrap"></div>
     </div>
-    <div class="arsip-body" id="arsipBody-qc"><div class="arsip-grid" id="arsipGrid-qc"></div></div>
+
+    <div id="blockPreview">
+      <div class="qc-toolbar" style="margin-top:4px;">
+        <span></span>
+        <button class="btn-rekap" type="button" id="btnKirimRekap">✈️ Kirim Rekap</button>
+      </div>
+      <div class="telegram-mock">
+        <div class="bubble" id="telegramPreview">Belum ada laporan di daftar antrian.</div>
+      </div>
+    </div>
+
+    <div id="secArsipQC">
+      <div class="arsip-toggle" data-arsip="qc">
+        <div class="left"><span>📜</span><div class="txt"><b>Arsip Selesai (3 hari terakhir)</b><span id="arsipSummary-qc">Ketuk buat lihat</span></div></div>
+        <svg class="arsip-chevron" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="arsip-body" id="arsipBody-qc"><div class="arsip-grid" id="arsipGrid-qc"></div></div>
+    </div>
   </div>
 
 </div>
@@ -396,9 +432,61 @@ input[type="number"]{ -moz-appearance:textfield; appearance:textfield; }
 
 <div class="cfg-overlay" id="cfgOverlay" style="display:none;">
   <div class="cfg-sheet">
-    <h3>Atur Tampilan Kartu QC</h3>
-    <p class="cfg-sub">Pilih info yang mau ditampilkan di kartu + urutannya. Berlaku buat SEMUA orang yang buka dashboard ini.</p>
-    <div id="cfgRows"></div>
+    <h3>Atur Tampilan Dashboard</h3>
+    <p class="cfg-sub">Semua pengaturan di sini tersimpan di server - berlaku buat SEMUA orang yang buka dashboard ini.</p>
+
+    <div class="cfg-group-title">Urutan Bagian (Tab QC)</div>
+    <p class="cfg-group-note">Atur urutan tampil Kartu QC, Daftar Antrian, dan Preview &amp; Kirim Rekap.</p>
+    <div id="cfgRowsQCLayout"></div>
+
+    <div class="cfg-group-title">Ukuran Font</div>
+    <div class="cfg-inline-row">
+      <label for="cfgFontCard">Kartu QC</label>
+      <select id="cfgFontCard"></select>
+    </div>
+    <div class="cfg-inline-row">
+      <label for="cfgFontAntrian">Daftar Antrian</label>
+      <select id="cfgFontAntrian"></select>
+    </div>
+    <div class="cfg-inline-row">
+      <label for="cfgFontPreview">Preview &amp; Kirim Rekap</label>
+      <select id="cfgFontPreview"></select>
+    </div>
+
+    <div class="cfg-group-title">Info di Kartu QC</div>
+    <p class="cfg-group-note">Ganti label, sembunyikan, atau atur urutan info yang tampil di tiap kartu.</p>
+    <div id="cfgRowsQCFields"></div>
+
+    <div class="cfg-group-title">Filter Urutan (Tab QC)</div>
+    <p class="cfg-group-note">Minimal 1 filter harus tetap aktif.</p>
+    <div id="cfgRowsQCFilters"></div>
+
+    <div class="cfg-group-title">Info di Kartu Stok</div>
+    <div id="cfgRowsStokFields"></div>
+
+    <div class="cfg-group-title">Tampilkan/Sembunyikan Bagian</div>
+    <div id="cfgRowsSections"></div>
+
+    <div class="cfg-group-title">Pengaturan Umum</div>
+    <div class="cfg-inline-row">
+      <label for="cfgDefaultTab">Tab dibuka pertama kali</label>
+      <select id="cfgDefaultTab">
+        <option value="stok">📦 Stok Kain</option>
+        <option value="qc">✅ Proses &amp; QC</option>
+      </select>
+    </div>
+    <div class="cfg-inline-row">
+      <label for="cfgDefaultFilter">Filter QC default</label>
+      <select id="cfgDefaultFilter"></select>
+    </div>
+    <div class="cfg-inline-row">
+      <label for="cfgStaleDays">Tandai "lama" mulai (hari)</label>
+      <input type="number" id="cfgStaleDays" min="1" max="30" style="width:64px;">
+    </div>
+
+    <div class="cfg-group-title">Warna Aksen</div>
+    <div class="cfg-swatch-row" id="cfgSwatchRow"></div>
+
     <div class="cfg-actions">
       <button class="cfg-btn-batal" type="button" id="cfgBatal">Batal</button>
       <button class="cfg-btn-simpan" type="button" id="cfgSimpan">Simpan</button>
@@ -462,12 +550,16 @@ document.querySelectorAll(".main-tab-btn").forEach(function(btn){
     document.getElementById("panel-stok").style.display = btn.dataset.maintab === "stok" ? "" : "none";
     document.getElementById("panel-qc").style.display = btn.dataset.maintab === "qc" ? "" : "none";
     if (btn.dataset.maintab === "qc" && !qcSudahDimuat) muatDashboardQC();
+    if (btn.dataset.maintab === "stok" && !stokSudahDimuat) muatDashboard();
   });
 });
 
 // ============ STATE (data mentah, dipakai ulang tiap ganti filter/search) ============
 let stokItemsRaw = [];
 let stokSortMode = "kg";
+let stokSudahDimuat = false; // v.16: Stok sekarang JUGA lazy-load (dulu selalu dimuat duluan
+// gak peduli tab default apa) - biar dashboard yang defaultnya buka tab QC gak ikut nunggu Stok
+// selesai dimuat juga.
 
 function urutkanStok(items, mode){
   const copy = items.slice();
@@ -496,11 +588,13 @@ function renderStokList(items){
   wrap.innerHTML = items.map(function(s, i){
     const rolls = s.rolls || [];
     const detailId = "stokdetail-"+i;
+    const showJumlahRoll = !stokFieldConfig.length || (stokFieldConfig.find(function(f){return f.key==="jumlahRoll";})||{show:true}).show;
+    const subHtml = showJumlahRoll ? '<p class="scard-sub">'+rolls.length+' roll</p>' : '';
     return '<div class="scard">' +
       '<div class="scard-head" data-target="'+detailId+'">' +
         '<span class="num">'+(i+1)+'</span>' +
         '<div class="swatch" style="'+swatchStyle(s.warna)+'"></div>' +
-        '<div class="scard-main"><p class="scard-title">'+s.warna+'</p><p class="scard-sub">'+rolls.length+' roll</p></div>' +
+        '<div class="scard-main"><p class="scard-title">'+s.warna+'</p>'+subHtml+'</div>' +
         '<div class="scard-kg">'+fmtKg(s.kg)+'<br>kg</div>' +
         '<svg class="scard-chevron" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
       '</div>' +
@@ -541,6 +635,7 @@ function muatDashboard(paksaRefresh){
   fetch(url, { cache: "no-store" })
     .then(function(res){ return res.json(); })
     .then(function(data){
+      stokSudahDimuat = true;
       renderStok(data.stok || {});
       const updated = data.updatedAt ? new Date(data.updatedAt) : new Date();
       const cacheTag = data.dariCache ? '<span class="cache-tag">· cache</span>' : '';
@@ -558,7 +653,6 @@ document.getElementById("btnRefresh").addEventListener("click", function(){
   muatDashboard(true);
   muatDashboardQC(true); // v.08: dulu cuma Stok yang ke-refresh, QC-nya kelupaan
 });
-muatDashboard(false);
 
 // ============ TAB QC ============
 let qcItemsRaw = [];
@@ -568,7 +662,7 @@ let qcSudahDimuat = false;
 const qcModeUI = {};
 
 // v.13: konfigurasi field mana yang tampil di baris meta kartu (+ urutannya) - datang dari
-// server (dashboardQC payload, field cardConfig), disimpan bareng lewat panel "Atur Tampilan".
+// server (dashboardQC payload, field dashCfg.qcFields), disimpan bareng lewat panel "Atur Tampilan".
 // Default di sini CUMA fallback sebelum data pertama kali kemuat / kalau server belum pernah
 // menyimpan pengaturan - begitu fetch pertama sukses, langsung ditimpa sama punya server.
 let qcCardConfig = [
@@ -577,6 +671,116 @@ let qcCardConfig = [
   { key: "kg", label: "Kg Terpakai", show: true },
   { key: "status", label: "Status", show: true }
 ];
+// v.15: kelompok config lain - dibundel bareng qcCardConfig, semuanya datang dari & tersimpan
+// ke server sekaligus (satu bundle "dashCfg") lewat panel "Atur Tampilan" yang sama.
+let qcFilterConfig = [
+  { key: "hari", label: "Paling lama", show: true },
+  { key: "jenis", label: "Jenis A-Z", show: true },
+  { key: "tanggal", label: "Tanggal terbaru", show: true }
+];
+let stokFieldConfig = [
+  { key: "jumlahRoll", label: "Jumlah roll", show: true }
+];
+let sectionConfig = [
+  { key: "searchQC", label: "Kolom cari (tab QC)", show: true },
+  { key: "filterBarQC", label: "Baris filter urutan (tab QC)", show: true },
+  { key: "arsipQC", label: "Section Arsip Selesai (tab QC)", show: true }
+];
+// v.16: urutan & tampil/sembunyikan 3 bagian utama tab QC. "Atur Tampilan" sengaja TIDAK ikut
+// blok manapun di sini (dipindah ke baris tombol yang selalu kelihatan) - biar Denny gak
+// kekunci gak bisa buka panel lagi kalau salah satu blok ini disembunyikan.
+let qcLayoutConfig = [
+  { key: "blockKartuQC", label: "Kartu QC", show: true },
+  { key: "blockAntrian", label: "Daftar Antrian", show: true },
+  { key: "blockPreview", label: "Preview & Kirim Rekap", show: true }
+];
+const FONT_SCALE_PRESETS = [
+  { key: "kecil", label: "Kecil", value: 0.85 },
+  { key: "sedang", label: "Sedang (default)", value: 1 },
+  { key: "besar", label: "Besar", value: 1.15 },
+  { key: "sangatbesar", label: "Sangat Besar", value: 1.3 }
+];
+let generalConfig = {
+  defaultTab: "stok", defaultFilterQC: "hari", staleDays: 3, accent: "teal",
+  cardFontScale: "sedang", antrianFontScale: "sedang", previewFontScale: "sedang"
+};
+const ACCENT_PRESETS = {
+  teal:  { accent:"#2F6F68", deep:"#1E4B46" },
+  blue:  { accent:"#2F5D8A", deep:"#1B3E5C" },
+  plum:  { accent:"#7A3B69", deep:"#4E2244" },
+  amber: { accent:"#B4790E", deep:"#7A5209" }
+};
+let configPertamaKaliDimuat = false; // dipakai supaya "tab/filter default" cuma diterapkan SEKALI pas dashboard baru dibuka
+
+function fontScaleValue(presetKey){
+  const p = FONT_SCALE_PRESETS.find(function(f){ return f.key === presetKey; });
+  return p ? p.value : 1;
+}
+function applyFontScales(){
+  document.documentElement.style.setProperty("--scale-card", fontScaleValue(generalConfig.cardFontScale));
+  document.documentElement.style.setProperty("--scale-antrian", fontScaleValue(generalConfig.antrianFontScale));
+  document.documentElement.style.setProperty("--scale-preview", fontScaleValue(generalConfig.previewFontScale));
+}
+function applyQcLayout(){
+  const parent = document.getElementById("panel-qc");
+  const arsip = document.getElementById("secArsipQC");
+  qcLayoutConfig.forEach(function(f){
+    const el = document.getElementById(f.key);
+    if (!el) return;
+    el.style.display = f.show ? "" : "none";
+    parent.insertBefore(el, arsip); // nempatin sesuai urutan array, arsip selalu di paling bawah
+  });
+}
+
+function applyAccent(key){
+  const p = ACCENT_PRESETS[key] || ACCENT_PRESETS.teal;
+  document.documentElement.style.setProperty("--accent", p.accent);
+  document.documentElement.style.setProperty("--accent-deep", p.deep);
+}
+function applySections(){
+  const map = {};
+  sectionConfig.forEach(function(f){ map[f.key] = f.show; });
+  const elSearch = document.getElementById("secSearchQC");
+  if (elSearch) elSearch.style.display = map.searchQC === false ? "none" : "";
+  const elFilter = document.getElementById("qcFilterBar");
+  if (elFilter) elFilter.style.display = map.filterBarQC === false ? "none" : "";
+  const elArsip = document.getElementById("secArsipQC");
+  if (elArsip) elArsip.style.display = map.arsipQC === false ? "none" : "";
+}
+function renderQCFilterBar(isInitial){
+  const visible = qcFilterConfig.filter(function(f){ return f.show; });
+  if (isInitial && generalConfig.defaultFilterQC && visible.some(function(f){ return f.key === generalConfig.defaultFilterQC; })) {
+    qcSortMode = generalConfig.defaultFilterQC;
+  }
+  if (!visible.some(function(f){ return f.key === qcSortMode; })) {
+    qcSortMode = visible.length ? visible[0].key : "hari";
+  }
+  const bar = document.getElementById("qcFilterBar");
+  bar.innerHTML = visible.map(function(f){
+    return '<span class="filter-chip'+(f.key===qcSortMode?' active':'')+'" data-sort="'+f.key+'">'+f.label+'</span>';
+  }).join("");
+  renderQCCards();
+}
+function terapkanConfigBundle(bundle, isInitial){
+  if (bundle.qcFields && bundle.qcFields.length) qcCardConfig = bundle.qcFields;
+  if (bundle.qcFilters && bundle.qcFilters.length) qcFilterConfig = bundle.qcFilters;
+  if (bundle.stokFields && bundle.stokFields.length) stokFieldConfig = bundle.stokFields;
+  if (bundle.sections && bundle.sections.length) sectionConfig = bundle.sections;
+  if (bundle.qcLayout && bundle.qcLayout.length) qcLayoutConfig = bundle.qcLayout;
+  if (bundle.general) generalConfig = Object.assign({}, generalConfig, bundle.general);
+
+  applySections();
+  applyQcLayout();
+  applyFontScales();
+  applyAccent(generalConfig.accent);
+  renderQCFilterBar(isInitial);
+  if (stokItemsRaw.length) renderStokList(urutkanStok(stokItemsRaw, stokSortMode));
+
+  if (isInitial && generalConfig.defaultTab === "qc") {
+    const btnQC = document.querySelector('.main-tab-btn[data-maintab="qc"]');
+    if (btnQC && !btnQC.classList.contains("active")) btnQC.click();
+  }
+}
 
 function metaFieldHtml(key, item, badgeKanan){
   if (key === "tanggal") return "<span>"+(item.tanggal||"-")+"</span>";
@@ -636,12 +840,15 @@ function muatDashboardQC(paksaRefresh){
     .then(function(data){
       qcSudahDimuat = true;
       qcItemsRaw = data.items || [];
-      if (data.cardConfig && Array.isArray(data.cardConfig) && data.cardConfig.length) qcCardConfig = data.cardConfig;
       // v.09: nomor urut STABIL - ditentukan dari baris (sheet row) ascending SEKALI di sini,
       // BUKAN dihitung ulang tiap render/sort. Jadi walau tampilan diurutkan ulang (filter sort
       // chip), nomor yang nempel di tiap kartu gak ikut berubah posisi.
       qcItemsRaw.slice().sort(function(a,b){ return a.baris - b.baris; })
         .forEach(function(item, i){ item.num = i + 1; });
+      if (data.dashCfg) {
+        terapkanConfigBundle(data.dashCfg, !configPertamaKaliDimuat);
+        configPertamaKaliDimuat = true;
+      }
       renderQCCards();
       renderDaftarAntrian();
     })
@@ -712,7 +919,7 @@ function renderQCCards(){
     }
 
     const sizeChips = qcDaftarUkuran(item).map(function(u){ return '<span class="size-chip">'+u+' <b>'+item.sizes[u].qty+'</b></span>'; }).join("");
-    const stale = item.hari !== null && item.hari >= 3;
+    const stale = item.hari !== null && item.hari >= (generalConfig.staleDays || 3);
     const hariLabel = item.hari === null ? "-" : (item.hari === 0 ? "hari ini" : item.hari + " hari lalu");
 
     const modeSwitchRow = lengkapEfektif
@@ -834,64 +1041,143 @@ btnClearQC.addEventListener("click", function(){
 });
 pasangFilterBar("qcFilterBar", function(mode){ qcSortMode = mode; renderQCCards(); });
 
-// ============ PANEL "ATUR TAMPILAN" (v.13 - konfigurasi kartu QC, tersimpan di server) ============
-let cfgDraft = []; // copy kerja sementara selama modal terbuka - qcCardConfig BARU ketimpa pas Simpan sukses
+// ============ PANEL "ATUR TAMPILAN" (v.15 - satu panel buat semua group config) ============
+// draftBundle = copy kerja sementara selama modal terbuka. Config ASLI (qcCardConfig dkk) baru
+// ketimpa & diterapkan pas tombol Simpan sukses - biar batal/tutup modal gak ninggalin perubahan
+// setengah jalan.
+let draftBundle = null;
 
-function renderCfgRows(){
-  const wrap = document.getElementById("cfgRows");
-  wrap.innerHTML = cfgDraft.map(function(f, i){
-    return '<div class="cfg-row'+(f.show?'':' off')+'" data-key="'+f.key+'">' +
-        '<label><input type="checkbox" data-idx="'+i+'"'+(f.show?' checked':'')+'>'+f.label+'</label>' +
-        '<div class="cfg-move">' +
-          '<button type="button" data-move="up" data-idx="'+i+'"'+(i===0?' disabled':'')+'>▲</button>' +
-          '<button type="button" data-move="down" data-idx="'+i+'"'+(i===cfgDraft.length-1?' disabled':'')+'>▼</button>' +
-        '</div>' +
+function cloneList(list){ return list.map(function(f){ return { key:f.key, label:f.label, show:f.show }; }); }
+
+// Renderer generik dipakai buat 4 grup list (qcFields, qcFilters, stokFields, sections).
+// opts.reorder -> tampilkan tombol ▲▼. opts.editLabel -> label jadi input teks (bisa diganti).
+function renderCfgList(containerId, listKey, opts){
+  const list = draftBundle[listKey];
+  const wrap = document.getElementById(containerId);
+  wrap.innerHTML = list.map(function(f, i){
+    const labelHtml = opts.editLabel
+      ? '<input type="text" class="cfg-label-input" data-list="'+listKey+'" data-idx="'+i+'" value="'+f.label.replace(/"/g,'&quot;')+'">'
+      : '<span class="cfg-row-label">'+f.label+'</span>';
+    const moveHtml = opts.reorder
+      ? '<div class="cfg-move">' +
+          '<button type="button" data-list="'+listKey+'" data-move="up" data-idx="'+i+'"'+(i===0?' disabled':'')+'>▲</button>' +
+          '<button type="button" data-list="'+listKey+'" data-move="down" data-idx="'+i+'"'+(i===list.length-1?' disabled':'')+'>▼</button>' +
+        '</div>'
+      : '';
+    return '<div class="cfg-row'+(f.show?'':' off')+'">' +
+        '<input type="checkbox" class="cfg-chk" data-list="'+listKey+'" data-idx="'+i+'"'+(f.show?' checked':'')+'>' +
+        labelHtml + moveHtml +
       '</div>';
   }).join("");
 
-  wrap.querySelectorAll('input[type="checkbox"]').forEach(function(cb){
+  wrap.querySelectorAll(".cfg-chk").forEach(function(cb){
     cb.addEventListener("change", function(){
-      cfgDraft[parseInt(cb.dataset.idx,10)].show = cb.checked;
-      renderCfgRows();
+      draftBundle[cb.dataset.list][parseInt(cb.dataset.idx,10)].show = cb.checked;
+      renderCfgList(containerId, listKey, opts);
     });
   });
-  wrap.querySelectorAll('button[data-move]').forEach(function(btn){
+  wrap.querySelectorAll(".cfg-label-input").forEach(function(inp){
+    inp.addEventListener("input", function(){
+      draftBundle[inp.dataset.list][parseInt(inp.dataset.idx,10)].label = inp.value;
+    });
+  });
+  wrap.querySelectorAll("button[data-move]").forEach(function(btn){
     btn.addEventListener("click", function(){
+      const list2 = draftBundle[btn.dataset.list];
       const i = parseInt(btn.dataset.idx, 10);
       const j = btn.dataset.move === "up" ? i-1 : i+1;
-      if (j < 0 || j >= cfgDraft.length) return;
-      const tmp = cfgDraft[i]; cfgDraft[i] = cfgDraft[j]; cfgDraft[j] = tmp;
-      renderCfgRows();
+      if (j < 0 || j >= list2.length) return;
+      const tmp = list2[i]; list2[i] = list2[j]; list2[j] = tmp;
+      renderCfgList(containerId, listKey, opts);
     });
   });
 }
 
-document.getElementById("btnAturTampilan").addEventListener("click", function(){
-  cfgDraft = qcCardConfig.map(function(f){ return { key:f.key, label:f.label, show:f.show }; }); // deep-ish copy
-  renderCfgRows();
+function renderCfgSwatches(){
+  const row = document.getElementById("cfgSwatchRow");
+  row.innerHTML = Object.keys(ACCENT_PRESETS).map(function(key){
+    const p = ACCENT_PRESETS[key];
+    const active = draftBundle.general.accent === key;
+    return '<button type="button" class="cfg-swatch'+(active?' active':'')+'" data-accent="'+key+'" style="background:'+p.accent+';" title="'+key+'"></button>';
+  }).join("");
+  row.querySelectorAll(".cfg-swatch").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      draftBundle.general.accent = btn.dataset.accent;
+      applyAccent(btn.dataset.accent); // live preview - dibatalin lagi kalau modal ditutup pakai Batal
+      renderCfgSwatches();
+    });
+  });
+}
+
+function bukaPanelAturTampilan(){
+  draftBundle = {
+    qcFields: cloneList(qcCardConfig),
+    qcFilters: cloneList(qcFilterConfig),
+    stokFields: cloneList(stokFieldConfig),
+    sections: cloneList(sectionConfig),
+    qcLayout: cloneList(qcLayoutConfig),
+    general: Object.assign({}, generalConfig)
+  };
+  renderCfgList("cfgRowsQCLayout", "qcLayout", { reorder:true, editLabel:false });
+  renderCfgList("cfgRowsQCFields", "qcFields", { reorder:true, editLabel:true });
+  renderCfgList("cfgRowsQCFilters", "qcFilters", { reorder:true, editLabel:true });
+  renderCfgList("cfgRowsStokFields", "stokFields", { reorder:false, editLabel:true });
+  renderCfgList("cfgRowsSections", "sections", { reorder:false, editLabel:false });
+
+  const optsFont = FONT_SCALE_PRESETS.map(function(f){ return '<option value="'+f.key+'">'+f.label+'</option>'; }).join("");
+  ["cfgFontCard","cfgFontAntrian","cfgFontPreview"].forEach(function(id){ document.getElementById(id).innerHTML = optsFont; });
+  document.getElementById("cfgFontCard").value = draftBundle.general.cardFontScale;
+  document.getElementById("cfgFontAntrian").value = draftBundle.general.antrianFontScale;
+  document.getElementById("cfgFontPreview").value = draftBundle.general.previewFontScale;
+
+  const selTab = document.getElementById("cfgDefaultTab");
+  selTab.value = draftBundle.general.defaultTab;
+  const selFilter = document.getElementById("cfgDefaultFilter");
+  selFilter.innerHTML = draftBundle.qcFilters.map(function(f){ return '<option value="'+f.key+'">'+f.label+'</option>'; }).join("");
+  selFilter.value = draftBundle.general.defaultFilterQC;
+  document.getElementById("cfgStaleDays").value = draftBundle.general.staleDays;
+  renderCfgSwatches();
+
   document.getElementById("cfgOverlay").style.display = "flex";
+}
+
+document.getElementById("btnAturTampilan").addEventListener("click", bukaPanelAturTampilan);
+document.getElementById("cfgFontCard").addEventListener("change", function(ev){ draftBundle.general.cardFontScale = ev.target.value; document.documentElement.style.setProperty("--scale-card", fontScaleValue(ev.target.value)); });
+document.getElementById("cfgFontAntrian").addEventListener("change", function(ev){ draftBundle.general.antrianFontScale = ev.target.value; document.documentElement.style.setProperty("--scale-antrian", fontScaleValue(ev.target.value)); });
+document.getElementById("cfgFontPreview").addEventListener("change", function(ev){ draftBundle.general.previewFontScale = ev.target.value; document.documentElement.style.setProperty("--scale-preview", fontScaleValue(ev.target.value)); });
+
+document.getElementById("cfgDefaultTab").addEventListener("change", function(ev){ draftBundle.general.defaultTab = ev.target.value; });
+document.getElementById("cfgDefaultFilter").addEventListener("change", function(ev){ draftBundle.general.defaultFilterQC = ev.target.value; });
+document.getElementById("cfgStaleDays").addEventListener("input", function(ev){
+  const v = parseInt(ev.target.value, 10);
+  draftBundle.general.staleDays = isNaN(v) ? 3 : Math.max(1, Math.min(30, v));
 });
+
 document.getElementById("cfgOverlay").addEventListener("click", function(ev){
-  if (ev.target.id === "cfgOverlay") document.getElementById("cfgOverlay").style.display = "none";
+  if (ev.target.id === "cfgOverlay") { applyAccent(generalConfig.accent); applyFontScales(); document.getElementById("cfgOverlay").style.display = "none"; }
 });
 document.getElementById("cfgBatal").addEventListener("click", function(){
+  applyAccent(generalConfig.accent); // balikin warna aksen ke yang beneran tersimpan (batal preview)
+  applyFontScales(); // sama, balikin ukuran font (batal preview)
   document.getElementById("cfgOverlay").style.display = "none";
 });
 document.getElementById("cfgSimpan").addEventListener("click", function(){
+  const visibleFilters = draftBundle.qcFilters.filter(function(f){ return f.show; });
+  if (!visibleFilters.length) { tampilkanToast("Minimal 1 filter urutan harus tetap aktif."); return; }
+
   const btn = document.getElementById("cfgSimpan");
   btn.disabled = true; btn.textContent = "Menyimpan…";
   const body = new URLSearchParams();
-  body.set("action", "saveCardConfig");
-  body.set("data", JSON.stringify(cfgDraft));
+  body.set("action", "saveDashCfg");
+  body.set("data", JSON.stringify(draftBundle));
   fetch(WEBAPP_URL, { method:"POST", body: body })
     .then(function(res){ return res.json(); })
     .then(function(hasil){
       btn.disabled = false; btn.textContent = "Simpan";
       if (hasil && hasil.ok) {
-        qcCardConfig = hasil.config || cfgDraft;
+        terapkanConfigBundle(hasil.config || draftBundle, false);
         document.getElementById("cfgOverlay").style.display = "none";
-        renderQCCards();
-        tampilkanToast("✓ Tampilan kartu disimpan - berlaku buat semua yang buka dashboard ini");
+        tampilkanToast("✓ Tampilan disimpan - berlaku buat semua yang buka dashboard ini");
       } else {
         tampilkanToast("Gagal simpan: " + ((hasil && hasil.error) || "tidak diketahui"));
       }
@@ -1068,6 +1354,33 @@ document.querySelectorAll(".arsip-toggle").forEach(function(toggle){
     }
   });
 });
+
+// v.16: OPTIMASI LOADING - v.15 kemarin selalu muat Stok DAN QC bareng-bareng pas dashboard
+// dibuka (biar "tab default"/"filter default" bisa langsung diterapkan), padahal salah satunya
+// pasti gak kepake sampai orangnya pindah tab sendiri. Sekarang dipecah jadi 2 tahap:
+//  1) ?action=dashboardCfg - CUMA baca config dari Script Properties (gak nyentuh Sheet TIM
+//     POTONG/STOK KAIN sama sekali) - jauh lebih cepat dibanding dashboard/dashboardQC biasa.
+//  2) Begitu tau "tab default"-nya apa, CUMA tab itu yang langsung dimuat datanya. Tab
+//     satunya tetap lazy - baru dimuat kalau orangnya beneran klik ke situ (gate
+//     qcSudahDimuat/stokSudahDimuat di listener .main-tab-btn di atas).
+// Kalau fetch config gagal (jaringan dsb), fallback aman: anggap default "Stok" & tetap jalan.
+fetch(WEBAPP_URL + "?action=dashboardCfg", { cache: "no-store" })
+  .then(function(res){ return res.json(); })
+  .then(function(data){
+    terapkanConfigBundle(data.config || {}, true); // ini juga yang mindahin tab kalau defaultnya "qc"
+    configPertamaKaliDimuat = true;
+    if (generalConfig.defaultTab === "qc") {
+      // .click() di terapkanConfigBundle() sudah mindahin tampilan + motret muatDashboardQC()
+      // lewat gate qcSudahDimuat - gak perlu panggil manual di sini lagi.
+    } else {
+      muatDashboard(false);
+    }
+  })
+  .catch(function(){
+    configPertamaKaliDimuat = true;
+    muatDashboard(false); // fallback: config gagal kebaca, buka Stok seperti biasa
+  });
+
 </script>
 </body>
 </html>
