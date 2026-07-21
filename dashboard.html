@@ -810,14 +810,21 @@ function renderTelegramPreview(){
 // nulis semuanya ke Sheet + kirim 1 pesan Telegram gabungan. Balikannya { ok, terkirim,
 // gagal:[{index,error}], teks } - "index" itu posisi di array `payload` (SAMA urutan qcAntrian
 // saat payload dibuat), dipakai buat nyisain cuma item yg gagal di antrian.
+// v.10 (fix): dikirim lewat POST (body form-urlencoded), BUKAN ditaruh di query string GET -
+// payload-nya (semua laporan yang di-antre) bisa bikin URL kepanjangan & gagal "Failed to fetch"
+// kalau dipaksa lewat GET. Backend (routeAksiDashboard, dipanggil dari doPost) sudah disesuaikan
+// buat nerima ini.
 function kirimRekapBeneran(){
   const payload = qcAntrian.map(function(a){
     const item = { baris: a.baris, mode: a.mode, totalSelesai: a.totSel, totalReject: a.totRej };
     if (a.mode === "detail") item.ukuran = a.perUkuran;
     return item;
   });
-  const url = WEBAPP_URL + "?action=kirimRekapQCBatch&data=" + encodeURIComponent(JSON.stringify(payload));
-  return fetch(url, { cache: "no-store" }).then(function(res){ return res.json(); });
+  const body = new URLSearchParams();
+  body.set("action", "kirimRekapQCBatch");
+  body.set("data", JSON.stringify(payload));
+  return fetch(WEBAPP_URL, { method: "POST", body: body })
+    .then(function(res){ return res.json(); });
 }
 
 document.getElementById("btnKirimRekap").addEventListener("click", function(){
