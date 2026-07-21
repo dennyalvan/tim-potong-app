@@ -1,4 +1,19 @@
 <!DOCTYPE html>
+<!--
+  MINI APP TIM POTONG (ver.07) - form input produksi di dalam Telegram.
+  Backend: apps_script_tim_potong_v11.js (?action=kirimProduksiMiniApp).
+
+  ver.07 (perubahan hari ini):
+  1. "Daftar Item" dipindah dari ATAS ke BAWAH (sebelum tombol), gaya gelap kontras (dark navy,
+     mirip bubble preview Telegram di dashboard QC) - biar jelas kelihatan ini "yang bakal
+     dikirim", bukan nyampur sama form input di atasnya.
+  2. Tombol "Kirim ke Chat" (dulu buka share-sheet Telegram, orangnya masih perlu 1 tap lagi di
+     Telegram) diganti "Kirim ke Telegram" - LANGSUNG kirim: teks diproses server (parse & tulis
+     ke Sheet) + notifikasi ke grup, semua dalam 1 tap, tanpa keluar dari Mini App.
+     PENTING: langkah "Buat Teks" (preview + tombol "Kembali Edit") SENGAJA TETAP ADA - itu
+     sekarang satu-satunya kesempatan ngecek/edit sebelum data BENERAN kekirim & diproses ke
+     Sheet, karena begitu tap "Kirim ke Telegram" udah gak ada tahap konfirmasi lagi.
+-->
 <html lang="id">
 <head>
 <meta charset="UTF-8">
@@ -100,6 +115,22 @@
     width:28px;height:28px;display:flex;align-items:center;justify-content:center;
   }
   .empty-hint{text-align:center;color:var(--ink-2);font-size:14px;padding:26px 16px;}
+
+  /* v.07: Daftar Item dipindah ke BAWAH (sebelum tombol kirim), gaya gelap kontras - biar
+     kelihatan jelas beda dari form input di atasnya, mirip bubble preview Telegram di dashboard
+     QC (dark navy). Ini yang bakal BENERAN dikirim, jadi sengaja dibikin menonjol. */
+  .daftar-gelap{
+    background:#0E1621; border-radius:16px; padding:12px 12px 6px; margin-top:4px;
+  }
+  .daftar-gelap .section-label{ color:#8FA3B8; margin:2px 4px 8px; }
+  .daftar-gelap .section-label .count-chip{ background:var(--theme-accent); }
+  .daftar-gelap .card{ background:#1E2A38; box-shadow:none; }
+  .daftar-gelap .item-row{ border-bottom:0.5px solid rgba(255,255,255,.08); }
+  .daftar-gelap .item-row-text{ color:#E8EDF2; }
+  .daftar-gelap .item-row-text b{ color:#fff; }
+  .daftar-gelap .item-row-tag{ background:rgba(58,175,192,.22); color:#7FD8E5; }
+  .daftar-gelap .item-row-del{ color:#FF6B60; }
+  .daftar-gelap .empty-hint{ color:#8FA3B8; }
 
   .tab-row{display:flex;gap:8px;}
   .tab-card{
@@ -242,7 +273,7 @@
       <div class="topbar-title">Input Produksi</div>
     </div>
     <div style="text-align:right;">
-      <div class="version-badge">ver.06</div>
+      <div class="version-badge">ver.07</div>
       <div id="refreshLink" style="margin-top:4px;font-size:11.5px;font-weight:600;color:var(--theme-accent-deep);cursor:pointer;">🔄 Refresh</div>
     </div>
   </div>
@@ -254,16 +285,6 @@
 
   <div class="app-body" id="formScreen">
     <div id="errorBanner" class="error-banner" style="display:none;"></div>
-
-    <div id="daftarItemSection" style="display:none;">
-      <div class="section-label"><span>Daftar Item</span><span class="count-chip" id="itemCount">0</span></div>
-      <div class="card">
-        <div id="itemList">
-          <div class="empty-hint" id="emptyHint">Belum ada item ditambahkan</div>
-        </div>
-      </div>
-      <div class="cut-divider"><div class="scissor-chip">✂️</div></div>
-    </div>
 
     <div class="section-label" style="margin-top:6px;">Kategori</div>
     <div class="tab-row" id="kategoriSeg"></div>
@@ -334,13 +355,25 @@
       <div class="qty-grid" id="qtyGridLain" style="display:none;"></div>
       <div class="total-row"><span>Total qty item ini</span><b id="totalQty">0 pcs</b></div>
     </div>
+
+    <div id="daftarItemSection" style="display:none;">
+      <div class="cut-divider"><div class="scissor-chip">✂️</div></div>
+      <div class="daftar-gelap">
+        <div class="section-label"><span>Daftar Item (siap dikirim)</span><span class="count-chip" id="itemCount">0</span></div>
+        <div class="card">
+          <div id="itemList">
+            <div class="empty-hint" id="emptyHint">Belum ada item ditambahkan</div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="app-body" id="successScreen" style="display:none;">
     <div class="success-screen">
       <div class="success-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
       <div class="success-title">Teks siap dikirim</div>
-      <div class="success-sub">Salin teks di bawah, lalu paste &amp; kirim manual ke chat grup ini.</div>
+      <div class="success-sub">Cek dulu teksnya di bawah - kalau ada yang salah ketik, tap "Kembali Edit". Kalau sudah benar, tap "Kirim ke Telegram" buat kirim &amp; proses langsung.</div>
     </div>
     <div class="teks-box" id="teksHasil"></div>
     <div style="text-align:center;">
@@ -354,7 +387,7 @@
   </div>
 
   <div class="btn-row" id="btnRowSukses" style="display:none;flex-direction:column;gap:10px;">
-    <button class="btn btn-green btn-full" id="btnKirimChat">Kirim ke Chat</button>
+    <button class="btn btn-green btn-full" id="btnKirimChat">✈️ Kirim ke Telegram</button>
     <div style="display:flex;gap:10px;">
       <button class="btn btn-secondary" id="btnKembali">Kembali Edit</button>
       <button class="btn btn-secondary" id="btnSalin">Salin Teks</button>
@@ -868,15 +901,68 @@ btnKembali.addEventListener('click', function(){
   document.getElementById('btnRowSukses').style.display = 'none';
 });
 
+// v.07: dulu tombol ini ("Kirim ke Chat") buka share-sheet Telegram (tg.openTelegramLink),
+// jadi orangnya masih perlu 1 tap lagi di dalam Telegram buat beneran kirim - itu jadi
+// kesempatan terakhir buat batal/edit. Sekarang ("Kirim ke Telegram") LANGSUNG proses: teks
+// dikirim ke server, server yang parse & tulis ke Sheet + kirim notifikasi ke grup, semua dalam
+// 1 tap. Layar preview (dengan tombol "Kembali Edit") di ATAS tombol ini yang sekarang jadi
+// SATU-SATUNYA kesempatan ngecek sebelum kekirim - makanya "Buat Teks" (langkah sebelumnya)
+// SENGAJA gak dihapus/digabung, itu bukan langkah basa-basi, itu jendela buat ngecek dulu.
 btnKirimChat.addEventListener('click', function(){
   const teks = document.getElementById('teksHasil').textContent;
-  const shareUrl = 'https://t.me/share/url?url=&text=' + encodeURIComponent(teks);
-  if (tg && tg.openTelegramLink) {
-    tg.openTelegramLink(shareUrl);
-  } else {
-    window.open(shareUrl, '_blank');
+  if (!teks.trim()) return;
+  const initData = tg ? tg.initData : '';
+  if (!initData) {
+    tampilkanErrorKirim_('Mini App ini perlu dibuka dari Telegram (initData kosong) - gak bisa kirim langsung dari browser biasa.');
+    return;
   }
+  btnKirimChat.disabled = true;
+  btnKirimChat.textContent = 'Mengirim…';
+  const body = new URLSearchParams();
+  body.set('action', 'kirimProduksiMiniApp');
+  body.set('teks', teks);
+  body.set('initData', initData);
+  fetch(WEBAPP_URL, { method: 'POST', body: body })
+    .then(function(res){ return res.json(); })
+    .then(function(hasil){
+      btnKirimChat.disabled = false;
+      btnKirimChat.textContent = '✈️ Kirim ke Telegram';
+      if (hasil && hasil.ok) {
+        if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+        daftarItem = [];
+        document.getElementById('successScreen').innerHTML =
+          '<div class="success-screen"><div class="success-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>' +
+          '<div class="success-title">Terkirim &amp; tersimpan</div>' +
+          '<div class="success-sub">' + hasil.jumlahItem + ' item berhasil diproses ke Sheet &amp; sudah dikirim ke grup.</div></div>';
+        document.getElementById('btnRowSukses').style.display = 'none';
+        const btnBaru = document.createElement('button');
+        btnBaru.className = 'btn btn-primary btn-full';
+        btnBaru.textContent = 'Input Laporan Baru';
+        btnBaru.style.marginTop = '10px';
+        btnBaru.addEventListener('click', function(){ window.location.reload(); });
+        document.getElementById('successScreen').appendChild(btnBaru);
+      } else {
+        tampilkanErrorKirim_((hasil && hasil.error) || 'Gagal mengirim, coba lagi.');
+      }
+    })
+    .catch(function(err){
+      btnKirimChat.disabled = false;
+      btnKirimChat.textContent = '✈️ Kirim ke Telegram';
+      tampilkanErrorKirim_('Gagal mengirim: ' + err.message);
+    });
 });
+
+function tampilkanErrorKirim_(pesan){
+  let el = document.getElementById('kirimErrorBanner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'kirimErrorBanner';
+    el.className = 'error-banner';
+    document.getElementById('btnRowSukses').insertAdjacentElement('beforebegin', el);
+  }
+  el.textContent = pesan;
+  el.style.display = 'block';
+}
 
 btnSalin.addEventListener('click', function(){
   const teks = document.getElementById('teksHasil').textContent;
