@@ -69,35 +69,37 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Dashboard Stok Kain — TIM POTONG</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
 <style>
 :root{
-  --bg:#F6F3EC; --surface:#FFFFFF; --surface-2:#EFEAE0;
-  --ink:#1E2430; --ink-muted:#726C60; --line:#E4DDCE;
-  --accent:#2F6F68; --accent-deep:#1E4B46;
-  --good:#2E7D5B; --good-tint:#E3F1E9;
-  --warn:#B4790E; --warn-tint:#FBEEDA;
-  --bad:#B23B2E; --bad-tint:#F8E4E0;
-  --shadow: 0 1px 2px rgba(30,36,48,0.04), 0 8px 24px -12px rgba(30,36,48,0.12);
+  --bg:#F3F5FE; --surface:#FFFFFF; --surface-2:#E4E7F5;
+  --ink:#292B31; --ink-muted:#6B6F82; --line:#D7DAEC;
+  --accent:#796CBF; --accent-deep:#5D5294;
+  --good:#3F7A5C; --good-tint:#E3F1E9;
+  --warn:#A5750F; --warn-tint:#FBEEDA;
+  --bad:#A64236; --bad-tint:#F8E4E0;
+  --shadow: 0 1px 2px rgba(41,43,49,0.05), 0 8px 24px -12px rgba(41,43,49,0.14);
   --scale-card:1; --scale-antrian:1; --scale-preview:1;
 }
 :root[data-theme="dark"]{
-  --bg:#14181F; --surface:#1B2129; --surface-2:#212934;
-  --ink:#EDEBE4; --ink-muted:#9B968A; --line:#2B323D;
-  --accent:#59A79C; --accent-deep:#8FCBC0;
-  --good:#5CB88A; --good-tint:#1B2E24;
-  --warn:#E0A94D; --warn-tint:#332510;
-  --bad:#E0736A; --bad-tint:#3A2320;
-  --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 32px -16px rgba(0,0,0,0.5);
+  --bg:#161826; --surface:#232532; --surface-2:#2B2E3D;
+  --ink:#E9E9ED; --ink-muted:#9397AB; --line:#3F424D;
+  --accent:#9184D9; --accent-deep:#B5ABFC;
+  --good:#5CB88A; --good-tint:#1C2E26;
+  --warn:#E0A94D; --warn-tint:#332811;
+  --bad:#E0736A; --bad-tint:#3A2422;
+  --shadow: 0 0 0 1px #3F424D, 0 6px 18px rgba(0,0,0,0.55);
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#14181F; --surface:#1B2129; --surface-2:#212934;
-    --ink:#EDEBE4; --ink-muted:#9B968A; --line:#2B323D;
-    --accent:#59A79C; --accent-deep:#8FCBC0;
-    --good:#5CB88A; --good-tint:#1B2E24;
-    --warn:#E0A94D; --warn-tint:#332510;
-    --bad:#E0736A; --bad-tint:#3A2320;
-    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 32px -16px rgba(0,0,0,0.5);
+    --bg:#161826; --surface:#232532; --surface-2:#2B2E3D;
+    --ink:#E9E9ED; --ink-muted:#9397AB; --line:#3F424D;
+    --accent:#9184D9; --accent-deep:#B5ABFC;
+    --good:#5CB88A; --good-tint:#1C2E26;
+    --warn:#E0A94D; --warn-tint:#332811;
+    --bad:#E0736A; --bad-tint:#3A2422;
+    --shadow: 0 0 0 1px #3F424D, 0 6px 18px rgba(0,0,0,0.55);
   }
 }
 
@@ -105,7 +107,7 @@
 html,body{height:100%;}
 body{
   margin:0; background:var(--bg); color:var(--ink);
-  font-family:-apple-system,"SF Pro Display","SF Pro Text",system-ui,"Segoe UI",Roboto,sans-serif;
+  font-family:"Inter",-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;
   -webkit-font-smoothing:antialiased;
 }
 .page{ max-width:1000px; margin:0 auto; padding:16px 16px 32px; }
@@ -129,14 +131,14 @@ body{
 .main-tabs{ display:flex; gap:6px; margin:4px 0 16px; max-width:420px; }
 .main-tab-btn{
   flex:1 1 auto; text-align:center; font-size:12.5px; font-weight:700; padding:10px;
-  border-radius:12px; border:1.4px solid var(--line); background:var(--surface); color:var(--ink-muted);
+  border-radius:8px; border:1.4px solid var(--line); background:var(--surface); color:var(--ink-muted);
   cursor:pointer; -webkit-tap-highlight-color:transparent;
 }
 .main-tab-btn.active{ background:var(--accent-deep); border-color:var(--accent-deep); color:#fff; }
 
 .stats{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:18px; }
 @media (max-width:520px){ .stats{grid-template-columns:1fr;} }
-.stat-card{ position:relative; background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:18px 18px 16px; box-shadow:var(--shadow); overflow:hidden; }
+.stat-card{ position:relative; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:18px 18px 16px; box-shadow:var(--shadow); overflow:hidden; }
 .stat-card .label{ font-size:12.5px; font-weight:600; color:var(--ink-muted); margin:0 0 10px; max-width:70%; }
 .stat-card .value{ font-size:32px; font-weight:750; letter-spacing:-0.02em; font-variant-numeric:tabular-nums; line-height:1; margin:0 0 6px; }
 .stat-card .value small{ font-size:16px; font-weight:600; color:var(--ink-muted); margin-left:2px; }
@@ -160,7 +162,7 @@ h2.section-title{
 .filter-chip.active{ background:var(--accent); border-color:var(--accent); color:#fff; }
 
 .search-wrap{ position:relative; margin:0 0 10px; }
-.search-wrap input{ width:100%; padding:10px 34px 10px 14px; border-radius:12px; border:1.4px solid var(--line); background:var(--surface); font-size:13.5px; color:var(--ink); }
+.search-wrap input{ width:100%; padding:10px 34px 10px 14px; border-radius:8px; border:1.4px solid var(--line); background:var(--surface); font-size:13.5px; color:var(--ink); }
 .search-wrap input:focus{ outline:2px solid var(--accent); outline-offset:1px; }
 .search-wrap .icon{ position:absolute; right:11px; top:50%; transform:translateY(-50%); width:16px; height:16px; color:var(--ink-muted); pointer-events:none; }
 .search-clear{ position:absolute; right:9px; top:50%; transform:translateY(-50%); font-size:11px; font-weight:700; color:var(--ink-muted); background:var(--surface-2); border:none; border-radius:999px; width:20px; height:20px; cursor:pointer; display:none; }
@@ -170,7 +172,7 @@ h2.section-title{
 
 /* ===== STOK: grid 2+ kolom, expand per kartu ===== */
 .stok-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:8px; }
-.scard{ background:var(--surface); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); overflow:hidden; align-self:start; }
+.scard{ background:var(--surface); border:1px solid var(--line); border-radius:8px; box-shadow:var(--shadow); overflow:hidden; align-self:start; }
 .scard-head{ display:flex; align-items:center; gap:7px; padding:8px 9px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
 .scard-head:active{ background:var(--surface-2); }
 .num{ width:16px; height:16px; border-radius:50%; background:var(--surface-2); color:var(--ink-muted); font-size:9px; font-weight:700; flex:0 0 auto; display:flex; align-items:center; justify-content:center; }
@@ -190,7 +192,7 @@ h2.section-title{
 
 /* ===== LAPORAN BELUM SELESAI: grid + checkbox ===== */
 .proses-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(215px, 1fr)); gap:8px; }
-.pcard{ background:var(--surface); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); padding:9px 10px 8px; display:flex; gap:8px; align-items:flex-start; }
+.pcard{ background:var(--surface); border:1px solid var(--line); border-radius:8px; box-shadow:var(--shadow); padding:9px 10px 8px; display:flex; gap:8px; align-items:flex-start; }
 .pcard.done{ opacity:.45; }
 .pcard.done .p-title{ text-decoration:line-through; }
 .chk{ width:18px; height:18px; border-radius:6px; border:1.6px solid var(--line); flex:0 0 auto; margin-top:1px; cursor:pointer; display:flex; align-items:center; justify-content:center; background:var(--surface); transition:background .15s,border-color .15s; }
@@ -218,7 +220,7 @@ h2.section-title{
 .btn-rekap:disabled{ opacity:.6; pointer-events:none; }
 
 .antrian-wrap{ margin-bottom:12px; }
-.antrian-empty{ font-size:calc(11.5px * var(--scale-antrian)); color:var(--ink-muted); background:var(--surface); border:1px dashed var(--line); border-radius:12px; padding:12px 14px; text-align:center; }
+.antrian-empty{ font-size:calc(11.5px * var(--scale-antrian)); color:var(--ink-muted); background:var(--surface); border:1px dashed var(--line); border-radius:12px; padding:12px 14px; text-align:left; }
 .antrian-list{ display:flex; flex-direction:column; gap:6px; }
 .antrian-item{ display:flex; align-items:center; gap:8px; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:8px 10px; box-shadow:var(--shadow); }
 .antrian-item .a-info{ flex:1 1 auto; min-width:0; }
@@ -239,19 +241,31 @@ h2.section-title{
 }
 .btn-kirim-beneran:disabled{ opacity:.6; pointer-events:none; }
 
-.qc-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:9px; }
-.qc-card{ background:var(--surface); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); padding:9px 10px 8px; position:relative; }
+.qc-grid{ display:flex; flex-direction:column; }
+.qc-card{ background:transparent; border:none; border-top:1px solid var(--line); box-shadow:none; border-radius:0; padding:0; position:relative; }
+.qc-card:first-child{ border-top:none; }
 .qc-card.mengirim::after{
-  content:"● menyimpan…"; position:absolute; top:7px; right:8px; font-size:8px; font-weight:700;
+  content:"● menyimpan…"; position:absolute; top:9px; right:4px; font-size:8px; font-weight:700;
   color:var(--accent-deep); background:var(--surface); border:1px solid var(--line);
   border-radius:999px; padding:2px 7px;
 }
-.qc-card.lengkap{ border-color:var(--good); background:var(--good-tint); }
-.qc-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:6px; }
-.qc-top-left{ min-width:0; flex:1 1 auto; }
-.qc-title{ font-size:calc(16px * var(--scale-card)); font-weight:800; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:flex; align-items:center; gap:6px; }
-.qc-num{ display:inline-flex; align-items:center; justify-content:center; width:17px; height:17px; border-radius:50%; background:var(--surface-2); color:var(--ink-muted); font-size:9.5px; font-weight:700; flex:0 0 auto; }
-.qc-qty-badge{ display:inline-flex; align-items:center; justify-content:center; min-width:38px; height:38px; padding:0 7px; border-radius:50%; background:#111; color:#fff; font-size:calc(18px * var(--scale-card)); font-weight:800; line-height:1; flex:0 0 auto; box-shadow:0 2px 6px rgba(0,0,0,.28); }
+.qc-card.lengkap{ background:var(--good-tint); }
+.qc-row-head{ display:flex; align-items:center; gap:8px; padding:10px 4px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.qc-row-head:active{ background:var(--surface-2); }
+.qc-row-main{ flex:1 1 auto; min-width:0; }
+.qc-row-title{ font-size:calc(12.5px * var(--scale-card)); font-weight:700; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.qc-row-meta{ font-size:calc(10px * var(--scale-card)); font-weight:600; color:var(--ink-muted); margin:2px 0 0; display:flex; flex-wrap:wrap; gap:2px 6px; }
+.qc-row-meta .roll{ color:var(--accent-deep); }
+.qc-row-meta .kg{ color:var(--warn); }
+.qc-row-meta .dot{ color:var(--line); font-weight:400; }
+.qc-row-right{ flex:0 0 auto; text-align:right; min-width:60px; }
+.qc-row-frac{ font-size:calc(11.5px * var(--scale-card)); font-weight:700; color:var(--ink); }
+.qc-row-bar{ height:4px; border-radius:2px; background:var(--surface-2); overflow:hidden; display:flex; margin-top:3px; }
+.qc-row-chevron{ width:12px; height:12px; color:var(--ink-muted); transition:transform .15s ease; flex:0 0 auto; margin-left:2px; }
+.qc-row-head.open .qc-row-chevron{ transform:rotate(90deg); }
+.qc-row-body{ max-height:0; overflow:hidden; transition:max-height .2s ease; }
+.qc-row-body-inner{ padding:0 4px 14px 27px; }
+.qc-num{ display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border-radius:50%; background:var(--surface-2); color:var(--ink-muted); font-size:9px; font-weight:700; flex:0 0 auto; }
 .qc-meta2{ font-size:calc(11.5px * var(--scale-card)); font-weight:700; color:var(--ink); margin:3px 0 6px; display:flex; flex-wrap:wrap; align-items:center; gap:3px 6px; }
 .qc-meta2 .roll{ color:var(--accent-deep); }
 .qc-meta2 .kg{ color:var(--warn); }
@@ -329,7 +343,7 @@ input[type="number"]{ -moz-appearance:textfield; appearance:textfield; }
 /* ===== ARSIP SELESAI (collapsible, di bawah tiap tab) ===== */
 .arsip-toggle{
   display:flex; align-items:center; justify-content:space-between; gap:8px;
-  background:var(--surface); border:1px solid var(--line); border-radius:12px;
+  background:var(--surface); border:1px solid var(--line); border-radius:8px;
   padding:11px 14px; margin-top:18px; cursor:pointer; box-shadow:var(--shadow);
   -webkit-tap-highlight-color:transparent;
 }
@@ -340,7 +354,7 @@ input[type="number"]{ -moz-appearance:textfield; appearance:textfield; }
 .arsip-toggle.open .arsip-chevron{ transform:rotate(90deg); }
 .arsip-body{ max-height:0; overflow:hidden; transition:max-height .25s ease; }
 .arsip-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(215px, 1fr)); gap:8px; margin-top:10px; }
-.acard{ background:var(--surface); border:1px solid var(--good); background-color:var(--good-tint); border-radius:12px; padding:9px 10px 8px; opacity:0.85; }
+.acard{ background:var(--surface); border:1px solid var(--good); background-color:var(--good-tint); border-radius:8px; padding:9px 10px 8px; opacity:0.85; }
 .acard .a-title{ font-size:11.5px; font-weight:700; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .acard .a-meta{ font-size:10px; font-weight:700; color:var(--ink); margin:3px 0 5px; display:flex; flex-wrap:wrap; gap:3px 6px; }
 .acard .a-meta .roll{ color:var(--accent-deep); }
@@ -673,6 +687,7 @@ let qcQuery = "";
 let qcSortMode = "hari";
 let qcSudahDimuat = false;
 const qcModeUI = {};
+const qcExpandState = {};
 
 // v.13: konfigurasi field mana yang tampil di baris meta kartu (+ urutannya) - datang dari
 // server (dashboardQC payload, field dashCfg.qcFields), disimpan bareng lewat panel "Atur Tampilan".
@@ -718,10 +733,10 @@ let generalConfig = {
   cardFontScale: "sedang", antrianFontScale: "sedang", previewFontScale: "sedang"
 };
 const ACCENT_PRESETS = {
-  teal:  { accent:"#2F6F68", deep:"#1E4B46" },
-  blue:  { accent:"#2F5D8A", deep:"#1B3E5C" },
-  plum:  { accent:"#7A3B69", deep:"#4E2244" },
-  amber: { accent:"#B4790E", deep:"#7A5209" }
+  teal:  { accent:"#796CBF", deep:"#5D5294" },
+  blue:  { accent:"#5D6EBF", deep:"#3F4B8A" },
+  plum:  { accent:"#8A5CA8", deep:"#5E3B73" },
+  amber: { accent:"#A5750F", deep:"#7A5209" }
 };
 let configPertamaKaliDimuat = false; // dipakai supaya "tab/filter default" cuma diterapkan SEKALI pas dashboard baru dibuka
 
@@ -945,20 +960,46 @@ function renderQCCards(){
     const badgeKanan = lengkapServer ? '<span class="qc-badge">✅</span>'
       : (lengkapEfektif ? '<span class="qc-badge" style="background:var(--accent);">🕓</span>' : '<span class="qc-days'+(stale?' stale':'')+'">'+hariLabel+'</span>');
 
-    const qtyBadge = '<span class="qc-qty-badge" title="Total qty">'+(item.jumlah||asli)+'</span>';
+    const detailId = "qcdetail-"+item.baris;
+    const isOpen = !!qcExpandState[item.baris];
 
     return '<div class="qc-card'+(lengkapEfektif?' lengkap':'')+'" data-baris="'+item.baris+'">' +
-      '<div class="qc-top"><div class="qc-top-left"><p class="qc-title"><span class="qc-num">'+(item.num||'')+'</span>'+item.item+'</p>' +
-        '<div class="qc-meta2">'+buildMetaLine(item, badgeKanan)+'</div>' +
-      '</div>' + qtyBadge + '</div>' +
-      '<div class="qc-sizes">'+sizeChips+'</div>' +
-      (pendingBadge ? '<div>'+pendingBadge+'</div>' : '') +
-      '<div class="qc-progress"><div class="p-sel" style="width:'+pctSel+'%"></div><div class="p-rej" style="width:'+pctRej+'%"></div></div>' +
-      '<div class="qc-progress-label"><span>Sel <b>'+effSel+'</b></span><span>Rej <b>'+effRej+'</b></span><span>Sisa <b>'+Math.max(asli-effSel-effRej,0)+'</b></span></div>' +
-      modeSwitchRow + formHtml +
-      '<p class="qc-error" id="qcErr-'+item.baris+'" style="display:none;"></p>' +
+      '<div class="qc-row-head'+(isOpen?' open':'')+'" data-target="'+detailId+'" data-baris="'+item.baris+'">' +
+        '<span class="qc-num">'+(item.num||'')+'</span>' +
+        '<div class="qc-row-main">' +
+          '<p class="qc-row-title">'+item.item+'</p>' +
+          '<div class="qc-row-meta">'+buildMetaLine(item, badgeKanan)+'</div>' +
+        '</div>' +
+        '<div class="qc-row-right">' +
+          '<span class="qc-row-frac">'+effSel+'/'+(item.jumlah||asli)+'</span>' +
+          '<div class="qc-row-bar"><div style="height:100%;background:var(--good);width:'+pctSel+'%;"></div><div style="height:100%;background:var(--warn);width:'+pctRej+'%;"></div></div>' +
+        '</div>' +
+        '<svg class="qc-row-chevron" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+      '</div>' +
+      '<div class="qc-row-body" id="'+detailId+'"><div class="qc-row-body-inner">' +
+        '<div class="qc-sizes">'+sizeChips+'</div>' +
+        (pendingBadge ? '<div>'+pendingBadge+'</div>' : '') +
+        '<div class="qc-progress"><div class="p-sel" style="width:'+pctSel+'%"></div><div class="p-rej" style="width:'+pctRej+'%"></div></div>' +
+        '<div class="qc-progress-label"><span>Sel <b>'+effSel+'</b></span><span>Rej <b>'+effRej+'</b></span><span>Sisa <b>'+Math.max(asli-effSel-effRej,0)+'</b></span></div>' +
+        modeSwitchRow + formHtml +
+        '<p class="qc-error" id="qcErr-'+item.baris+'" style="display:none;"></p>' +
+      '</div></div>' +
     '</div>';
   }).join("");
+
+  wrap.querySelectorAll(".qc-row-head").forEach(function(head){
+    head.addEventListener("click", function(){
+      const body = document.getElementById(head.dataset.target);
+      const isOpen2 = head.classList.contains("open");
+      head.classList.toggle("open", !isOpen2);
+      qcExpandState[head.dataset.baris] = !isOpen2;
+      body.style.maxHeight = !isOpen2 ? body.scrollHeight + "px" : null;
+    });
+  });
+  wrap.querySelectorAll(".qc-row-head.open").forEach(function(head){
+    const body = document.getElementById(head.dataset.target);
+    if (body) body.style.maxHeight = body.scrollHeight + "px";
+  });
 
   wrap.querySelectorAll(".qc-mode-btn").forEach(function(btn){
     btn.addEventListener("click", function(){ qcModeUI[parseInt(btn.dataset.baris,10)] = btn.dataset.switch; renderQCCards(); });
