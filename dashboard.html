@@ -1,9 +1,22 @@
 <!--
-  DASHBOARD STOK KAIN - TIM POTONG (v.16)
+  DASHBOARD STOK KAIN - TIM POTONG (v.17)
   Halaman statis, di-hosting di GitHub Pages yang sama dengan index.html (Mini App), diupload
-  sebagai "dashboard.html". Backend: apps_script_tim_potong_v15.js.
+  sebagai "dashboard.html". Backend: apps_script_tim_potong_v16.js.
 
-  v.16 (hari ini):
+  v.17 (hari ini):
+  1. Toggle tab "✅ Proses & QC" dipindah jadi posisi PERTAMA/kiri, "📦 Stok Kain" jadi kedua/
+     kanan (sebelumnya kebalik). Urutan opsi di dropdown "Tab dibuka pertama kali" (panel Atur
+     Tampilan) ikut disesuaikan biar konsisten sama urutan toggle yang baru.
+  2. BUG FIX - section "📜 Arsip Selesai" gak pernah nampilin data apapun (selalu kosong/gagal
+     diam-diam). Penyebabnya: fungsi renderArsip()/muatArsipSelesai() nyoba akses elemen
+     `arsipSummary-stok`/`arsipGrid-stok` yang SEBENARNYA GAK ADA di HTML (arsip cuma pernah
+     dipasang di tab QC, gak pernah ada versi tab Stok) - begitu getElementById balikin null,
+     baris berikutnya (.textContent=...) langsung throw TypeError yang menghentikan SELURUH
+     forEach, termasuk buat tab "qc" yang datanya sebenarnya valid. Diperbaiki: loop cuma proses
+     "qc" (satu-satunya tab yang beneran punya markup arsip), plus jaga2 null-check kalau markup
+     berubah lagi nanti.
+
+  v.16 (sebelumnya):
   1. Reposisi bagian tab QC - Kartu QC / Daftar Antrian / Preview & Kirim Rekap sekarang masing2
      dibungkus 1 blok yang bisa diatur urutan tampil + show/hide-nya lewat panel "Atur Tampilan"
      (grup "Urutan Bagian"). Section Arsip Selesai TETAP dikunci di posisi paling bawah. Tombol
@@ -361,8 +374,8 @@ input[type="number"]{ -moz-appearance:textfield; appearance:textfield; }
   </div>
 
   <div class="main-tabs">
-    <div class="main-tab-btn active" data-maintab="stok">📦 Stok Kain</div>
     <div class="main-tab-btn" data-maintab="qc">✅ Proses &amp; QC</div>
+    <div class="main-tab-btn active" data-maintab="stok">📦 Stok Kain</div>
   </div>
   <div class="settings-row">
     <button class="btn-atur-tampilan" type="button" id="btnAturTampilan">✏️ Atur Tampilan</button>
@@ -471,8 +484,8 @@ input[type="number"]{ -moz-appearance:textfield; appearance:textfield; }
     <div class="cfg-inline-row">
       <label for="cfgDefaultTab">Tab dibuka pertama kali</label>
       <select id="cfgDefaultTab">
-        <option value="stok">📦 Stok Kain</option>
         <option value="qc">✅ Proses &amp; QC</option>
+        <option value="stok">📦 Stok Kain</option>
       </select>
     </div>
     <div class="cfg-inline-row">
@@ -1305,8 +1318,9 @@ function muatArsipSelesai(){
       renderArsip();
     })
     .catch(function(err){
-      ["arsipGrid-stok","arsipGrid-qc"].forEach(function(id){
-        document.getElementById(id).innerHTML = '<div class="error-state">Gagal memuat arsip: '+err.message+'</div>';
+      ["arsipGrid-qc"].forEach(function(id){
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = '<div class="error-state">Gagal memuat arsip: '+err.message+'</div>';
       });
       perbaruiTinggiArsipTerbuka();
     });
@@ -1322,9 +1336,11 @@ function perbaruiTinggiArsipTerbuka(){
 function renderArsip(){
   const items = arsipItemsRaw || [];
   const ringkasan = items.length ? (items.length + " laporan selesai") : "Belum ada yang selesai 3 hari terakhir";
-  ["stok","qc"].forEach(function(tab){
-    document.getElementById("arsipSummary-"+tab).textContent = ringkasan;
+  ["qc"].forEach(function(tab){
+    const summaryEl = document.getElementById("arsipSummary-"+tab);
     const grid = document.getElementById("arsipGrid-"+tab);
+    if (!summaryEl || !grid) return; // jaga2 kalau markup section ini disembunyikan/dipindah
+    summaryEl.textContent = ringkasan;
     if (!items.length) { grid.innerHTML = '<div class="empty-state">Belum ada laporan yang selesai dalam 3 hari terakhir.</div>'; return; }
     grid.innerHTML = items.map(function(a){
       const sizeChips = Object.keys(a.sizes||{}).map(function(k){ return '<span class="size-chip">'+k+' <b>'+a.sizes[k]+'</b></span>'; }).join("");
