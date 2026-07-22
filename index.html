@@ -1,9 +1,33 @@
 <!DOCTYPE html>
 <!--
-  MINI APP TIM POTONG (ver.07) - form input produksi di dalam Telegram.
-  Backend: apps_script_tim_potong_v11.js (?action=kirimProduksiMiniApp).
+  MINI APP TIM POTONG (ver.08) - form input produksi di dalam Telegram.
+  Backend: apps_script_tim_potong_v16.js (?action=kirimProduksiMiniApp / ?action=standarPemakaian /
+  ?action=inputCfg / ?action=saveInputCfg).
 
-  ver.07 (perubahan hari ini):
+  ver.08 (perubahan hari ini):
+  1. Keyboard NUMERIC-ONLY buat kolom Kode Roll (mode biasa & kombinasi) - inputmode="numeric" +
+     pattern="[0-9]*", biar HP nampilin keypad angka aja begitu kolom itu difokus.
+  2. Tombol "Kirim ke Telegram" sekarang OPTIMISTIC/instant - begitu ditap LANGSUNG pindah ke
+     layar "Terkirim & tersimpan" (no delay sama sekali, gak nunggu jaringan), proses kirim
+     beneran (fetch ke server) jalan di BELAKANG LAYAR. Item disimpan dulu ke antrian tertunda
+     (localStorage) SEBELUM fetch jalan - kalau gagal (jaringan jelek) atau app keburu ditutup,
+     data TETAP ada & otomatis dicoba lagi begitu app dibuka ulang (+ tombol "Coba Kirim Ulang"
+     manual kalau masih gagal terus).
+  3. Opsi ESTIMASI KG STANDAR - toggle "Kg tidak diketahui - pakai estimasi standar" (mode biasa)
+     buat kondisi tim potong lupa/gak sempat timbang. Ambil rate Kg/pcs dari sheet baru
+     "STANDAR PEMAKAIAN" (lewat ?action=standarPemakaian, di-cache 7 hari sama pola kayak
+     Kombinasi Warna), dikalikan qty total. Sheet-nya SENGAJA masih kosong - isi kolom "Kg per
+     Pcs" per Varian dulu baru fitur ini kepakai (sebelum itu, toggle bakal bilang "data belum
+     tersedia"). Estimasi CUMA ditandai di Daftar Item lokal (badge "≈ estimasi") - teks yang
+     BENERAN dikirim ke server TETAP format angka biasa (gak ada tambahan teks), jadi parser
+     backend gak kepengaruh sama sekali.
+  4. Panel baru "✏️ Atur Tampilan" (mirip yang ada di Dashboard QC) - atur urutan & show/hide
+     baris Warna/Kg/Roll (Warna & Kg wajib tetap tampil), ukuran font form, dan warna aksen
+     (pilihan "Otomatis" = ikut tema kategori Anak/Dewasa/Lain seperti biasa, atau override manual
+     salah satu preset). Disimpan di server (Script Properties, key terpisah dari config
+     Dashboard) lewat ?action=saveInputCfg - berlaku buat siapapun yang buka Mini App ini.
+
+  ver.07 (sebelumnya):
   1. "Daftar Item" dipindah dari ATAS ke BAWAH (sebelum tombol), gaya gelap kontras (dark navy,
      mirip bubble preview Telegram di dashboard QC) - biar jelas kelihatan ini "yang bakal
      dikirim", bukan nyampur sama form input di atasnya.
@@ -36,6 +60,7 @@
     --theme-accent-deep:#1F7A88;
     --theme-accent-soft:#E4F6F8;
     --theme-bg-image: none;
+    --scale-app:1;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{margin:0;padding:0;overflow-x:hidden;max-width:100vw;}
@@ -90,9 +115,9 @@
   }
   .row:last-child{border-bottom:none;}
   .row-inline{display:flex;flex-direction:row;align-items:center;gap:10px;min-height:20px;min-width:0;}
-  .row-label{font-size:12px;color:var(--ink-2);font-weight:600;flex:0 0 auto;white-space:nowrap;}
+  .row-label{font-size:calc(12px * var(--scale-app));color:var(--ink-2);font-weight:600;flex:0 0 auto;white-space:nowrap;}
   select,input[type=number],input[type=text]{
-    width:100%;flex:1;min-width:0;border:none;outline:none;font-size:16px;color:var(--ink);
+    width:100%;flex:1;min-width:0;border:none;outline:none;font-size:calc(16px * var(--scale-app));color:var(--ink);
     background:transparent;padding:1px 0;font-family:inherit;font-weight:450;text-align:right;
   }
   #warnaInput{text-transform:uppercase;}
@@ -103,7 +128,7 @@
     display:flex;justify-content:space-between;align-items:center;gap:10px;
   }
   .item-row:last-child{border-bottom:none;}
-  .item-row-text{font-size:14.5px;line-height:1.55;}
+  .item-row-text{font-size:calc(14.5px * var(--scale-app));line-height:1.55;}
   .item-row-text b{font-weight:650;}
   .item-row-tag{
     display:inline-block;font-size:10.5px;font-weight:700;padding:1.5px 7px;border-radius:6px;
@@ -262,6 +287,19 @@
   .custom-select-btn.placeholder{color:var(--ink-3);}
   .custom-select-btn .chev{font-size:11px;color:var(--ink-2);flex-shrink:0;}
   .custom-select-btn span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+  /* ---- Panel "Atur Tampilan" (v.08) ---- */
+  .cfg-row{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:0.5px solid var(--sep);}
+  .cfg-row:last-child{border-bottom:none;}
+  .cfg-row.off{opacity:.45;}
+  .cfg-row input[type=checkbox]{width:auto;flex:none;}
+  .cfg-row-label{flex:1;font-size:14px;font-weight:600;text-align:left;}
+  .cfg-move{display:flex;gap:4px;flex:none;}
+  .cfg-move button{border:none;background:var(--canvas);border-radius:8px;width:26px;height:26px;font-size:12px;cursor:pointer;color:var(--ink-2);}
+  .cfg-move button:disabled{opacity:.3;}
+  .cfg-swatch{width:36px;height:36px;border-radius:50%;border:2.5px solid transparent;cursor:pointer;flex:none;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:800;}
+  .cfg-swatch.active{border-color:var(--ink);}
+  #cfgFontApp{text-align:left;border:1px solid var(--sep);border-radius:10px;padding:8px;background:#fff;}
 </style>
 </head>
 <body>
@@ -273,8 +311,9 @@
       <div class="topbar-title">Input Produksi</div>
     </div>
     <div style="text-align:right;">
-      <div class="version-badge">ver.07</div>
+      <div class="version-badge">ver.08</div>
       <div id="refreshLink" style="margin-top:4px;font-size:11.5px;font-weight:600;color:var(--theme-accent-deep);cursor:pointer;">🔄 Refresh</div>
+      <div id="aturTampilanLink" style="margin-top:4px;font-size:11.5px;font-weight:600;color:var(--theme-accent-deep);cursor:pointer;">✏️ Atur Tampilan</div>
     </div>
   </div>
 </div>
@@ -305,22 +344,29 @@
       </div>
 
       <div id="biasaRows">
-        <div class="row" style="position:relative;">
+        <div class="row" id="rowWarna" style="position:relative;">
           <div class="row-inline" id="warnaInputWrap">
             <div class="row-label">Warna</div>
             <input type="text" id="warnaInput" autocomplete="off">
           </div>
         </div>
-        <div class="row">
+        <div class="row" id="rowKg">
           <div class="row-inline">
             <div class="row-label">Kg Kain Terpakai</div>
             <input type="number" id="kgInput" step="0.01" autocomplete="off">
           </div>
+          <div class="row-inline" style="margin-top:6px;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);font-weight:600;">
+              <input type="checkbox" id="pakaiEstimasiKg" style="width:auto;flex:none;">
+              Kg tidak diketahui - pakai estimasi standar
+            </label>
+          </div>
+          <div id="estimasiKgInfo" style="display:none;font-size:11.5px;color:var(--theme-accent-deep);margin-top:2px;"></div>
         </div>
-        <div class="row">
+        <div class="row" id="rowRoll">
           <div class="row-inline">
             <div class="row-label">Kode Roll <span class="badge">opsional</span></div>
-            <input type="text" id="rollInput" autocomplete="off">
+            <input type="text" id="rollInput" autocomplete="off" inputmode="numeric" pattern="[0-9]*">
           </div>
         </div>
       </div>
@@ -394,6 +440,31 @@
     </div>
   </div>
 
+  <div id="cfgOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;align-items:flex-end;justify-content:center;">
+    <div style="background:var(--canvas);width:100%;max-width:480px;border-radius:20px 20px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));max-height:85vh;overflow-y:auto;">
+      <div style="font-size:17px;font-weight:750;margin-bottom:10px;">✏️ Atur Tampilan</div>
+
+      <div class="section-label" style="margin-top:2px;">Urutan &amp; Tampil/Sembunyikan Kolom</div>
+      <div class="card" id="cfgRowsFieldOrder"></div>
+      <p style="font-size:11.5px;color:var(--ink-2);margin:6px 4px 0;">Warna &amp; Kg Kain wajib tetap tampil (dipakai buat proses data).</p>
+
+      <div class="section-label">Ukuran Font</div>
+      <div class="card"><div class="row"><div class="row-inline">
+        <div class="row-label">Font</div>
+        <select id="cfgFontApp"></select>
+      </div></div></div>
+
+      <div class="section-label">Warna Aksen</div>
+      <div style="display:flex;gap:10px;padding:4px 4px 8px;" id="cfgSwatchRow"></div>
+      <p style="font-size:11.5px;color:var(--ink-2);margin:0 4px 0;">"Otomatis" = warna ikut kategori (Anak/Dewasa/Lain) seperti biasa.</p>
+
+      <div style="display:flex;gap:10px;margin-top:18px;">
+        <button class="btn btn-secondary" id="cfgBatal" style="flex:1;">Batal</button>
+        <button class="btn btn-primary" id="cfgSimpan" style="flex:1;">Simpan</button>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -445,6 +516,8 @@ const WARNA_CACHE_KEY = 'timpotong_warna_cache_v1';
 const WARNA_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 1 hari - stok kain bergerak tiap hari, beda dari kategori/varian yang jarang berubah
 const KOMBINASI_CACHE_KEY = 'timpotong_kombinasi_warna_cache_v1';
 const KOMBINASI_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 hari - kombinasi warna jarang ganti tapi gak sejarang kategori/varian
+const STANDAR_CACHE_KEY = 'timpotong_standar_pemakaian_cache_v1';
+const STANDAR_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 hari - sama pola kayak kombinasi warna
 
 const tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
 
@@ -466,12 +539,170 @@ function themeUntukKategori(nama){
 }
 function terapkanTema(theme){
   const root = document.documentElement;
-  root.style.setProperty('--theme-accent', theme.accent);
-  root.style.setProperty('--theme-accent-deep', theme.accentDeep);
-  root.style.setProperty('--theme-accent-soft', theme.accentSoft);
-  root.style.setProperty('--canvas', theme.canvas);
-  root.style.setProperty('--theme-bg-image', theme.bgImage);
+  // v.08: kalau Denny pilih warna aksen manual lewat "Atur Tampilan" (bukan 'auto'), itu
+  // MENIMPA tema otomatis per-kategori di bawah ini - tema otomatis tetap jalan sebagai default.
+  const t = (appGeneralConfig.accent && appGeneralConfig.accent !== 'auto' && ACCENT_PRESETS_APP[appGeneralConfig.accent])
+    ? ACCENT_PRESETS_APP[appGeneralConfig.accent] : theme;
+  root.style.setProperty('--theme-accent', t.accent);
+  root.style.setProperty('--theme-accent-deep', t.accentDeep);
+  root.style.setProperty('--theme-accent-soft', t.accentSoft);
+  root.style.setProperty('--canvas', t.canvas);
+  root.style.setProperty('--theme-bg-image', t.bgImage);
 }
+
+// ============ v.08: PANEL "ATUR TAMPILAN" (urutan kolom, font, warna aksen) ============
+const ACCENT_PRESETS_APP = {
+  teal:  { accent:'#3AAFC0', accentDeep:'#1F7A88', accentSoft:'#E4F6F8', canvas:'#EAF7F8', bgImage:'none' },
+  blue:  { accent:'#2F6FEA', accentDeep:'#1B3F91', accentSoft:'#E1E9FB', canvas:'#EFF3FC', bgImage:'none' },
+  plum:  { accent:'#8B5FBF', accentDeep:'#5B3A82', accentSoft:'#EDE3F7', canvas:'#F4EEFB', bgImage:'none' },
+  amber: { accent:'#D98E1B', accentDeep:'#8F5A0C', accentSoft:'#FCEBD2', canvas:'#FCF3E4', bgImage:'none' }
+};
+const FONT_SCALE_PRESETS_APP = [
+  { key:'kecil', label:'Kecil', value:0.9 },
+  { key:'sedang', label:'Sedang', value:1 },
+  { key:'besar', label:'Besar', value:1.15 },
+  { key:'sangatbesar', label:'Sangat Besar', value:1.3 }
+];
+function fontScaleValueApp(key){
+  const f = FONT_SCALE_PRESETS_APP.filter(function(p){ return p.key === key; })[0];
+  return f ? f.value : 1;
+}
+const ROW_EL_BY_KEY = { warna: 'rowWarna', kg: 'rowKg', roll: 'rowRoll' };
+
+let appGeneralConfig = { accent: 'auto', fontScale: 'sedang' };
+let appFieldOrderConfig = [
+  { key: 'warna', label: 'Warna', show: true },
+  { key: 'kg', label: 'Kg Kain Terpakai', show: true },
+  { key: 'roll', label: 'Kode Roll', show: true }
+];
+
+function applyFontScaleApp(){
+  document.documentElement.style.setProperty('--scale-app', fontScaleValueApp(appGeneralConfig.fontScale));
+}
+
+// Reorder & show/hide baris di dalam #biasaRows sesuai appFieldOrderConfig. Roll boleh
+// disembunyikan (opsional), tapi Warna & Kg WAJIB tetap tampil (dijaga juga di backend).
+function applyFieldOrderApp(){
+  const wrap = document.getElementById('biasaRows');
+  appFieldOrderConfig.forEach(function(f){
+    const el = document.getElementById(ROW_EL_BY_KEY[f.key]);
+    if (!el) return;
+    wrap.appendChild(el); // pindahkan ke urutan paling akhir, satu-satu sesuai urutan config
+    const wajibTampil = (f.key === 'warna' || f.key === 'kg');
+    el.style.display = (f.show || wajibTampil) ? 'block' : 'none';
+  });
+}
+
+function terapkanInputConfigBundle(bundle){
+  if (bundle.fieldOrder) appFieldOrderConfig = bundle.fieldOrder;
+  if (bundle.general) appGeneralConfig = Object.assign({}, appGeneralConfig, bundle.general);
+  applyFieldOrderApp();
+  applyFontScaleApp();
+  // re-terapkan tema kategori yang lagi aktif skrg biar accent override langsung kepakai
+  if (state.kategori) terapkanTema(themeUntukKategori(state.kategori));
+}
+
+fetch(WEBAPP_URL + '?action=inputCfg', { cache: 'no-store' })
+  .then(function(r){ return r.json(); })
+  .then(function(data){ terapkanInputConfigBundle(data.config || {}); })
+  .catch(function(){ /* diamkan - pakai default kalau gagal, gak ganggu form utama */ });
+
+let draftInputCfg = null;
+function cloneFieldOrder(list){ return list.map(function(f){ return { key:f.key, label:f.label, show:f.show }; }); }
+
+function renderCfgFieldOrder(){
+  const wrap = document.getElementById('cfgRowsFieldOrder');
+  const list = draftInputCfg.fieldOrder;
+  wrap.innerHTML = list.map(function(f, i){
+    const wajib = (f.key === 'warna' || f.key === 'kg');
+    return '<div class="cfg-row'+(f.show || wajib ? '' : ' off')+'">' +
+      '<input type="checkbox" data-idx="'+i+'"'+(f.show || wajib ? ' checked' : '')+(wajib ? ' disabled' : '')+'>' +
+      '<span class="cfg-row-label">'+f.label+(wajib ? ' <span class="badge">wajib</span>' : '')+'</span>' +
+      '<div class="cfg-move">' +
+        '<button type="button" data-move="up" data-idx="'+i+'"'+(i===0?' disabled':'')+'>▲</button>' +
+        '<button type="button" data-move="down" data-idx="'+i+'"'+(i===list.length-1?' disabled':'')+'>▼</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+  wrap.querySelectorAll('input[type=checkbox]').forEach(function(cb){
+    cb.addEventListener('change', function(){
+      draftInputCfg.fieldOrder[parseInt(cb.dataset.idx,10)].show = cb.checked;
+    });
+  });
+  wrap.querySelectorAll('button[data-move]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      const i = parseInt(btn.dataset.idx,10);
+      const j = btn.dataset.move === 'up' ? i-1 : i+1;
+      if (j < 0 || j >= list.length) return;
+      const tmp = list[i]; list[i] = list[j]; list[j] = tmp;
+      renderCfgFieldOrder();
+    });
+  });
+}
+
+function renderCfgSwatchesApp(){
+  const row = document.getElementById('cfgSwatchRow');
+  const opsi = [{key:'auto', label:'A'}].concat(Object.keys(ACCENT_PRESETS_APP).map(function(k){ return {key:k, label:k[0].toUpperCase()}; }));
+  row.innerHTML = opsi.map(function(o){
+    const active = draftInputCfg.general.accent === o.key;
+    const bg = o.key === 'auto' ? 'linear-gradient(135deg,#3AAFC0,#264060,#8B5FBF)' : ACCENT_PRESETS_APP[o.key].accent;
+    return '<button type="button" class="cfg-swatch'+(active?' active':'')+'" data-accent="'+o.key+'" style="background:'+bg+';" title="'+o.key+'">'+o.label+'</button>';
+  }).join('');
+  row.querySelectorAll('.cfg-swatch').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      draftInputCfg.general.accent = btn.dataset.accent;
+      if (state.kategori) terapkanTema(themeUntukKategori(state.kategori)); // live preview
+      else { appGeneralConfig.accent = btn.dataset.accent; }
+      renderCfgSwatchesApp();
+    });
+  });
+}
+
+function bukaPanelAturTampilanApp(){
+  draftInputCfg = { fieldOrder: cloneFieldOrder(appFieldOrderConfig), general: Object.assign({}, appGeneralConfig) };
+  renderCfgFieldOrder();
+  renderCfgSwatchesApp();
+  const selFont = document.getElementById('cfgFontApp');
+  selFont.innerHTML = FONT_SCALE_PRESETS_APP.map(function(f){ return '<option value="'+f.key+'">'+f.label+'</option>'; }).join('');
+  selFont.value = draftInputCfg.general.fontScale;
+  document.getElementById('cfgOverlay').style.display = 'flex';
+}
+
+document.getElementById('aturTampilanLink').addEventListener('click', bukaPanelAturTampilanApp);
+document.getElementById('cfgFontApp').addEventListener('change', function(ev){
+  draftInputCfg.general.fontScale = ev.target.value;
+  document.documentElement.style.setProperty('--scale-app', fontScaleValueApp(ev.target.value)); // live preview
+});
+document.getElementById('cfgOverlay').addEventListener('click', function(ev){
+  if (ev.target.id === 'cfgOverlay') { terapkanInputConfigBundle(appGeneralConfig ? { general: appGeneralConfig, fieldOrder: appFieldOrderConfig } : {}); document.getElementById('cfgOverlay').style.display = 'none'; }
+});
+document.getElementById('cfgBatal').addEventListener('click', function(){
+  applyFontScaleApp();
+  if (state.kategori) terapkanTema(themeUntukKategori(state.kategori)); // batal preview, balik ke yang tersimpan
+  document.getElementById('cfgOverlay').style.display = 'none';
+});
+document.getElementById('cfgSimpan').addEventListener('click', function(){
+  const btn = document.getElementById('cfgSimpan');
+  btn.disabled = true; btn.textContent = 'Menyimpan…';
+  const body = new URLSearchParams();
+  body.set('action', 'saveInputCfg');
+  body.set('data', JSON.stringify(draftInputCfg));
+  fetch(WEBAPP_URL, { method: 'POST', body: body })
+    .then(function(res){ return res.json(); })
+    .then(function(hasil){
+      btn.disabled = false; btn.textContent = 'Simpan';
+      if (hasil && hasil.ok){
+        terapkanInputConfigBundle(hasil.config || draftInputCfg);
+        document.getElementById('cfgOverlay').style.display = 'none';
+      } else {
+        showError('Gagal simpan tampilan: ' + ((hasil && hasil.error) || 'tidak diketahui'));
+      }
+    })
+    .catch(function(err){
+      btn.disabled = false; btn.textContent = 'Simpan';
+      showError('Gagal simpan tampilan: ' + err.message);
+    });
+});
 
 let KATEGORI_VARIAN = {};
 let KOMBINASI_WARNA = [];
@@ -479,7 +710,7 @@ let daftarItem = []; // item biasa: {mode:'biasa', kategori, kodeItem, varianLab
                       // item kombinasi: {mode:'kombinasi', kategori, kodeItem, varianLabel, warnaTiga:[w1,w2,w3], kgTiga:[k1,k2,k3], rollTiga:[r1,r2,r3], qty}
 let state = {
   kategori: null, kodeItem: null, varianLabel: null, mode: 'biasa',
-  warna: '', kg: '', roll: '',
+  warna: '', kg: '', roll: '', kgEstimasi: false,
   comboWarna: null, comboKg: ['','',''], comboRoll: ['','',''],
   qty: {}
 };
@@ -597,6 +828,7 @@ function pilihVarian(idx){
   state.kodeItem = v.kode; // BISA jadi string kosong '' - itu VALID (lihat catatan di bawah)
   state.varianLabel = v.label;
   state.mode = isKombinasi(v.label) ? 'kombinasi' : 'biasa';
+  if (cbEstimasiKg.checked){ cbEstimasiKg.checked = false; kgInput.disabled = false; kgInput.value = ''; state.kg = ''; state.kgEstimasi = false; estimasiKgInfo.style.display = 'none'; }
   if (state.mode === 'kombinasi') {
     biasaRows.style.display = 'none';
     kombinasiRows.style.display = 'block';
@@ -704,7 +936,7 @@ function pilihKombinasi(c){
     return '<div class="combo-kgroll-label">Kg + Kode Roll - ' + w + '</div>' +
       '<div class="combo-kgroll-row" style="align-items:center;">' +
         '<input type="number" step="0.01" class="comboKgInput" data-idx="'+i+'" placeholder="kg">' +
-        '<input type="text" class="comboRollInput" data-idx="'+i+'" placeholder="kode roll (opsional)">' +
+        '<input type="text" class="comboRollInput" data-idx="'+i+'" placeholder="kode roll (opsional)" inputmode="numeric" pattern="[0-9]*">' +
       '</div>';
   }).join('');
   kgRollComboRow.style.display = 'block';
@@ -729,6 +961,10 @@ document.addEventListener('click', function(e){
 
 function validate(){
   const total = updateTotal();
+  if (cbEstimasiKg && cbEstimasiKg.checked && state.mode !== 'kombinasi'){
+    const est = hitungEstimasiKg_();
+    if (est !== null){ kgInput.value = est; state.kg = String(est); }
+  }
   let ok;
   if (state.mode === 'kombinasi') {
     ok = state.kategori && state.kodeItem !== null && state.comboWarna &&
@@ -763,7 +999,7 @@ function renderItemList(){
     } else {
       const awalanBiasa = bikinAwalan_(item.kategori, item.kodeItem);
       namaItem = (awalanBiasa ? awalanBiasa + ' ' : '') + item.warna.toUpperCase();
-      subInfo = item.kg + 'kg' + (item.roll ? ' (roll ' + item.roll + ')' : '');
+      subInfo = item.kg + 'kg' + (item.kgEstimasi ? ' <span class="badge" style="color:var(--theme-accent-deep);">≈ estimasi</span>' : '') + (item.roll ? ' (roll ' + item.roll + ')' : '');
     }
     const row = document.createElement('div');
     row.className = 'item-row';
@@ -804,6 +1040,7 @@ btnTambah.addEventListener('click', function(){
       warna: state.warna,
       kg: state.kg,
       roll: state.roll,
+      kgEstimasi: !!state.kgEstimasi,
       qty: Object.assign({}, state.qty)
     });
   }
@@ -811,11 +1048,12 @@ btnTambah.addEventListener('click', function(){
 
   // Reset field DETAIL ITEM (kategori TETAP, biar cepat isi item berikutnya kategori sama)
   state.kodeItem = null; state.varianLabel = null; state.mode = 'biasa';
-  state.warna = ''; state.kg = ''; state.roll = '';
+  state.warna = ''; state.kg = ''; state.roll = ''; state.kgEstimasi = false;
   state.comboWarna = null; state.comboKg = ['','','']; state.comboRoll = ['','',''];
   varianPickerLabel.textContent = '— pilih —';
   varianPickerBtn.classList.add('placeholder');
-  warnaInput.value = ''; kgInput.value = ''; rollInput.value = '';
+  warnaInput.value = ''; kgInput.value = ''; kgInput.disabled = false; rollInput.value = '';
+  cbEstimasiKg.checked = false; estimasiKgInfo.style.display = 'none';
   biasaRows.style.display = 'block';
   kombinasiRows.style.display = 'none';
   resetComboUI();
@@ -901,56 +1139,136 @@ btnKembali.addEventListener('click', function(){
   document.getElementById('btnRowSukses').style.display = 'none';
 });
 
-// v.07: dulu tombol ini ("Kirim ke Chat") buka share-sheet Telegram (tg.openTelegramLink),
-// jadi orangnya masih perlu 1 tap lagi di dalam Telegram buat beneran kirim - itu jadi
-// kesempatan terakhir buat batal/edit. Sekarang ("Kirim ke Telegram") LANGSUNG proses: teks
-// dikirim ke server, server yang parse & tulis ke Sheet + kirim notifikasi ke grup, semua dalam
-// 1 tap. Layar preview (dengan tombol "Kembali Edit") di ATAS tombol ini yang sekarang jadi
-// SATU-SATUNYA kesempatan ngecek sebelum kekirim - makanya "Buat Teks" (langkah sebelumnya)
-// SENGAJA gak dihapus/digabung, itu bukan langkah basa-basi, itu jendela buat ngecek dulu.
+// v.08: dulu tombol ini nunggu respons server dulu (bisa berasa delay/nge-freeze sebentar)
+// baru pindah ke layar "Terkirim & tersimpan". SEKARANG optimistic: begitu ditap, langsung
+// pindah ke layar sukses (no delay, gak nunggu jaringan sama sekali) - proses kirim beneran
+// (fetch ke server) jalan di BELAKANG LAYAR. Kalau gagal (jaringan jelek dll), item TETAP
+// disimpan di localStorage (antrianKirimTertunda) dan dicoba lagi otomatis + ada tombol "Coba
+// Kirim Ulang" manual, jadi data gak pernah hilang biarpun sudah pindah layar/nutup app.
+const PENDING_KIRIM_KEY = 'antrianKirimTertunda_v1';
+
+function bacaAntrianTertunda_(){
+  try { return JSON.parse(localStorage.getItem(PENDING_KIRIM_KEY) || '[]'); } catch(e){ return []; }
+}
+function simpanAntrianTertunda_(list){
+  try { localStorage.setItem(PENDING_KIRIM_KEY, JSON.stringify(list)); } catch(e){}
+}
+function tambahKeAntrianTertunda_(teks){
+  const list = bacaAntrianTertunda_();
+  const tempId = Date.now() + '_' + Math.floor(Math.random()*1000);
+  list.push({ tempId: tempId, teks: teks, ts: Date.now() });
+  simpanAntrianTertunda_(list);
+  return tempId;
+}
+function hapusDariAntrianTertunda_(tempId){
+  simpanAntrianTertunda_(bacaAntrianTertunda_().filter(function(p){ return p.tempId !== tempId; }));
+}
+
+function tampilkanBannerKirim_(pesan, tipe){
+  let el = document.getElementById('kirimStatusBanner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'kirimStatusBanner';
+    el.className = 'error-banner';
+    el.style.cssText = 'position:fixed;left:14px;right:14px;bottom:90px;z-index:50;box-shadow:0 6px 18px rgba(0,0,0,.12);';
+    document.body.appendChild(el);
+  }
+  el.style.background = tipe === 'gagal' ? 'var(--danger-bg)' : 'var(--theme-accent-soft)';
+  el.style.color = tipe === 'gagal' ? 'var(--danger)' : 'var(--theme-accent-deep)';
+  el.innerHTML = '';
+  const span = document.createElement('span');
+  span.textContent = pesan;
+  el.appendChild(span);
+  if (tipe === 'gagal') {
+    const btnRetry = document.createElement('button');
+    btnRetry.textContent = 'Coba Kirim Ulang';
+    btnRetry.className = 'btn btn-secondary';
+    btnRetry.style.cssText = 'margin-top:8px;padding:8px 14px;font-size:13.5px;';
+    btnRetry.addEventListener('click', function(){ procesAntrianTertunda_(); });
+    el.appendChild(document.createElement('br'));
+    el.appendChild(btnRetry);
+  }
+  return el;
+}
+function hapusBannerKirim_(){
+  const el = document.getElementById('kirimStatusBanner');
+  if (el) el.remove();
+}
+
+// Kirim 1 item tertunda ke server. Dipanggil pertama kali begitu tombol ditap, DAN dipanggil
+// lagi otomatis tiap kali app dibuka kalau masih ada sisa yang belum sukses dari sesi
+// sebelumnya (lihat pemanggilan procesAntrianTertunda_() di bagian bawah file).
+function kirimSatuTertunda_(pending, isBackground){
+  const initData = tg ? tg.initData : '';
+  if (!initData) {
+    if (!isBackground) tampilkanBannerKirim_('Mini App ini perlu dibuka dari Telegram - gak bisa kirim dari browser biasa. Data belum hilang, buka lagi lewat tombol Telegram.', 'gagal');
+    return Promise.resolve(false);
+  }
+  const body = new URLSearchParams();
+  body.set('action', 'kirimProduksiMiniApp');
+  body.set('teks', pending.teks);
+  body.set('initData', initData);
+  return fetch(WEBAPP_URL, { method: 'POST', body: body })
+    .then(function(res){ return res.json(); })
+    .then(function(hasil){
+      if (hasil && hasil.ok) {
+        hapusDariAntrianTertunda_(pending.tempId);
+        hapusBannerKirim_();
+        if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+        return true;
+      }
+      tampilkanBannerKirim_('Gagal mengirim: ' + ((hasil && hasil.error) || 'tidak diketahui') + ' - data masih tersimpan, coba lagi.', 'gagal');
+      return false;
+    })
+    .catch(function(err){
+      tampilkanBannerKirim_('Gagal mengirim (jaringan): ' + err.message + ' - data masih tersimpan, coba lagi.', 'gagal');
+      return false;
+    });
+}
+function procesAntrianTertunda_(){
+  const list = bacaAntrianTertunda_();
+  if (!list.length) return;
+  // proses satu-satu (biar gak dobel-kirim kalau banyak nyangkut dari beberapa sesi)
+  let p = Promise.resolve();
+  list.forEach(function(item){
+    p = p.then(function(){ return kirimSatuTertunda_(item, true); });
+  });
+}
+
 btnKirimChat.addEventListener('click', function(){
   const teks = document.getElementById('teksHasil').textContent;
   if (!teks.trim()) return;
-  const initData = tg ? tg.initData : '';
-  if (!initData) {
+  if (tg && !tg.initData) {
     tampilkanErrorKirim_('Mini App ini perlu dibuka dari Telegram (initData kosong) - gak bisa kirim langsung dari browser biasa.');
     return;
   }
-  btnKirimChat.disabled = true;
-  btnKirimChat.textContent = 'Mengirim…';
-  const body = new URLSearchParams();
-  body.set('action', 'kirimProduksiMiniApp');
-  body.set('teks', teks);
-  body.set('initData', initData);
-  fetch(WEBAPP_URL, { method: 'POST', body: body })
-    .then(function(res){ return res.json(); })
-    .then(function(hasil){
-      btnKirimChat.disabled = false;
-      btnKirimChat.textContent = '✈️ Kirim ke Telegram';
-      if (hasil && hasil.ok) {
-        if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-        daftarItem = [];
-        document.getElementById('successScreen').innerHTML =
-          '<div class="success-screen"><div class="success-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>' +
-          '<div class="success-title">Terkirim &amp; tersimpan</div>' +
-          '<div class="success-sub">' + hasil.jumlahItem + ' item berhasil diproses ke Sheet &amp; sudah dikirim ke grup.</div></div>';
-        document.getElementById('btnRowSukses').style.display = 'none';
-        const btnBaru = document.createElement('button');
-        btnBaru.className = 'btn btn-primary btn-full';
-        btnBaru.textContent = 'Input Laporan Baru';
-        btnBaru.style.marginTop = '10px';
-        btnBaru.addEventListener('click', function(){ window.location.reload(); });
-        document.getElementById('successScreen').appendChild(btnBaru);
-      } else {
-        tampilkanErrorKirim_((hasil && hasil.error) || 'Gagal mengirim, coba lagi.');
-      }
-    })
-    .catch(function(err){
-      btnKirimChat.disabled = false;
-      btnKirimChat.textContent = '✈️ Kirim ke Telegram';
-      tampilkanErrorKirim_('Gagal mengirim: ' + err.message);
-    });
+
+  // 1) Simpan ke antrian tertunda DULU (biar gak hilang walau app ditutup sebelum fetch selesai)
+  const tempId = tambahKeAntrianTertunda_(teks);
+  const jumlahItemDikirim = daftarItem.length;
+
+  // 2) LANGSUNG pindah ke layar sukses - no delay, gak nunggu jaringan sama sekali
+  daftarItem = [];
+  document.getElementById('successScreen').innerHTML =
+    '<div class="success-screen"><div class="success-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>' +
+    '<div class="success-title">Terkirim &amp; tersimpan</div>' +
+    '<div class="success-sub">' + jumlahItemDikirim + ' item sedang diproses ke Sheet &amp; dikirim ke grup di latar belakang.</div></div>';
+  document.getElementById('btnRowSukses').style.display = 'none';
+  const btnBaru = document.createElement('button');
+  btnBaru.className = 'btn btn-primary btn-full';
+  btnBaru.textContent = 'Input Laporan Baru';
+  btnBaru.style.marginTop = '10px';
+  btnBaru.addEventListener('click', function(){ window.location.reload(); });
+  document.getElementById('successScreen').appendChild(btnBaru);
+  window.scrollTo(0,0);
+
+  // 3) Proses kirim beneran di belakang layar, gak nge-block UI di atas sama sekali
+  kirimSatuTertunda_({ tempId: tempId, teks: teks }, false);
 });
+
+// Kalau ada sisa antrian yang belum sukses dari sesi sebelumnya (app sempat ketutup/reload
+// sebelum fetch selesai), coba kirim ulang otomatis begitu app ini dibuka lagi.
+if (bacaAntrianTertunda_().length) { procesAntrianTertunda_(); }
 
 function tampilkanErrorKirim_(pesan){
   let el = document.getElementById('kirimErrorBanner');
@@ -1099,6 +1417,94 @@ function fetchKombinasiFresh(){
   } catch(e){}
   fetchKombinasiFresh();
 })();
+
+// v.08: tabel Kg standar per varian (dipakai fitur "Kg tidak diketahui - pakai estimasi
+// standar"). Datanya dibaca dari sheet "STANDAR PEMAKAIAN" (Kategori | Varian | Kg per Pcs) -
+// sheet ini BARU/masih kosong sampai Denny isi datanya sendiri, jadi awalnya toggle akan selalu
+// bilang "belum tersedia" sampai sheet-nya diisi. Lihat cariStandarKg_() buat logic pencocokan.
+let STANDAR_PEMAKAIAN_LIST = [];
+function fetchStandarFresh(){
+  fetch(WEBAPP_URL + '?action=standarPemakaian', { cache: 'no-store' })
+    .then(function(r){ return r.json(); })
+    .then(function(list){
+      STANDAR_PEMAKAIAN_LIST = list || [];
+      try { localStorage.setItem(STANDAR_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: STANDAR_PEMAKAIAN_LIST })); } catch(e){}
+    })
+    .catch(function(){ /* diamkan - toggle estimasi akan kasih pesan "belum tersedia" kalau gagal/kosong */ });
+}
+(function bootstrapStandar(){
+  try {
+    const cached = JSON.parse(localStorage.getItem(STANDAR_CACHE_KEY) || 'null');
+    if (cached && cached.data && (Date.now() - cached.ts) < STANDAR_CACHE_TTL_MS){
+      STANDAR_PEMAKAIAN_LIST = cached.data;
+    }
+  } catch(e){}
+  fetchStandarFresh();
+})();
+
+// Cari Kg per Pcs standar - cocokkan dulu lewat kodeItem (persis), kalau gak ketemu coba lewat
+// varianLabel (case-insensitive). null kalau memang belum ada datanya di sheet.
+function cariStandarKg_(kodeItem, varianLabel){
+  for (let i=0; i<STANDAR_PEMAKAIAN_LIST.length; i++){
+    const s = STANDAR_PEMAKAIAN_LIST[i];
+    if (kodeItem !== null && s.kodeItem && s.kodeItem === kodeItem) return parseFloat(s.kgPerPcs) || null;
+  }
+  for (let i=0; i<STANDAR_PEMAKAIAN_LIST.length; i++){
+    const s = STANDAR_PEMAKAIAN_LIST[i];
+    if (s.varian && varianLabel && s.varian.trim().toLowerCase() === varianLabel.trim().toLowerCase()) return parseFloat(s.kgPerPcs) || null;
+  }
+  return null;
+}
+
+const cbEstimasiKg = document.getElementById('pakaiEstimasiKg');
+const estimasiKgInfo = document.getElementById('estimasiKgInfo');
+
+function hitungEstimasiKg_(){
+  const total = updateTotal();
+  const kgPerPcs = cariStandarKg_(state.kodeItem, state.varianLabel);
+  if (kgPerPcs === null){
+    estimasiKgInfo.style.display = 'block';
+    estimasiKgInfo.style.color = 'var(--danger)';
+    estimasiKgInfo.textContent = 'Data standar untuk varian ini belum tersedia - isi Kg manual.';
+    return null;
+  }
+  if (total <= 0){
+    estimasiKgInfo.style.display = 'block';
+    estimasiKgInfo.style.color = 'var(--theme-accent-deep)';
+    estimasiKgInfo.textContent = 'Isi qty per ukuran dulu buat hitung estimasinya (' + kgPerPcs + ' kg/pcs).';
+    return null;
+  }
+  const est = Math.round(total * kgPerPcs * 100) / 100;
+  estimasiKgInfo.style.display = 'block';
+  estimasiKgInfo.style.color = 'var(--theme-accent-deep)';
+  estimasiKgInfo.textContent = '≈ ' + est + ' kg (estimasi ' + kgPerPcs + ' kg/pcs × ' + total + ' pcs)';
+  return est;
+}
+
+cbEstimasiKg.addEventListener('change', function(){
+  if (cbEstimasiKg.checked){
+    if (state.kodeItem === null){
+      cbEstimasiKg.checked = false;
+      showError('Pilih Varian dulu sebelum pakai estimasi standar.');
+      return;
+    }
+    const est = hitungEstimasiKg_();
+    if (est === null){
+      cbEstimasiKg.checked = false; // gak ada datanya / qty masih kosong - balik ke input manual
+      validate();
+      return;
+    }
+    kgInput.value = est;
+    kgInput.disabled = true;
+    state.kg = String(est);
+    state.kgEstimasi = true;
+  } else {
+    kgInput.disabled = false;
+    estimasiKgInfo.style.display = 'none';
+    state.kgEstimasi = false;
+  }
+  validate();
+});
 
 let dariCache = false;
 try {
