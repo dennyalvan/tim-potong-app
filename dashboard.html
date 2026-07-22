@@ -208,7 +208,7 @@ h2.section-title{
 .p-meta .dot{ color:var(--line); font-weight:400; }
 .p-sizes{ display:flex; flex-wrap:wrap; gap:3px; margin-bottom:3px; }
 .size-chip{ font-size:calc(10.5px * var(--scale-card)); font-weight:600; background:var(--surface-2); color:var(--ink); padding:2px 6px; border-radius:5px; }
-.size-chip b{ color:var(--accent); }
+.size-chip b{ color:var(--accent); font-weight:700; }
 .p-days{ font-size:9.5px; color:var(--ink-muted); margin-top:2px; }
 .p-days.stale{ color:var(--warn); font-weight:700; }
 .p-error{ font-size:9.5px; color:var(--bad); margin-top:4px; }
@@ -254,6 +254,10 @@ h2.section-title{
 .qc-row-head:active{ background:var(--surface-2); }
 .qc-row-main{ flex:1 1 auto; min-width:0; }
 .qc-row-title{ font-size:calc(12.5px * var(--scale-card)); font-weight:700; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.qc-row-title-wrap{ display:flex; align-items:center; gap:6px; min-width:0; }
+.qc-row-title-wrap .qc-row-title{ flex:0 1 auto; }
+.kat-badge{ flex:0 0 auto; font-size:calc(9px * var(--scale-card)); font-weight:700; padding:2px 8px; border-radius:999px; background:var(--surface-2); color:var(--accent-deep); border:1px solid var(--line); text-transform:uppercase; letter-spacing:.03em; }
+.kat-badge.kat-anak{ background:var(--ink); color:var(--surface); border-color:var(--ink); }
 .qc-row-meta{ font-size:calc(10px * var(--scale-card)); font-weight:600; color:var(--ink-muted); margin:2px 0 0; display:flex; flex-wrap:wrap; gap:2px 6px; }
 .qc-row-meta .roll{ color:var(--accent-deep); }
 .qc-row-meta .kg{ color:var(--warn); }
@@ -278,16 +282,17 @@ h2.section-title{
 .qc-progress .p-sel{ background:var(--good); height:100%; }
 .qc-progress .p-rej{ background:var(--warn); height:100%; }
 .qc-progress-label{ display:flex; justify-content:space-between; font-size:calc(10.5px * var(--scale-card)); color:var(--ink-muted); margin-bottom:6px; }
-.qc-progress-label b{ color:var(--ink); }
+.qc-progress-label b{ color:var(--ink); font-weight:700; }
 .qc-mode-switch{ display:flex; gap:5px; margin-bottom:6px; justify-content:space-between; align-items:center; }
 .mode-left{ display:flex; gap:5px; }
 .qc-mode-btn{ font-size:calc(10.5px * var(--scale-card)); font-weight:700; padding:3px 9px; border-radius:999px; border:1px solid var(--line); background:var(--surface); color:var(--ink-muted); cursor:pointer; }
 .qc-mode-btn.active{ background:var(--accent); border-color:var(--accent); color:#fff; }
-.qc-form-row{ display:flex; gap:6px; align-items:flex-end; }
+.qc-form-row{ display:flex; flex-direction:column; gap:6px; }
+.qc-form-fields{ display:flex; gap:8px; }
 .qc-field{ flex:1 1 auto; min-width:0; }
 .qc-field label{ font-size:calc(10.5px * var(--scale-card)); font-weight:600; color:var(--ink-muted); display:block; margin-bottom:2px; }
-.qc-field input{ width:100%; padding:6px 7px; border-radius:7px; border:1.3px solid var(--line); font-size:calc(13.5px * var(--scale-card)); background:var(--surface); color:var(--ink); }
-.qc-btn-submit{ background:var(--accent); color:#fff; border:none; border-radius:6px; font-size:calc(10px * var(--scale-card)); font-weight:700; padding:4.5px 9px; cursor:pointer; flex:0 0 auto; white-space:nowrap; }
+.qc-field input{ width:100%; padding:9px 8px; border-radius:14px; border:1.3px solid var(--line); font-size:calc(14px * var(--scale-card)); font-weight:700; font-family:inherit; background:var(--surface); color:var(--ink); }
+.qc-btn-submit{ background:var(--accent); color:#fff; border:none; border-radius:10px; font-size:calc(11px * var(--scale-card)); font-weight:700; padding:9px 9px; cursor:pointer; width:100%; white-space:nowrap; }
 .qc-btn-submit:disabled{ opacity:.6; }
 .btn-atur-tampilan{ background:var(--surface-2); color:var(--ink); border:1px solid var(--line); border-radius:8px; font-size:11px; font-weight:700; padding:6px 10px; cursor:pointer; white-space:nowrap; }
 .settings-row{ display:flex; justify-content:flex-end; margin:8px 0 14px; }
@@ -326,10 +331,10 @@ h2.section-title{
 .qc-tabel{ width:100%; border-collapse:collapse; margin-bottom:5px; }
 .qc-tabel th{ font-size:calc(10px * var(--scale-card)); font-weight:700; text-transform:uppercase; color:var(--ink-muted); text-align:center; padding:3px 2px; border-bottom:1px solid var(--line); }
 .qc-tabel th:first-child{ text-align:left; }
-.qc-tabel td{ padding:4px 2px; text-align:center; border-bottom:1px dashed var(--line); font-size:calc(12px * var(--scale-card)); }
+.qc-tabel td{ padding:4px 2px; text-align:center; border-bottom:1px dashed var(--line); font-size:calc(12px * var(--scale-card)); font-weight:700; }
 .qc-tabel td:first-child{ text-align:left; font-weight:700; }
 .qc-tabel tr.lengkap-u td{ color:var(--good); }
-.qc-tabel input{ width:34px; padding:3px; border-radius:5px; border:1.3px solid var(--line); font-size:calc(11.5px * var(--scale-card)); text-align:center; background:var(--surface); color:var(--ink); }
+.qc-tabel input{ width:42px; padding:5px; border-radius:10px; border:1.3px solid var(--line); font-size:calc(12.5px * var(--scale-card)); font-weight:700; font-family:inherit; text-align:center; background:var(--surface); color:var(--ink); }
 .qc-undo{ font-size:calc(10.5px * var(--scale-card)); font-weight:700; color:var(--bad); background:var(--bad-tint); border:none; border-radius:999px; padding:3px 9px; cursor:pointer; flex:0 0 auto; }
 .qc-error{ font-size:calc(11px * var(--scale-card)); color:var(--bad); margin-top:4px; }
 
@@ -339,6 +344,40 @@ input[type="number"]::-webkit-outer-spin-button{ -webkit-appearance:none; margin
 input[type="number"]{ -moz-appearance:textfield; appearance:textfield; }
 
 .foot-note{ font-size:10.5px; color:var(--ink-muted); margin-top:16px; line-height:1.5; }
+
+/* ===== TWEAKS (feel-level controls: suasana / kepadatan / gaya aksen) ===== */
+.tweaks-fab{ position:fixed; right:16px; bottom:16px; width:44px; height:44px; border-radius:50%; border:1px solid var(--line); background:var(--accent-deep); color:#fff; font-size:18px; box-shadow:var(--shadow); cursor:pointer; z-index:40; }
+.tweaks-panel{ position:fixed; right:16px; bottom:68px; width:238px; background:var(--surface); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); padding:14px; z-index:41; }
+.tweaks-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; font-size:13px; font-weight:700; }
+.tweaks-close{ border:none; background:var(--surface-2); color:var(--ink); width:22px; height:22px; border-radius:50%; cursor:pointer; }
+.tweaks-row{ margin-bottom:10px; }
+.tweaks-row:last-child{ margin-bottom:0; }
+.tweaks-label{ display:block; font-size:10.5px; font-weight:700; color:var(--ink-muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:5px; }
+.seg3{ display:flex; gap:4px; }
+.seg3 span{ flex:1 1 auto; text-align:center; font-size:10.5px; font-weight:700; padding:6px 4px; border-radius:8px; border:1px solid var(--line); background:var(--surface-2); color:var(--ink-muted); cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.seg3 span.active{ background:var(--accent); border-color:var(--accent); color:#fff; }
+
+/* Kepadatan: Lega loosens rhythm across sections at once, not one pixel value */
+[data-density="lega"] .page{ padding:20px 20px 44px; }
+[data-density="lega"] .stat-card{ padding:22px 22px 20px; }
+[data-density="lega"] .stok-grid{ gap:14px; }
+[data-density="lega"] .proses-grid{ gap:14px; }
+[data-density="lega"] .qc-grid .qc-row-head{ padding:14px 6px; gap:12px; }
+[data-density="lega"] .qc-row-body-inner{ padding:0 6px 20px 33px; }
+[data-density="lega"] .scard-head{ padding:12px 12px; gap:10px; }
+[data-density="lega"] .pcard{ padding:14px 14px 12px; }
+[data-density="lega"] h2.section-title{ margin:30px 0 8px; }
+[data-density="lega"] .antrian-item{ padding:11px 13px; }
+
+/* Gaya Aksen: Tegas raises visual weight everywhere at once (bolder bars, harder edges) */
+[data-style="tegas"] .qc-row-bar{ height:7px; border-radius:4px; }
+[data-style="tegas"] .qc-progress{ height:8px; }
+[data-style="tegas"] .qc-badge{ font-weight:800; box-shadow:0 1px 5px rgba(0,0,0,.22); }
+[data-style="tegas"] .qc-row-frac{ font-size:calc(13.5px * var(--scale-card)); }
+[data-style="tegas"] .filter-chip.active,[data-style="tegas"] .main-tab-btn.active{ box-shadow:0 3px 10px color-mix(in srgb, var(--accent) 45%, transparent); }
+[data-style="tegas"] .scard,[data-style="tegas"] .pcard,[data-style="tegas"] .qc-card.lengkap,[data-style="tegas"] .stat-card{ border-width:1.6px; }
+[data-style="tegas"] .qc-qty-badge,[data-style="tegas"] .stat-card .value{ letter-spacing:-0.02em; }
+[data-style="tegas"] .btn-rekap,[data-style="tegas"] .qc-btn-submit{ box-shadow:0 2px 8px color-mix(in srgb, var(--accent) 35%, transparent); }
 
 /* ===== ARSIP SELESAI (collapsible, di bawah tiap tab) ===== */
 .arsip-toggle{
@@ -457,6 +496,29 @@ input[type="number"]{ -moz-appearance:textfield; appearance:textfield; }
 
 <div class="toast" id="toastEl"></div>
 
+<button class="tweaks-fab" id="btnTweaks" type="button" title="Tweaks">🎛️</button>
+<div class="tweaks-panel" id="tweaksPanel" style="display:none;">
+  <div class="tweaks-head"><span>Tweaks</span><button class="tweaks-close" id="tweaksClose" type="button">✕</button></div>
+  <div class="tweaks-row">
+    <span class="tweaks-label">Suasana</span>
+    <div class="seg3" id="segTheme">
+      <span data-val="light">Terang</span><span data-val="dark">Gelap</span><span data-val="auto">Sistem</span>
+    </div>
+  </div>
+  <div class="tweaks-row">
+    <span class="tweaks-label">Kepadatan</span>
+    <div class="seg3" id="segDensity">
+      <span data-val="padat">Padat</span><span data-val="lega">Lega</span>
+    </div>
+  </div>
+  <div class="tweaks-row">
+    <span class="tweaks-label">Gaya Aksen</span>
+    <div class="seg3" id="segStyle">
+      <span data-val="halus">Halus</span><span data-val="tegas">Tegas</span>
+    </div>
+  </div>
+</div>
+
 <div class="cfg-overlay" id="cfgOverlay" style="display:none;">
   <div class="cfg-sheet">
     <h3>Atur Tampilan Dashboard</h3>
@@ -513,6 +575,10 @@ input[type="number"]{ -moz-appearance:textfield; appearance:textfield; }
 
     <div class="cfg-group-title">Warna Aksen</div>
     <div class="cfg-swatch-row" id="cfgSwatchRow"></div>
+    <div class="cfg-color-row" id="cfgColorRow" style="display:flex;align-items:center;gap:10px;margin-top:8px;">
+      <input type="color" id="cfgAccentPicker" style="width:44px;height:44px;padding:0;border:1.3px solid var(--line);border-radius:10px;background:none;cursor:pointer;">
+      <span style="font-size:11.5px;color:var(--ink-muted);">Pilih warna aksen bebas — ringan, pakai color picker bawaan browser/HP.</span>
+    </div>
 
     <div class="cfg-actions">
       <button class="cfg-btn-batal" type="button" id="cfgBatal">Batal</button>
@@ -760,10 +826,12 @@ function applyQcLayout(){
   });
 }
 
-function applyAccent(key){
-  const p = ACCENT_PRESETS[key] || ACCENT_PRESETS.teal;
-  document.documentElement.style.setProperty("--accent", p.accent);
-  document.documentElement.style.setProperty("--accent-deep", p.deep);
+function applyAccent(val){
+  const isHex = /^#/.test(val || "");
+  const accent = isHex ? val : ((ACCENT_PRESETS[val] || ACCENT_PRESETS.teal).accent);
+  const deep = isHex ? "color-mix(in srgb, "+val+" 68%, black)" : ((ACCENT_PRESETS[val] || ACCENT_PRESETS.teal).deep);
+  document.documentElement.style.setProperty("--accent", accent);
+  document.documentElement.style.setProperty("--accent-deep", deep);
 }
 function applySections(){
   const map = {};
@@ -939,14 +1007,20 @@ function renderQCCards(){
           '<button class="qc-btn-submit" data-mode="detail" data-baris="'+item.baris+'">+ Tambah ke Daftar</button>';
       } else {
         formHtml = '<div class="qc-form-row">' +
+            '<div class="qc-form-fields">' +
             '<div class="qc-field"><label>Selesai</label><input type="number" min="0" id="qcTotSel-'+item.baris+'" placeholder="0"></div>' +
             '<div class="qc-field"><label>Reject</label><input type="number" min="0" id="qcTotRej-'+item.baris+'" placeholder="0"></div>' +
+            '</div>' +
             '<button class="qc-btn-submit" data-mode="ringkas" data-baris="'+item.baris+'">+ Tambah ke Daftar</button>' +
           '</div>';
       }
     }
 
     const sizeChips = qcDaftarUkuran(item).map(function(u){ return '<span class="size-chip">'+u+' <b>'+item.sizes[u].qty+'</b></span>'; }).join("");
+    const ANAK_VARIAN = ["PENDEK KOMBINASI","PANJANG KOMBINASI","ONESET","PENDEK","PANJANG","RUFFLE","SETELAN","SET.","CELANA"];
+    const ANAK_WARNA = ["CREAM CHOCO","CREAM MUSTARD","CREAM SAGE","STEEL NAVY","BLACK TERACOTA","WHITE TERACOTA","MUSTARD NAVY","NAVY WHITE","NAVY CREAM","TERACOTA GREEN","WHITE MUSTARD","WHITE SAGE"];
+    const isAnak = ANAK_VARIAN.some(function(v){ return item.item.toUpperCase().indexOf(v) !== -1; }) || ANAK_WARNA.some(function(v){ return item.item.toUpperCase().indexOf(v) !== -1; });
+    const kategori = isAnak ? "Anak" : "Dewasa";
     const stale = item.hari !== null && item.hari >= (generalConfig.staleDays || 3);
     const hariLabel = item.hari === null ? "-" : (item.hari === 0 ? "hari ini" : item.hari + " hari lalu");
 
@@ -967,7 +1041,7 @@ function renderQCCards(){
       '<div class="qc-row-head'+(isOpen?' open':'')+'" data-target="'+detailId+'" data-baris="'+item.baris+'">' +
         '<span class="qc-num">'+(item.num||'')+'</span>' +
         '<div class="qc-row-main">' +
-          '<p class="qc-row-title">'+item.item+'</p>' +
+          '<div class="qc-row-title-wrap"><p class="qc-row-title">'+item.item+'</p><span class="kat-badge'+(isAnak?' kat-anak':'')+'">'+kategori+'</span></div>' +
           '<div class="qc-row-meta">'+buildMetaLine(item, badgeKanan)+'</div>' +
         '</div>' +
         '<div class="qc-row-right">' +
@@ -1159,9 +1233,19 @@ function renderCfgSwatches(){
       draftBundle.general.accent = btn.dataset.accent;
       applyAccent(btn.dataset.accent); // live preview - dibatalin lagi kalau modal ditutup pakai Batal
       renderCfgSwatches();
+      const isHex = /^#/.test(draftBundle.general.accent);
+      document.getElementById("cfgAccentPicker").value = isHex ? draftBundle.general.accent : (ACCENT_PRESETS[draftBundle.general.accent]||ACCENT_PRESETS.teal).accent;
     });
   });
+  const picker = document.getElementById("cfgAccentPicker");
+  const isHexNow = /^#/.test(draftBundle.general.accent);
+  picker.value = isHexNow ? draftBundle.general.accent : (ACCENT_PRESETS[draftBundle.general.accent]||ACCENT_PRESETS.teal).accent;
 }
+document.getElementById("cfgAccentPicker").addEventListener("input", function(ev){
+  draftBundle.general.accent = ev.target.value;
+  applyAccent(ev.target.value); // live preview - dibatalin lagi kalau modal ditutup pakai Batal
+  renderCfgSwatches();
+});
 
 function bukaPanelAturTampilan(){
   draftBundle = {
@@ -1411,6 +1495,46 @@ document.querySelectorAll(".arsip-toggle").forEach(function(toggle){
     }
   });
 });
+
+// ============ TWEAKS (feel-level: suasana / kepadatan / gaya aksen) ============
+function applyTweak(kind, val){
+  if (kind === "theme") {
+    if (val === "auto") delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = val;
+  } else if (kind === "density") {
+    document.documentElement.dataset.density = val;
+  } else if (kind === "style") {
+    document.documentElement.dataset.style = val;
+  }
+  localStorage.setItem("dashTweak_"+kind, val);
+}
+function setSegActive(segId, val){
+  document.querySelectorAll("#"+segId+" span").forEach(function(s){ s.classList.toggle("active", s.dataset.val === val); });
+}
+function initTweaks(){
+  var theme = localStorage.getItem("dashTweak_theme") || "auto";
+  var density = localStorage.getItem("dashTweak_density") || "padat";
+  var gaya = localStorage.getItem("dashTweak_style") || "halus";
+  applyTweak("theme", theme); applyTweak("density", density); applyTweak("style", gaya);
+  setSegActive("segTheme", theme); setSegActive("segDensity", density); setSegActive("segStyle", gaya);
+}
+["segTheme","segDensity","segStyle"].forEach(function(segId){
+  document.getElementById(segId).addEventListener("click", function(ev){
+    const el = ev.target.closest("span[data-val]");
+    if (!el) return;
+    const kind = segId === "segTheme" ? "theme" : (segId === "segDensity" ? "density" : "style");
+    applyTweak(kind, el.dataset.val);
+    setSegActive(segId, el.dataset.val);
+  });
+});
+document.getElementById("btnTweaks").addEventListener("click", function(){
+  const p = document.getElementById("tweaksPanel");
+  p.style.display = p.style.display === "none" ? "block" : "none";
+});
+document.getElementById("tweaksClose").addEventListener("click", function(){
+  document.getElementById("tweaksPanel").style.display = "none";
+});
+initTweaks();
 
 // v.16: OPTIMASI LOADING - v.15 kemarin selalu muat Stok DAN QC bareng-bareng pas dashboard
 // dibuka (biar "tab default"/"filter default" bisa langsung diterapkan), padahal salah satunya
