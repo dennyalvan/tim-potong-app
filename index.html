@@ -27,6 +27,15 @@
      salah satu preset). Disimpan di server (Script Properties, key terpisah dari config
      Dashboard) lewat ?action=saveInputCfg - berlaku buat siapapun yang buka Mini App ini.
 
+  CATATAN FILE INI (index_v08.html - FINAL, siap upload ke GitHub Pages sebagai index.html):
+  PREVIEW_MODE = false - "Kirim ke Telegram" & "Simpan Atur Tampilan" akan BENERAN memanggil
+  server (nulis ke Sheet, kirim ke grup Telegram, simpan config ke Script Properties). Estimasi
+  Kg akan pakai data ASLI dari sheet STANDAR PEMAKAIAN (bukan dummy) - kalau sheet itu masih
+  kosong, toggle akan bilang "data belum tersedia" sampai Anda isi baris-barisnya.
+  WAJIB: Apps Script v16 (apps_script_tim_potong_v16.js) harus SUDAH di-deploy dulu sebelum file
+  ini diupload, kalau tidak fitur Atur Tampilan & Estimasi Kg gak akan jalan (fallback ke default,
+  gak error, tapi gak berfungsi penuh).
+
   ver.07 (sebelumnya):
   1. "Daftar Item" dipindah dari ATAS ke BAWAH (sebelum tombol), gaya gelap kontras (dark navy,
      mirip bubble preview Telegram di dashboard QC) - biar jelas kelihatan ini "yang bakal
@@ -317,6 +326,9 @@
     </div>
   </div>
 </div>
+<div id="previewModeBanner" style="display:none;background:#3A2E00;color:#FFD666;font-size:11.5px;font-weight:700;text-align:center;padding:7px 10px;">
+  🧪 MODE PREVIEW - "Kirim ke Telegram" &amp; "Simpan Atur Tampilan" DISIMULASIKAN (gak nulis ke Sheet/kirim ke grup beneran). Kategori/Warna/Kombinasi tetap baca data asli.
+</div>
 
 <div id="loadingScreen" class="loading-screen">Memuat data kategori/varian...</div>
 
@@ -508,6 +520,21 @@
 // =====================================================================================
 const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzaWvCi3Vw2fnFgBPfn1qvFBSqYXOrdWi8yxvKc8WOtaIH78JN83dIMiQtQeockW6EDBw/exec";
 
+// v.08-preview: MODE PREVIEW - biar bisa dites SEBELUM Apps Script v16 di-deploy. Data
+// kategori/varian/warna/kombinasi tetap dibaca LANGSUNG dari server asli (read-only, aman).
+// Yang di-SIMULASIKAN cuma 3 hal yang: (a) butuh backend BARU yang belum jalan (estimasi Kg,
+// simpan Atur Tampilan), atau (b) beneran NULIS data kalau dites di server produksi (kirim ke
+// Telegram) - lihat masing2 titik "if (PREVIEW_MODE)" di bawah buat detailnya. Set false lalu
+// upload ulang sebagai index.html begitu Apps Script v16 sudah di-deploy, biar semuanya jalan ke
+// server beneran.
+const PREVIEW_MODE = false;
+const DUMMY_STANDAR_PEMAKAIAN = [
+  { varian: 'RFL', kodeItem: '', kgPerPcs: 0.18 },
+  { varian: 'Kaos Anak', kodeItem: '', kgPerPcs: 0.15 },
+  { varian: 'Ringer', kodeItem: '', kgPerPcs: 0.22 }
+]; // v.08-preview: cuma dipakai kalau PREVIEW_MODE true DAN sheet STANDAR PEMAKAIAN beneran kosong -
+   // biar tombol "pakai estimasi standar" ada sesuatu buat didemoin. HAPUS/abaikan begitu sheet asli sudah diisi.
+
 const SIZES_UTAMA = ["XS","S","M","L","XL","XXL"];
 const SIZES_LAIN = ["3XL","4XL","5XL","6XL"];
 const CACHE_KEY = 'timpotong_kategori_varian_cache_v1';
@@ -683,6 +710,17 @@ document.getElementById('cfgBatal').addEventListener('click', function(){
 });
 document.getElementById('cfgSimpan').addEventListener('click', function(){
   const btn = document.getElementById('cfgSimpan');
+  if (PREVIEW_MODE) {
+    // v.08-preview: backend v16 (?action=saveInputCfg) belum tentu sudah di-deploy - simpan
+    // cuma di memori tab ini (gak ke server) biar tetap bisa didemoin urutan/font/warnanya.
+    btn.disabled = true; btn.textContent = 'Menyimpan (simulasi)…';
+    setTimeout(function(){
+      btn.disabled = false; btn.textContent = 'Simpan';
+      terapkanInputConfigBundle(draftInputCfg);
+      document.getElementById('cfgOverlay').style.display = 'none';
+    }, 500);
+    return;
+  }
   btn.disabled = true; btn.textContent = 'Menyimpan…';
   const body = new URLSearchParams();
   body.set('action', 'saveInputCfg');
@@ -1199,6 +1237,17 @@ function hapusBannerKirim_(){
 // lagi otomatis tiap kali app dibuka kalau masih ada sisa yang belum sukses dari sesi
 // sebelumnya (lihat pemanggilan procesAntrianTertunda_() di bagian bawah file).
 function kirimSatuTertunda_(pending, isBackground){
+  if (PREVIEW_MODE) {
+    // v.08-preview: JANGAN beneran nulis ke Sheet/kirim ke grup produksi - simulasikan sukses
+    // setelah jeda kecil (biar kelihatan "proses di background"-nya), baru hapus dari antrian.
+    return new Promise(function(resolve){
+      setTimeout(function(){
+        hapusDariAntrianTertunda_(pending.tempId);
+        hapusBannerKirim_();
+        resolve(true);
+      }, 900);
+    });
+  }
   const initData = tg ? tg.initData : '';
   if (!initData) {
     if (!isBackground) tampilkanBannerKirim_('Mini App ini perlu dibuka dari Telegram - gak bisa kirim dari browser biasa. Data belum hilang, buka lagi lewat tombol Telegram.', 'gagal');
@@ -1252,7 +1301,7 @@ btnKirimChat.addEventListener('click', function(){
   document.getElementById('successScreen').innerHTML =
     '<div class="success-screen"><div class="success-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>' +
     '<div class="success-title">Terkirim &amp; tersimpan</div>' +
-    '<div class="success-sub">' + jumlahItemDikirim + ' item sedang diproses ke Sheet &amp; dikirim ke grup di latar belakang.</div></div>';
+    '<div class="success-sub">' + jumlahItemDikirim + ' item ' + (PREVIEW_MODE ? 'DISIMULASIKAN diproses (mode preview, gak beneran masuk Sheet/Telegram).' : 'sedang diproses ke Sheet & dikirim ke grup di latar belakang.') + '</div></div>';
   document.getElementById('btnRowSukses').style.display = 'none';
   const btnBaru = document.createElement('button');
   btnBaru.className = 'btn btn-primary btn-full';
@@ -1334,6 +1383,7 @@ function fetchFresh(isBackground){
     });
 }
 
+if (PREVIEW_MODE) document.getElementById('previewModeBanner').style.display = 'block';
 if (tg){ tg.ready(); tg.expand(); }
 
 // ---- Dropdown saran Warna CUSTOM (bukan <datalist> bawaan browser - itu berantakan &
@@ -1427,10 +1477,10 @@ function fetchStandarFresh(){
   fetch(WEBAPP_URL + '?action=standarPemakaian', { cache: 'no-store' })
     .then(function(r){ return r.json(); })
     .then(function(list){
-      STANDAR_PEMAKAIAN_LIST = list || [];
+      STANDAR_PEMAKAIAN_LIST = (list && list.length) ? list : (PREVIEW_MODE ? DUMMY_STANDAR_PEMAKAIAN : []);
       try { localStorage.setItem(STANDAR_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: STANDAR_PEMAKAIAN_LIST })); } catch(e){}
     })
-    .catch(function(){ /* diamkan - toggle estimasi akan kasih pesan "belum tersedia" kalau gagal/kosong */ });
+    .catch(function(){ if (PREVIEW_MODE) STANDAR_PEMAKAIAN_LIST = DUMMY_STANDAR_PEMAKAIAN; });
 }
 (function bootstrapStandar(){
   try {
