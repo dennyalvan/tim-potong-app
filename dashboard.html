@@ -258,6 +258,7 @@ h2.section-title{
 .qc-row-title-wrap .qc-row-title{ flex:0 1 auto; }
 .kat-badge{ flex:0 0 auto; font-size:calc(9px * var(--scale-card)); font-weight:700; padding:2px 8px; border-radius:999px; background:var(--surface-2); color:var(--accent-deep); border:1px solid var(--line); text-transform:uppercase; letter-spacing:.03em; }
 .kat-badge.kat-anak{ background:var(--ink); color:var(--surface); border-color:var(--ink); }
+.qc-quick-complete{ flex:0 0 auto; width:17px; height:17px; margin:0; cursor:pointer; accent-color:var(--good); }
 .qc-row-meta{ font-size:calc(10px * var(--scale-card)); font-weight:600; color:var(--ink-muted); margin:2px 0 0; display:flex; flex-wrap:wrap; gap:2px 6px; }
 .qc-row-meta .roll{ color:var(--accent-deep); }
 .qc-row-meta .kg{ color:var(--warn); }
@@ -1041,7 +1042,9 @@ function renderQCCards(){
       '<div class="qc-row-head'+(isOpen?' open':'')+'" data-target="'+detailId+'" data-baris="'+item.baris+'">' +
         '<span class="qc-num">'+(item.num||'')+'</span>' +
         '<div class="qc-row-main">' +
-          '<div class="qc-row-title-wrap"><p class="qc-row-title">'+item.item+'</p><span class="kat-badge'+(isAnak?' kat-anak':'')+'">'+kategori+'</span></div>' +
+          '<div class="qc-row-title-wrap">' +
+            (!lengkapEfektif ? '<input type="checkbox" class="qc-quick-complete" data-baris="'+item.baris+'" title="Tandai LENGKAP langsung (semua ukuran sekaligus, tanpa isi angka)">' : '') +
+            '<p class="qc-row-title">'+item.item+'</p><span class="kat-badge'+(isAnak?' kat-anak':'')+'">'+kategori+'</span></div>' +
           '<div class="qc-row-meta">'+buildMetaLine(item, badgeKanan)+'</div>' +
         '</div>' +
         '<div class="qc-row-right">' +
@@ -1131,6 +1134,44 @@ function renderQCCards(){
       renderQCCards();
       renderDaftarAntrian();
       tampilkanToast("✓ Ditambahkan ke daftar");
+    });
+  });
+
+  // v.19: checkbox shortcut "Tandai LENGKAP langsung" di pinggir judul - buat laporan yang QC-nya
+  // udah pasti tuntas semua ukuran (gak perlu cek angka satu-satu), tanpa harus isi form manual.
+  // CUMA masuk ke antrian lokal (qcAntrian) - PERSIS sama kayak klik "+ Tambah ke Daftar" biasa,
+  // BUKAN langsung kirim ke server/Telegram. Tetap wajib tekan "Kirim Rekap" buat benar-benar
+  // mengirimkan (jadi ada 2 lapis konfirmasi: dialog confirm() pas dicentang + tombol Kirim Rekap).
+  wrap.querySelectorAll(".qc-quick-complete").forEach(function(cb){
+    // stopPropagation di CLICK (bukan cuma change) - checkbox ini nempel di dalam .qc-row-head
+    // yang punya listener klik sendiri buat buka/tutup detail kartu, tanpa ini nyentang checkbox
+    // bakal ikut nge-toggle buka/tutup kartunya juga.
+    cb.addEventListener("click", function(e){ e.stopPropagation(); });
+    cb.addEventListener("change", function(){
+      if (!cb.checked) return; // cuma proses pas DICENTANG, gak ada aksi pas dilepas
+      const baris = parseInt(cb.dataset.baris, 10);
+      const item = qcItemsRaw.find(function(x){ return x.baris === baris; });
+      if (!item) { cb.checked = false; return; }
+
+      let deltaPerUkuran = {}, deltaSel = 0;
+      for (const u of qcDaftarUkuran(item)) {
+        const sisa = qcSisaUkuran(item, u);
+        if (sisa > 0) { deltaPerUkuran[u] = { sel: sisa, rej: 0 }; deltaSel += sisa; }
+      }
+      if (deltaSel <= 0) { cb.checked = false; tampilkanToast("Gak ada sisa yang perlu diselesaikan."); return; }
+
+      const ok = confirm('Tandai "' + item.item + '" LENGKAP langsung (semua ukuran sekaligus, total +' + deltaSel + ' selesai)?\n\nIni bakal masuk ke Daftar Antrian dulu - kamu tetap perlu tekan "Kirim Rekap" buat benar-benar mengirimkannya ke Telegram.');
+      if (!ok) { cb.checked = false; return; }
+
+      qcAntrian.push({
+        tempId: ++antrianSeq, baris: baris, item: item.item, roll: item.roll, kg: item.kg,
+        mode: "ringkas", totSel: deltaSel, totRej: 0, perUkuran: {},
+        deltaPerUkuran: deltaPerUkuran, deltaSel: deltaSel, deltaRej: 0
+      });
+
+      renderQCCards();
+      renderDaftarAntrian();
+      tampilkanToast('✓ "' + item.item + '" ditambahkan LENGKAP ke daftar');
     });
   });
 
