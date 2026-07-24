@@ -294,7 +294,7 @@
   }
   .btn{
     flex:1;border:none;border-radius:13px;padding:12px;font-size:15.5px;font-weight:650;
-    cursor:pointer;letter-spacing:-.1px;
+    cursor:pointer;letter-spacing:-.1px;font-family:"Space Grotesk",inherit;
   }
   .btn-primary{background:var(--theme-accent-deep);color:#fff;transition:background .4s;}
   .btn-primary:disabled{background:var(--ink-3);cursor:not-allowed;}
@@ -398,11 +398,6 @@
 <div class="topbar">
   <div class="topbar-top-row">
     <div style="display:flex;align-items:center;gap:10px;">
-      <div class="topbar-logo" id="topbarLogoWrap" title="Klik untuk ubah logo">
-        <img id="topbarLogoImg" style="display:block;width:100%;height:100%;object-fit:contain;" src="../rafkids-logo_-mrz7540z-jnk3.png">
-        <span id="topbarLogoPlaceholder" style="display:none;">+ LOGO</span>
-      </div>
-      <input type="file" id="topbarLogoInput" accept="image/*" style="display:none;">
       <div>
         <div class="topbar-title">INPUT PRODUKSI</div>
         <div class="topbar-eyebrow" id="topbarEyebrow" style="font-size:13px;color:#000000;">Tim Potong</div>
@@ -539,7 +534,7 @@
   </div>
 
   <div class="btn-row" id="btnRowForm">
-    <button class="btn btn-secondary" id="btnTambah">Tambah ke Daftar</button>
+    <button class="btn btn-secondary" id="btnTambah">+ Tambah ke Daftar</button>
     <button class="btn btn-primary" id="btnBuatTeks" disabled>Buat Teks (0)</button>
   </div>
 
@@ -943,38 +938,6 @@ function showError(msg){
   window.scrollTo(0,0);
 }
 function hideError(){ errorBanner.style.display = 'none'; }
-
-// Upload logo header - disimpan di localStorage (base64), tampil di kiri judul. Cuma tampilan
-// lokal per-device (belum disinkron ke server).
-const LOGO_KEY = 'timpotong_logo_v1';
-const topbarLogoWrap = document.getElementById('topbarLogoWrap');
-const topbarLogoImg = document.getElementById('topbarLogoImg');
-const topbarLogoPlaceholder = document.getElementById('topbarLogoPlaceholder');
-const topbarLogoInput = document.getElementById('topbarLogoInput');
-(function terapkanLogoTersimpan_(){
-  try {
-    const dataUrl = localStorage.getItem(LOGO_KEY);
-    if (dataUrl){
-      topbarLogoImg.src = dataUrl;
-      topbarLogoImg.style.display = 'block';
-      topbarLogoPlaceholder.style.display = 'none';
-    }
-  } catch(e){}
-})();
-topbarLogoWrap.addEventListener('click', function(){ topbarLogoInput.click(); });
-topbarLogoInput.addEventListener('change', function(){
-  const file = topbarLogoInput.files && topbarLogoInput.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function(){
-    const dataUrl = reader.result;
-    topbarLogoImg.src = dataUrl;
-    topbarLogoImg.style.display = 'block';
-    topbarLogoPlaceholder.style.display = 'none';
-    try { localStorage.setItem(LOGO_KEY, dataUrl); } catch(e){}
-  };
-  reader.readAsDataURL(file);
-});
 
 // Auto-scroll ke kolom aktif - SENGAJA TIDAK dipasang di kolom Qty per Size (lihat
 // renderQtyGrid di bawah): begitu user sudah masuk area qty dan pindah-pindah antar kotak
