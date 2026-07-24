@@ -1,11 +1,37 @@
 <!DOCTYPE html>
 <!--
-  MINI APP TIM POTONG (ver.09) - form input produksi di dalam Telegram.
-  Backend: apps_script_tim_potong_v33.js (butuh ?action=stokRoll BARU - lihat poin 3 di bawah -
-  selain yang lama: ?action=kirimProduksiMiniApp / ?action=standarPemakaian / ?action=inputCfg /
+  MINI APP TIM POTONG (ver.10) - form input produksi di dalam Telegram.
+  Backend: apps_script_tim_potong_v33.js (butuh ?action=stokRoll - lihat catatan v.09, selain
+  yang lama: ?action=kirimProduksiMiniApp / ?action=standarPemakaian / ?action=inputCfg /
   ?action=saveInputCfg).
 
-  ver.09 (perubahan hari ini):
+  CATATAN FILE INI (index_v10.html - FINAL, sudah di-ACC Denny dari preview, siap upload ke
+  GitHub Pages sebagai index.html):
+  PREVIEW_MODE = false - "Kirim ke Telegram" & "Simpan Atur Tampilan" akan BENERAN memanggil
+  server (nulis ke Sheet, kirim ke grup Telegram, simpan config ke Script Properties). Semua data
+  dummy (Kategori/Varian, Warna, Kombinasi, Kode Roll, Estimasi Kg) di kode ini TETAP ADA sebagai
+  cadangan darurat (kalau fetch ke server gagal total), tapi PREVIEW_MODE = false berarti gak
+  pernah kepakai kecuali server-nya BENERAN gak bisa diakses sama sekali.
+  WAJIB: Apps Script v33 (apps_script_tim_potong_v33.js) harus SUDAH di-deploy dulu SEBELUM file
+  ini diupload - kalau masih pakai versi lama, dropdown Kode Roll (poin 1 di bawah) gak akan
+  nemu data stok (gagal fetch ?action=stokRoll, ditangkap diam-diam, field balik jadi input teks
+  manual biasa - fitur lain tetap aman jalan normal).
+
+  ver.10 (perubahan hari ini, lanjutan v.09):
+  1. Kode Roll SEKARANG dropdown ala Varian (bukan lagi list teks horizontal abu-abu) - muncul
+     otomatis begitu Warna dipilih & ada roll yang cocok di STOK KAIN (mode BIASA saja,
+     Kombinasi TETAP manual). Tiap baris opsi dikasih warna latar beda-beda (oranye/hijau/biru/
+     pink/ungu/kuning muda, muter kalau roll-nya lebih banyak dari 6) biar kontras jelas dari
+     dropdown putih. Ada opsi "✏️ Ketik manual (roll lain)" di baris paling bawah buat kasus
+     mau pakai kode di luar daftar. Kalau Warna gak ada stok yang cocok (atau Kode Roll udah
+     diketik manual duluan), field balik/tetap jadi input teks biasa seperti sebelumnya - ada
+     link "🔽 Pilih dari stok tersedia" buat pindah ke dropdown kalau berubah pikiran.
+  2. Format angka Kg di tiap baris dropdown SEKARANG selalu 2 digit di depan koma (di-pad nol
+     kalau cuma 1 digit, misal "07.98") + 2 digit di belakang koma (dibulatin, misal
+     7.979999999999997 -> "07.98") - cuma buat TAMPILAN, angka asli yang dikirim ke server gak
+     berubah sama sekali.
+
+  ver.09 (sebelumnya):
   1. Kolom Warna - tambah placeholder abu "— pilih warna —" (pola sama kayak "— pilih —" di
      Varian), biar kelihatan jelas kolom itu emang belum diisi (bukan sengaja dikosongin).
   2. Kolom Kg Kain Terpakai - panah spinner bawaan number input DIHILANGKAN (via CSS, bukan lagi
@@ -40,16 +66,6 @@
      (pilihan "Otomatis" = ikut tema kategori Anak/Dewasa/Lain seperti biasa, atau override manual
      salah satu preset). Disimpan di server (Script Properties, key terpisah dari config
      Dashboard) lewat ?action=saveInputCfg - berlaku buat siapapun yang buka Mini App ini.
-
-  CATATAN FILE INI (index_v09.html - FINAL, siap upload ke GitHub Pages sebagai index.html):
-  PREVIEW_MODE = false - "Kirim ke Telegram" & "Simpan Atur Tampilan" akan BENERAN memanggil
-  server (nulis ke Sheet, kirim ke grup Telegram, simpan config ke Script Properties). Estimasi
-  Kg akan pakai data ASLI dari sheet STANDAR PEMAKAIAN (bukan dummy) - kalau sheet itu masih
-  kosong, toggle akan bilang "data belum tersedia" sampai Anda isi baris-barisnya.
-  WAJIB: Apps Script v33 (apps_script_tim_potong_v33.js) harus SUDAH di-deploy dulu sebelum file
-  ini diupload - kalau masih pakai versi lama, fitur auto-show Kode Roll (poin 3 di atas) akan
-  diam-diam gak berfungsi (gagal fetch ?action=stokRoll, ditangkap & didiamkan, form tetap normal
-  cuma auto-show-nya gak jalan), fitur lain tetap aman.
 
   ver.07 (sebelumnya):
   1. "Daftar Item" dipindah dari ATAS ke BAWAH (sebelum tombol), gaya gelap kontras (dark navy,
@@ -155,11 +171,23 @@
   #kgInput{-moz-appearance:textfield;}
   #kgInput::placeholder{color:var(--ink-3);font-weight:450;}
 
-  /* v.09: hint abu di bawah Kode Roll - auto-show stok roll (kg / kode) yang cocok sama Warna
-     yang lagi dipilih. Lihat tampilkanStokRoll_() di script. */
-  #rollStokInfo{font-size:11.5px;color:var(--ink-2);margin-top:4px;line-height:1.5;}
-  #rollStokInfo b{color:var(--theme-accent-deep);font-weight:650;}
+  /* v.10: Kode Roll - dropdown ala Varian (bukan lagi list teks horizontal) kalau ada roll stok
+     yang cocok sama Warna. Baris opsi dikasih warna latar (beda2 per baris) biar kontras dari
+     dropdown putih - lihat renderRollDropdown_() di script buat cara milih warnanya. */
+  #rollPickerBtn{font-family:inherit;}
   #rollInput::placeholder{color:var(--ink-3);font-weight:450;}
+  .roll-opt{
+    padding:11px 14px;font-size:14.5px;font-weight:650;border-bottom:0.5px solid rgba(0,0,0,.06);
+    cursor:pointer;display:flex;justify-content:space-between;align-items:center;color:#1C1C1E;
+  }
+  .roll-opt:last-child{border-bottom:none;}
+  .roll-opt .roll-opt-kode{font-weight:750;}
+  .roll-opt .roll-opt-kg{font-size:12.5px;font-weight:650;opacity:.75;}
+  .roll-opt-manual{
+    padding:11px 14px;font-size:13.5px;font-weight:650;color:var(--theme-accent-deep);
+    background:#fff;cursor:pointer;text-align:center;
+  }
+  .roll-link{font-size:12.5px;color:var(--theme-accent-deep);font-weight:600;margin-top:6px;display:inline-block;cursor:pointer;}
 
   .item-row{
     padding:8px 14px;border-bottom:0.5px solid var(--sep);
@@ -356,7 +384,7 @@
   </div>
 </div>
 <div id="previewModeBanner" style="display:none;background:#3A2E00;color:#FFD666;font-size:11.5px;font-weight:700;text-align:center;padding:7px 10px;">
-  🧪 MODE PREVIEW - "Kirim ke Telegram" &amp; "Simpan Atur Tampilan" DISIMULASIKAN (gak nulis ke Sheet/kirim ke grup beneran). Kategori/Warna/Kombinasi tetap baca data asli.
+  🧪 MODE PREVIEW - "Kirim ke Telegram" &amp; "Simpan Atur Tampilan" DISIMULASIKAN (gak nulis ke Sheet/kirim ke grup beneran). Kategori/Varian/Warna/Kombinasi/Kode Roll akan pakai data ASLI kalau server bisa diakses - kalau gagal/gak ada koneksi ke server, otomatis pakai data contoh (dummy) biar tetap bisa didemoin.
 </div>
 
 <div id="loadingScreen" class="loading-screen">Memuat data kategori/varian...</div>
@@ -404,12 +432,20 @@
           </div>
           <div id="estimasiKgInfo" style="display:none;font-size:11.5px;color:var(--theme-accent-deep);margin-top:2px;"></div>
         </div>
-        <div class="row" id="rowRoll">
-          <div class="row-inline">
+        <div class="row" id="rowRoll" style="position:relative;">
+          <div class="row-inline" id="rollInputWrap">
             <div class="row-label">Kode Roll <span class="badge">opsional</span></div>
             <input type="text" id="rollInput" autocomplete="off" inputmode="numeric" pattern="[0-9]*">
           </div>
-          <div id="rollStokInfo" style="display:none;"></div>
+          <span class="roll-link" id="rollKeDaftarLink" style="display:none;">🔽 Pilih dari stok tersedia</span>
+          <div class="row-inline" id="rollPickerWrap" style="display:none;">
+            <div class="row-label">Kode Roll <span class="badge">opsional</span></div>
+            <div class="custom-select-btn placeholder" id="rollPickerBtn">
+              <span id="rollPickerLabel">— pilih roll —</span>
+              <span class="chev">▾</span>
+            </div>
+          </div>
+          <div class="combo-dropdown" id="rollDropdown"></div>
         </div>
       </div>
 
@@ -550,13 +586,13 @@
 // =====================================================================================
 const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzaWvCi3Vw2fnFgBPfn1qvFBSqYXOrdWi8yxvKc8WOtaIH78JN83dIMiQtQeockW6EDBw/exec";
 
-// v.08-preview: MODE PREVIEW - biar bisa dites SEBELUM Apps Script v16 di-deploy. Data
+// v.10-preview: MODE PREVIEW - biar bisa dites SEBELUM Apps Script v33 di-deploy. Data
 // kategori/varian/warna/kombinasi tetap dibaca LANGSUNG dari server asli (read-only, aman).
-// Yang di-SIMULASIKAN cuma 3 hal yang: (a) butuh backend BARU yang belum jalan (estimasi Kg,
-// simpan Atur Tampilan), atau (b) beneran NULIS data kalau dites di server produksi (kirim ke
-// Telegram) - lihat masing2 titik "if (PREVIEW_MODE)" di bawah buat detailnya. Set false lalu
-// upload ulang sebagai index.html begitu Apps Script v16 sudah di-deploy, biar semuanya jalan ke
-// server beneran.
+// Yang di-SIMULASIKAN cuma yang: (a) butuh backend BARU yang belum jalan (estimasi Kg, dropdown
+// Kode Roll dari stok, simpan Atur Tampilan), atau (b) beneran NULIS data kalau dites di server
+// produksi (kirim ke Telegram) - lihat masing2 titik "if (PREVIEW_MODE)" di bawah buat detailnya.
+// Set false lalu upload ulang sebagai index.html begitu Apps Script v33 sudah di-deploy DAN
+// preview dropdown Kode Roll-nya sudah di-ACC, biar semuanya jalan ke server beneran.
 const PREVIEW_MODE = false;
 const DUMMY_STANDAR_PEMAKAIAN = [
   { varian: 'RFL', kodeItem: '', kgPerPcs: 0.18 },
@@ -564,6 +600,52 @@ const DUMMY_STANDAR_PEMAKAIAN = [
   { varian: 'Ringer', kodeItem: '', kgPerPcs: 0.22 }
 ]; // v.08-preview: cuma dipakai kalau PREVIEW_MODE true DAN sheet STANDAR PEMAKAIAN beneran kosong -
    // biar tombol "pakai estimasi standar" ada sesuatu buat didemoin. HAPUS/abaikan begitu sheet asli sudah diisi.
+
+// v.10-preview: contoh data stok roll per warna buat demo dropdown Kode Roll - cuma dipakai
+// kalau PREVIEW_MODE true DAN ?action=stokRoll gagal/kosong (backend v33 belum di-deploy).
+// Nilai "NAVY" sengaja dibikin sama kayak contoh screenshot Denny (3 roll, salah satunya angka
+// desimal panjang 7.979999999999997 - buat mastiin formatKg2_() bulatin & pad-nya bener).
+const DUMMY_STOK_ROLL_PER_WARNA = {
+  'NAVY': [
+    { kodeRoll: '1427', kg: 25.1 },
+    { kodeRoll: '1426', kg: 24.85 },
+    { kodeRoll: '0668', kg: 7.979999999999997 }
+  ],
+  'BLACK': [
+    { kodeRoll: '0912', kg: 18.5 }
+  ],
+  'CREAM': [
+    { kodeRoll: '0231', kg: 6.333333333333333 },
+    { kodeRoll: '0455', kg: 112.4 }
+  ]
+};
+
+// v.10-preview: dummy KATEGORI/VARIAN, WARNA, & KOMBINASI WARNA - dipakai kalau fetch ke
+// WEBAPP_URL gagal TOTAL (mis. gak ada akses internet/CORS di lingkungan preview). Sebelumnya
+// cuma STANDAR_PEMAKAIAN & STOK_ROLL yang ada fallback dummy - Kategori/Varian yang GAGAL bikin
+// SELURUH form kosong (loading screen nyangkut), jadi sekarang dilengkapi juga.
+const DUMMY_KATEGORI_VARIAN = {
+  'Anak': [
+    { label: 'Kaos Lengan Panjang', kode: 'PJ' },
+    { label: 'Kaos Lengan Panjang Kombinasi', kode: 'LT' },
+    { label: 'Setelan', kode: 'SET' },
+    { label: 'Celana Pendek', kode: 'CP' }
+  ],
+  'Dewasa': [
+    { label: 'Pendek', kode: 'TS' },
+    { label: 'Panjang', kode: 'LS' },
+    { label: 'Pendek Kombinasi', kode: 'TSK' },
+    { label: 'Panjang Kombinasi', kode: 'LSK' },
+    { label: 'Ruffle', kode: 'RFL' },
+    { label: 'Setelan', kode: 'SETD' }
+  ]
+};
+const DUMMY_WARNA_LIST = ['NAVY', 'BLACK', 'CREAM', 'WHITE', 'GREY', 'MUSTARD', 'TERACOTA'];
+const DUMMY_KOMBINASI_WARNA = [
+  { nama: 'WHITE MUSTARD', ketiga: 'STEEL BLUE' },
+  { nama: 'NAVY CREAM', ketiga: 'TERACOTA' },
+  { nama: 'BLACK TERACOTA', ketiga: 'MUSTARD' }
+];
 
 const SIZES_UTAMA = ["XS","S","M","L","XL","XXL"];
 const SIZES_LAIN = ["3XL","4XL","5XL","6XL"];
@@ -791,7 +873,12 @@ const varianDropdown = document.getElementById('varianDropdown');
 const warnaInput = document.getElementById('warnaInput');
 const kgInput = document.getElementById('kgInput');
 const rollInput = document.getElementById('rollInput');
-const rollStokInfo = document.getElementById('rollStokInfo');
+const rollInputWrap = document.getElementById('rollInputWrap');
+const rollPickerWrap = document.getElementById('rollPickerWrap');
+const rollPickerBtn = document.getElementById('rollPickerBtn');
+const rollPickerLabel = document.getElementById('rollPickerLabel');
+const rollDropdown = document.getElementById('rollDropdown');
+const rollKeDaftarLink = document.getElementById('rollKeDaftarLink');
 const qtyGrid = document.getElementById('qtyGrid');
 const qtyGridLain = document.getElementById('qtyGridLain');
 const totalQtyEl = document.getElementById('totalQty');
@@ -1128,7 +1215,7 @@ btnTambah.addEventListener('click', function(){
   varianPickerLabel.textContent = '— pilih —';
   varianPickerBtn.classList.add('placeholder');
   warnaInput.value = ''; kgInput.value = ''; kgInput.disabled = false; rollInput.value = '';
-  rollAutoFilled = false; rollStokInfo.style.display = 'none';
+  rollAutoFilled = false; resetRollPickerUI_();
   cbEstimasiKg.checked = false; estimasiKgInfo.style.display = 'none';
   biasaRows.style.display = 'block';
   kombinasiRows.style.display = 'none';
@@ -1410,11 +1497,18 @@ function fetchFresh(isBackground){
   return fetch(WEBAPP_URL + '?action=kategori', { cache: 'no-store' })
     .then(function(r){ return r.json(); })
     .then(function(data){
-      KATEGORI_VARIAN = data;
-      try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data })); } catch(e){}
+      KATEGORI_VARIAN = (data && Object.keys(data).length) ? data : (PREVIEW_MODE ? DUMMY_KATEGORI_VARIAN : data);
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: KATEGORI_VARIAN })); } catch(e){}
       if (!isBackground) initUI();
     })
     .catch(function(err){
+      // v.10-preview: kalau gagal TOTAL (bukan cuma kosong) & lagi PREVIEW_MODE, tetap render
+      // pakai data dummy biar bisa didemoin tanpa akses ke server asli.
+      if (PREVIEW_MODE){
+        KATEGORI_VARIAN = DUMMY_KATEGORI_VARIAN;
+        if (!isBackground) initUI();
+        return;
+      }
       if (!isBackground) {
         document.getElementById('loadingScreen').textContent = 'Gagal memuat data: ' + err.message + ' (cek WEBAPP_URL di kode)';
       }
@@ -1473,10 +1567,10 @@ function fetchWarnaFresh(){
   fetch(WEBAPP_URL + '?action=warna', { cache: 'no-store' })
     .then(function(r){ return r.json(); })
     .then(function(list){
-      WARNA_LIST = list;
-      try { localStorage.setItem(WARNA_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: list })); } catch(e){}
+      WARNA_LIST = (list && list.length) ? list : (PREVIEW_MODE ? DUMMY_WARNA_LIST : list);
+      try { localStorage.setItem(WARNA_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: WARNA_LIST })); } catch(e){}
     })
-    .catch(function(){ /* diamkan - autocomplete cuma bonus, gak boleh ganggu form kalau gagal */ });
+    .catch(function(){ if (PREVIEW_MODE) WARNA_LIST = DUMMY_WARNA_LIST; /* selain itu diamkan - autocomplete cuma bonus, gak boleh ganggu form kalau gagal */ });
 }
 (function bootstrapWarna(){
   try {
@@ -1497,10 +1591,10 @@ function fetchStokRollFresh(){
   fetch(WEBAPP_URL + '?action=stokRoll', { cache: 'no-store' })
     .then(function(r){ return r.json(); })
     .then(function(map){
-      STOK_ROLL_PER_WARNA = map || {};
+      STOK_ROLL_PER_WARNA = (map && Object.keys(map).length) ? map : (PREVIEW_MODE ? DUMMY_STOK_ROLL_PER_WARNA : {});
       try { localStorage.setItem(STOK_ROLL_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: STOK_ROLL_PER_WARNA })); } catch(e){}
     })
-    .catch(function(){ /* diamkan - auto-show cuma bonus, gak boleh ganggu form kalau gagal */ });
+    .catch(function(){ STOK_ROLL_PER_WARNA = PREVIEW_MODE ? DUMMY_STOK_ROLL_PER_WARNA : {}; });
 }
 (function bootstrapStokRoll(){
   try {
@@ -1512,48 +1606,124 @@ function fetchStokRollFresh(){
   fetchStokRollFresh();
 })();
 
+// v.10: 2 digit di depan koma (di-pad nol kalau cuma 1 digit) + selalu 2 di belakang koma -
+// format tampilan kg biar rapi & konsisten di dropdown Kode Roll. Cuma buat TAMPILAN (angka yang
+// beneran dikirim ke server tetap presisi asli, gak kepengaruh).
+function formatKg2_(kg){
+  const n = Math.round((parseFloat(kg) || 0) * 100) / 100;
+  const fixed = n.toFixed(2);
+  const neg = fixed.charAt(0) === '-';
+  const parts = (neg ? fixed.slice(1) : fixed).split('.');
+  const intPart = parts[0].length < 2 ? parts[0].padStart(2, '0') : parts[0];
+  return (neg ? '-' : '') + intPart + '.' + parts[1];
+}
+
+// v.10: warna latar baris dropdown Kode Roll - diganti-ganti per baris (bukan putih polos)
+// biar kontras jelas dari latar dropdown yang putih. Muter lagi kalau roll-nya lebih banyak
+// dari daftar warna ini.
+const ROLL_OPT_COLORS = ['#FFE8CC', '#D9F2E3', '#D8E8FC', '#FCE0EC', '#EDE0FC', '#FFF6BF'];
+
+function renderRollDropdown_(rolls){
+  rollDropdown.innerHTML = rolls.map(function(r, idx){
+    const bg = ROLL_OPT_COLORS[idx % ROLL_OPT_COLORS.length];
+    return '<div class="roll-opt" data-kode="' + r.kodeRoll + '" style="background:' + bg + ';">' +
+      '<span class="roll-opt-kode">Roll ' + r.kodeRoll + '</span>' +
+      '<span class="roll-opt-kg">' + formatKg2_(r.kg) + ' kg</span></div>';
+  }).join('') + '<div class="roll-opt-manual" id="rollOptManual">✏️ Ketik manual (roll lain)</div>';
+
+  rollDropdown.querySelectorAll('.roll-opt').forEach(function(el){
+    el.addEventListener('click', function(){ pilihRoll_(el.dataset.kode); });
+  });
+  document.getElementById('rollOptManual').addEventListener('click', function(){
+    rollDropdown.style.display = 'none';
+    switchKeManualRoll_(true);
+    rollInput.focus();
+  });
+}
+
+function pilihRoll_(kode){
+  rollInput.value = kode;
+  state.roll = kode;
+  rollAutoFilled = true;
+  rollPickerLabel.textContent = 'Roll ' + kode;
+  rollPickerBtn.classList.remove('placeholder');
+  rollDropdown.style.display = 'none';
+}
+
+function switchKeManualRoll_(tampilkanLinkKeDaftar){
+  rollPickerWrap.style.display = 'none';
+  rollInputWrap.style.display = '';
+  rollDropdown.style.display = 'none';
+  rollKeDaftarLink.style.display = tampilkanLinkKeDaftar ? 'inline-block' : 'none';
+}
+
+function switchKePickerRoll_(){
+  rollInputWrap.style.display = 'none';
+  rollKeDaftarLink.style.display = 'none';
+  rollPickerWrap.style.display = '';
+}
+
+function resetRollPickerUI_(){
+  switchKeManualRoll_(false);
+  rollPickerLabel.textContent = '— pilih roll —';
+  rollPickerBtn.classList.add('placeholder');
+  rollDropdown.innerHTML = '';
+  rollDropdown.style.display = 'none';
+}
+
+rollPickerBtn.addEventListener('click', function(){
+  const showing = rollDropdown.style.display === 'block';
+  rollDropdown.style.display = showing ? 'none' : 'block';
+});
+rollKeDaftarLink.addEventListener('click', function(){ switchKePickerRoll_(); });
+document.addEventListener('click', function(e){
+  if (!rollPickerBtn.contains(e.target) && !rollDropdown.contains(e.target)) {
+    rollDropdown.style.display = 'none';
+  }
+});
+
 // Cocokkan warna yang lagi diketik/dipilih ke STOK_ROLL_PER_WARNA - persis kayak alur
 // bacaPetaWarnaKanonik() di backend (uppercase langsung), jadi cukup cocok persis di sini.
 function tampilkanStokRoll_(){
-  if (state.mode === 'kombinasi'){ rollStokInfo.style.display = 'none'; return; } // v.09: kombinasi TETAP manual
+  if (state.mode === 'kombinasi'){ resetRollPickerUI_(); return; } // v.10: kombinasi TETAP manual, gak disentuh
   const w = (state.warna || '').trim().toUpperCase();
   const rolls = w ? STOK_ROLL_PER_WARNA[w] : null;
 
   if (!rolls || rolls.length === 0){
-    rollStokInfo.style.display = 'none';
-    // Warna ganti jadi gak cocok lagi - kalau isi Kode Roll itu HASIL AUTO (bukan diketik
-    // manual), kosongkan lagi biar gak nyangkut kode roll punya warna sebelumnya.
+    // Warna gak ada stok yang cocok - balik ke input manual biasa. Kalau isi sebelumnya HASIL
+    // AUTO (bukan diketik manual tim potong), kosongkan lagi biar gak nyangkut punya warna lama.
     if (rollAutoFilled){ rollInput.value = ''; state.roll = ''; rollAutoFilled = false; }
+    switchKeManualRoll_(false);
     return;
   }
 
-  rollStokInfo.style.display = 'block';
-  rollStokInfo.innerHTML = 'Stok tersedia: ' + rolls.map(function(r){
-    return '<b>' + r.kg + ' / ' + r.kodeRoll + '</b>';
-  }).join(', ');
+  renderRollDropdown_(rolls);
 
-  // Auto-isi Kode Roll HANYA kalau field kosong ATAU isinya hasil auto-show sebelumnya (BUKAN
-  // diketik manual sama tim potong) & cuma ada TEPAT 1 roll yang cocok - kalau ada >1 roll
-  // biarkan kosong/manual, biar tim potong pilih sendiri roll mana yang lagi jalan.
-  if ((!rollInput.value || rollAutoFilled)){
-    if (rolls.length === 1){
-      rollInput.value = rolls[0].kodeRoll;
-      state.roll = rollInput.value;
-      rollAutoFilled = true;
-    } else if (rollAutoFilled){
-      rollInput.value = ''; state.roll = ''; rollAutoFilled = false;
-    }
+  // Kalau tim potong SUDAH ngetik kode roll sendiri (bukan hasil auto-show), jangan diganggu -
+  // tetap di mode manual, cuma dikasih link buat pindah ke dropdown stok kalau mau.
+  if (rollInput.value && !rollAutoFilled){
+    switchKeManualRoll_(true);
+    return;
   }
+
+  if (rolls.length === 1){
+    pilihRoll_(rolls[0].kodeRoll); // cuma 1 roll cocok - auto-pilih langsung
+  } else {
+    rollInput.value = ''; state.roll = ''; rollAutoFilled = false;
+    rollPickerLabel.textContent = '— pilih roll —';
+    rollPickerBtn.classList.add('placeholder');
+  }
+  switchKePickerRoll_();
 }
 
 function fetchKombinasiFresh(){
   fetch(WEBAPP_URL + '?action=kombinasi', { cache: 'no-store' })
     .then(function(r){ return r.json(); })
     .then(function(list){
-      KOMBINASI_WARNA = list;
-      try { localStorage.setItem(KOMBINASI_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: list })); } catch(e){}
+      KOMBINASI_WARNA = (list && list.length) ? list : (PREVIEW_MODE ? DUMMY_KOMBINASI_WARNA : list);
+      try { localStorage.setItem(KOMBINASI_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: KOMBINASI_WARNA })); } catch(e){}
     })
-    .catch(function(){ /* diamkan - kalau gagal, combo picker akan kasih pesan error saat dibuka */ });
+    .catch(function(){ if (PREVIEW_MODE) KOMBINASI_WARNA = DUMMY_KOMBINASI_WARNA; /* selain itu diamkan - combo picker akan kasih pesan error saat dibuka */ });
 }
 (function bootstrapKombinasi(){
   try {
