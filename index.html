@@ -1441,6 +1441,16 @@ function kirimSatuTertunda_(pending, isBackground){
         if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
         return true;
       }
+      if (hasil && hasil.duplikat) {
+        // v.11: server bilang ini kiriman DOBEL (kiriman pertamanya SUDAH berhasil duluan) -
+        // hapus dari antrian tertunda juga, JANGAN dianggap gagal & dicoba kirim ulang terus
+        // (kalau tetap dianggap gagal, ini bakal nyoba kirim ulang selamanya dan selalu ditolak
+        // server sampai 24 jam - banner error nyangkut terus padahal datanya sudah aman tersimpan).
+        hapusDariAntrianTertunda_(pending.tempId);
+        tampilkanBannerKirim_('ℹ️ Data ini sudah terkirim duluan (kiriman ganda terdeteksi) - tidak dikirim ulang.', 'info');
+        setTimeout(hapusBannerKirim_, 4000);
+        return true;
+      }
       tampilkanBannerKirim_('Gagal mengirim: ' + ((hasil && hasil.error) || 'tidak diketahui') + ' - data masih tersimpan, coba lagi.', 'gagal');
       return false;
     })
