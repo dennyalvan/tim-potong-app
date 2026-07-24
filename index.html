@@ -1,12 +1,11 @@
 <!DOCTYPE html>
 <!--
-  MINI APP TIM POTONG (ver.10) - form input produksi di dalam Telegram.
+  MINI APP TIM POTONG (ver.11) - form input produksi di dalam Telegram.
   Backend: apps_script_tim_potong_v33.js (butuh ?action=stokRoll - lihat catatan v.09, selain
   yang lama: ?action=kirimProduksiMiniApp / ?action=standarPemakaian / ?action=inputCfg /
   ?action=saveInputCfg).
 
-  CATATAN FILE INI (index_v10.html - FINAL, sudah di-ACC Denny dari preview, siap upload ke
-  GitHub Pages sebagai index.html):
+  CATATAN FILE INI (index_v11.html - siap upload ke GitHub Pages sebagai index.html):
   PREVIEW_MODE = false - "Kirim ke Telegram" & "Simpan Atur Tampilan" akan BENERAN memanggil
   server (nulis ke Sheet, kirim ke grup Telegram, simpan config ke Script Properties). Semua data
   dummy (Kategori/Varian, Warna, Kombinasi, Kode Roll, Estimasi Kg) di kode ini TETAP ADA sebagai
@@ -17,7 +16,18 @@
   nemu data stok (gagal fetch ?action=stokRoll, ditangkap diam-diam, field balik jadi input teks
   manual biasa - fitur lain tetap aman jalan normal).
 
-  ver.10 (perubahan hari ini, lanjutan v.09):
+  ver.11 (perubahan hari ini, lanjutan v.10):
+  1. Kg roll SEKARANG ikut tampil di tombol Kode Roll setelah dipilih (bukan cuma "Roll 0024"
+     doang, sekarang "Roll 0024 · 25.50 kg") - biar tim potong bisa langsung nyontek angka kg-nya
+     pas ngisi "Kg Kain Terpakai", gak perlu buka dropdown lagi buat lihat angkanya.
+  2. Validasi KG MENCURIGAKAN - kalau tim potong ngetik 3 digit atau lebih TANPA titik desimal
+     sama sekali (contoh "253", padahal maksudnya "25.3"), field-nya kasih border+background
+     merah + pesan peringatan di bawahnya, dan tombol "+ Tambah ke Daftar" DI-DISABLE sampai
+     dibetulin. Berlaku di mode biasa maupun kombinasi (3 warna). Alasannya: kain gak pernah
+     seberat itu (paling berat biasanya ±40kg, gak pernah sampai 100kg) - hampir pasti salah
+     ketik lupa titik desimal.
+
+  ver.10 (sebelumnya):
   1. Kode Roll SEKARANG dropdown ala Varian (bukan lagi list teks horizontal abu-abu) - muncul
      otomatis begitu Warna dipilih & ada roll yang cocok di STOK KAIN (mode BIASA saja,
      Kombinasi TETAP manual). Tiap baris opsi dikasih warna latar beda-beda (oranye/hijau/biru/
@@ -178,19 +188,15 @@
   #rollInput::placeholder{color:var(--ink-3);font-weight:450;}
   .roll-opt{
     padding:11px 14px;font-size:14.5px;font-weight:650;border-bottom:0.5px solid rgba(0,0,0,.06);
-    cursor:pointer;display:flex;justify-content:flex-end;align-items:center;gap:10px;color:#1C1C1E;
-    background:var(--theme-accent-soft);
+    cursor:pointer;display:flex;justify-content:space-between;align-items:center;color:#1C1C1E;
   }
   .roll-opt:last-child{border-bottom:none;}
-  .roll-opt .roll-opt-kode{font-weight:700;font-size:14.5px;}
-  .roll-opt .roll-opt-sep{font-weight:700;font-size:14.5px;opacity:.6;margin:0 -2px;}
-  .roll-opt .roll-opt-kg{font-size:14.5px;font-weight:700;}
+  .roll-opt .roll-opt-kode{font-weight:750;}
+  .roll-opt .roll-opt-kg{font-size:12.5px;font-weight:650;opacity:.75;}
   .roll-opt-manual{
     padding:11px 14px;font-size:13.5px;font-weight:650;color:var(--theme-accent-deep);
     background:#fff;cursor:pointer;text-align:center;
   }
-  .warna-opt{ background:var(--theme-accent-soft); }
-  #varianDropdown .combo-opt{ background:var(--theme-accent-soft); }
   .roll-link{font-size:12.5px;color:var(--theme-accent-deep);font-weight:600;margin-top:6px;display:inline-block;cursor:pointer;}
 
   .item-row{
@@ -291,6 +297,11 @@
     padding:12px 16px;font-size:14px;margin:0 0 6px;font-weight:550;
   }
   .badge{font-size:10.5px;background:var(--canvas);color:var(--ink-2);padding:2px 8px;border-radius:6px;font-weight:650;}
+
+  /* v.11: kg mencurigakan (3+ digit tanpa desimal, contoh "253" yang harusnya "25.3") -
+     border+background merah di input-nya + teks peringatan di bawahnya. */
+  .kg-suspicious{border-color:var(--danger) !important;background:var(--danger-bg) !important;}
+  .kg-warning-text{font-size:11.5px;color:var(--danger);margin-top:4px;font-weight:650;}
 
   .success-screen{display:flex;flex-direction:column;align-items:center;text-align:center;padding:6px 12px 0;}
   .success-icon{
@@ -435,6 +446,7 @@
             </label>
           </div>
           <div id="estimasiKgInfo" style="display:none;font-size:11.5px;color:var(--theme-accent-deep);margin-top:2px;"></div>
+          <div id="kgWarningInfo" class="kg-warning-text" style="display:none;"></div>
         </div>
         <div class="row" id="rowRoll" style="position:relative;">
           <div class="row-inline" id="rollInputWrap">
@@ -1062,7 +1074,22 @@ function resetComboUI(){
 warnaInput.addEventListener('input', function(){ state.warna = warnaInput.value; validate(); tampilkanSaranWarna(); tampilkanStokRoll_(); });
 warnaInput.addEventListener('focus', function(){ warnaInput.select(); });
 warnaInput.addEventListener('blur', function(){ setTimeout(function(){ warnaDropdown.style.display = 'none'; }, 150); });
-kgInput.addEventListener('input', function(){ state.kg = kgInput.value; validate(); });
+// v.11: kg mencurigakan = 3 digit ATAU LEBIH tanpa tanda desimal sama sekali (contoh "253",
+// "1200") - kain gak pernah seberat itu (paling berat biasanya ±40kg, gak pernah sampai 100kg),
+// hampir pasti tim potong lupa nulis titik desimalnya (maksudnya "25.3" bukan "253"). Dicek dari
+// STRING mentah (bukan angka hasil parseFloat), karena yang mau dideteksi justru KETIADAAN titik-nya.
+function kgMencurigakan_(rawStr){
+  return /^\d{3,}$/.test(String(rawStr || '').trim());
+}
+
+kgInput.addEventListener('input', function(){
+  state.kg = kgInput.value;
+  const curiga = kgMencurigakan_(kgInput.value);
+  kgInput.classList.toggle('kg-suspicious', curiga);
+  kgWarningInfo.style.display = curiga ? 'block' : 'none';
+  kgWarningInfo.textContent = curiga ? '⚠️ ' + kgInput.value + ' kg? Kain jarang di atas 100kg (biasanya maks ±40kg) - cek lagi titik desimalnya, mungkin maksudnya ' + kgInput.value.slice(0, -1) + '.' + kgInput.value.slice(-1) + ' kg.' : '';
+  validate();
+});
 // v.09: rollAutoFilled nandain isi rollInput itu HASIL AUTO-SHOW (bukan diketik manual) - dipakai
 // tampilkanStokRoll_() buat tau boleh timpa/kosongin lagi apa nggak begitu Warna ganti.
 let rollAutoFilled = false;
@@ -1108,7 +1135,11 @@ function pilihKombinasi(c){
   kgRollComboRow.style.display = 'block';
 
   document.querySelectorAll('.comboKgInput').forEach(function(inp){
-    inp.addEventListener('input', function(){ state.comboKg[parseInt(inp.dataset.idx,10)] = inp.value; validate(); });
+    inp.addEventListener('input', function(){
+      state.comboKg[parseInt(inp.dataset.idx,10)] = inp.value;
+      inp.classList.toggle('kg-suspicious', kgMencurigakan_(inp.value));
+      validate();
+    });
   });
   document.querySelectorAll('.comboRollInput').forEach(function(inp){
     inp.addEventListener('input', function(){ state.comboRoll[parseInt(inp.dataset.idx,10)] = inp.value; });
@@ -1134,10 +1165,10 @@ function validate(){
   let ok;
   if (state.mode === 'kombinasi') {
     ok = state.kategori && state.kodeItem !== null && state.comboWarna &&
-      state.comboKg.every(function(k){ return k && parseFloat(k) > 0; }) && total > 0;
+      state.comboKg.every(function(k){ return k && parseFloat(k) > 0 && !kgMencurigakan_(k); }) && total > 0;
   } else {
     ok = state.kategori && state.kodeItem !== null && state.warna.trim() &&
-      state.kg && parseFloat(state.kg) > 0 && total > 0;
+      state.kg && parseFloat(state.kg) > 0 && !kgMencurigakan_(state.kg) && total > 0;
   }
   btnTambah.disabled = !ok;
 }
@@ -1547,8 +1578,8 @@ function tampilkanSaranWarna(){
   const cocok = q ? sumberList.filter(function(w){ return w.toUpperCase().indexOf(q) !== -1; }) : sumberList;
   if (cocok.length === 0) { warnaDropdown.style.display = 'none'; return; }
   warnaDropdown.innerHTML = cocok.slice(0,8).map(function(w){
-    return '<div class="warna-opt" style="padding:10px 14px;font-size:14.5px;font-weight:700;' +
-      'border-bottom:0.5px solid rgba(0,0,0,.06);">' + w + '</div>';
+    return '<div class="warna-opt" style="padding:10px 14px;font-size:14.5px;font-weight:500;' +
+      'border-bottom:0.5px solid #E5E5EA;">' + w + '</div>';
   }).join('');
   const opts = warnaDropdown.querySelectorAll('.warna-opt');
   opts[opts.length-1].style.borderBottom = 'none';
@@ -1622,19 +1653,21 @@ function formatKg2_(kg){
   return (neg ? '-' : '') + intPart + '.' + parts[1];
 }
 
-// v.10: baris dropdown Kode Roll pakai warna latar senada tema kategori aktif
-// (var(--theme-accent-soft)), sama kayak baris dropdown saran Warna & Varian, biar
-// keduanya konsisten. Kode roll & kg dirapatkan rata kanan (bukan disebar kiri-kanan).
+// v.10: warna latar baris dropdown Kode Roll - diganti-ganti per baris (bukan putih polos)
+// biar kontras jelas dari latar dropdown yang putih. Muter lagi kalau roll-nya lebih banyak
+// dari daftar warna ini.
+const ROLL_OPT_COLORS = ['#FFE8CC', '#D9F2E3', '#D8E8FC', '#FCE0EC', '#EDE0FC', '#FFF6BF'];
+
 function renderRollDropdown_(rolls){
   rollDropdown.innerHTML = rolls.map(function(r, idx){
-    return '<div class="roll-opt" data-kode="' + r.kodeRoll + '">' +
+    const bg = ROLL_OPT_COLORS[idx % ROLL_OPT_COLORS.length];
+    return '<div class="roll-opt" data-kode="' + r.kodeRoll + '" data-kg="' + r.kg + '" style="background:' + bg + ';">' +
       '<span class="roll-opt-kode">Roll ' + r.kodeRoll + '</span>' +
-      '<span class="roll-opt-sep">/</span>' +
       '<span class="roll-opt-kg">' + formatKg2_(r.kg) + ' kg</span></div>';
   }).join('') + '<div class="roll-opt-manual" id="rollOptManual">✏️ Ketik manual (roll lain)</div>';
 
   rollDropdown.querySelectorAll('.roll-opt').forEach(function(el){
-    el.addEventListener('click', function(){ pilihRoll_(el.dataset.kode); });
+    el.addEventListener('click', function(){ pilihRoll_(el.dataset.kode, parseFloat(el.dataset.kg)); });
   });
   document.getElementById('rollOptManual').addEventListener('click', function(){
     rollDropdown.style.display = 'none';
@@ -1643,11 +1676,14 @@ function renderRollDropdown_(rolls){
   });
 }
 
-function pilihRoll_(kode){
+// v.11: param ke-2 `kg` BARU (opsional) - kalau diisi, kg roll itu ikut ditampilkan di tombol
+// Kode Roll (bukan cuma "Roll 0024" doang) - biar tim potong bisa langsung nyontek angka kg-nya
+// pas ngisi "Kg Kain Terpakai", gak perlu buka dropdown lagi buat lihat angkanya.
+function pilihRoll_(kode, kg){
   rollInput.value = kode;
   state.roll = kode;
   rollAutoFilled = true;
-  rollPickerLabel.textContent = 'Roll ' + kode;
+  rollPickerLabel.textContent = 'Roll ' + kode + ((kg !== undefined && kg !== null && !isNaN(kg)) ? '  ·  ' + formatKg2_(kg) + ' kg' : '');
   rollPickerBtn.classList.remove('placeholder');
   rollDropdown.style.display = 'none';
 }
@@ -1709,7 +1745,7 @@ function tampilkanStokRoll_(){
   }
 
   if (rolls.length === 1){
-    pilihRoll_(rolls[0].kodeRoll); // cuma 1 roll cocok - auto-pilih langsung
+    pilihRoll_(rolls[0].kodeRoll, rolls[0].kg); // cuma 1 roll cocok - auto-pilih langsung
   } else {
     rollInput.value = ''; state.roll = ''; rollAutoFilled = false;
     rollPickerLabel.textContent = '— pilih roll —';
@@ -1777,6 +1813,7 @@ function cariStandarKg_(kodeItem, varianLabel){
 
 const cbEstimasiKg = document.getElementById('pakaiEstimasiKg');
 const estimasiKgInfo = document.getElementById('estimasiKgInfo');
+const kgWarningInfo = document.getElementById('kgWarningInfo');
 
 function hitungEstimasiKg_(){
   const total = updateTotal();
