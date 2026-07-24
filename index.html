@@ -93,6 +93,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Input Produksi - Tim Potong</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root{
@@ -115,7 +118,7 @@
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{margin:0;padding:0;overflow-x:hidden;max-width:100vw;}
   body{
-    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Segoe UI",Roboto,sans-serif;
+    font-family:"Space Grotesk",-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Segoe UI",Roboto,sans-serif;
     color:var(--ink);
     background-color:var(--canvas);
     background-image:var(--theme-bg-image);
@@ -137,6 +140,14 @@
     transition:background .4s;
   }
   #refreshLink{font-size:11.5px;}
+  .topbar-logo{
+    width:38px;height:38px;border-radius:0;background:transparent;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;
+    flex-shrink:0;transition:background .4s;
+  }
+  .topbar-logo #topbarLogoPlaceholder{
+    font-size:8.5px;font-weight:700;color:var(--theme-accent-deep);text-align:center;line-height:1.15;
+  }
 
   .loading-screen{text-align:center;padding:60px 30px;color:var(--ink-2);font-size:14px;line-height:1.7;}
 
@@ -188,11 +199,10 @@
   #rollInput::placeholder{color:var(--ink-3);font-weight:450;}
   .roll-opt{
     padding:11px 14px;font-size:14.5px;font-weight:650;border-bottom:0.5px solid rgba(0,0,0,.06);
-    cursor:pointer;display:flex;justify-content:space-between;align-items:center;color:#1C1C1E;
+    cursor:pointer;display:flex;justify-content:flex-end;align-items:center;color:#1C1C1E;
   }
   .roll-opt:last-child{border-bottom:none;}
-  .roll-opt .roll-opt-kode{font-weight:750;}
-  .roll-opt .roll-opt-kg{font-size:12.5px;font-weight:650;opacity:.75;}
+  .roll-opt .roll-opt-text{font-weight:600;font-size:14.5px;text-align:right;}
   .roll-opt-manual{
     padding:11px 14px;font-size:13.5px;font-weight:650;color:var(--theme-accent-deep);
     background:#fff;cursor:pointer;text-align:center;
@@ -323,7 +333,7 @@
     width:100%;min-height:150px;background:var(--card);border-radius:16px;
     box-shadow:0 1px 2px rgba(0,0,0,.04), 0 0 0 0.5px rgba(0,0,0,.04);
     padding:16px;font-size:14px;line-height:1.75;white-space:pre-wrap;
-    font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;text-align:left;color:var(--ink);
+    font-family:"Space Grotesk",ui-monospace,"SF Mono",Menlo,Consolas,monospace;text-align:left;color:var(--ink);
   }
   .copied-flash{color:var(--success);font-size:13.5px;font-weight:650;margin-top:10px;display:none;}
 
@@ -387,9 +397,16 @@
 
 <div class="topbar">
   <div class="topbar-top-row">
-    <div>
-      <div class="topbar-eyebrow" id="topbarEyebrow">Tim Potong</div>
-      <div class="topbar-title">Input Produksi</div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="topbar-logo" id="topbarLogoWrap" title="Klik untuk ubah logo">
+        <img id="topbarLogoImg" style="display:block;width:100%;height:100%;object-fit:contain;" src="../rafkids-logo_-mrz7540z-jnk3.png">
+        <span id="topbarLogoPlaceholder" style="display:none;">+ LOGO</span>
+      </div>
+      <input type="file" id="topbarLogoInput" accept="image/*" style="display:none;">
+      <div>
+        <div class="topbar-title">INPUT PRODUKSI</div>
+        <div class="topbar-eyebrow" id="topbarEyebrow" style="font-size:13px;color:#000000;">Tim Potong</div>
+      </div>
     </div>
     <div style="text-align:right;">
       <div class="version-badge">ver.08</div>
@@ -418,7 +435,7 @@
     <div class="card">
       <div class="row" style="position:relative;">
         <div class="row-inline">
-          <div class="row-label">Varian</div>
+          <div class="row-label" style="color:#000000;font-size:14px;">Varian</div>
           <div class="custom-select-btn placeholder" id="varianPickerBtn">
             <span id="varianPickerLabel">— pilih —</span>
             <span class="chev">▾</span>
@@ -430,13 +447,13 @@
       <div id="biasaRows">
         <div class="row" id="rowWarna" style="position:relative;">
           <div class="row-inline" id="warnaInputWrap">
-            <div class="row-label">Warna</div>
+            <div class="row-label" style="color:#000000;font-size:14px;">Warna</div>
             <input type="text" id="warnaInput" autocomplete="off" placeholder="— pilih warna —">
           </div>
         </div>
         <div class="row" id="rowKg">
           <div class="row-inline">
-            <div class="row-label">Kg Kain Terpakai</div>
+            <div class="row-label" style="color:#000000;font-size:14px;">Kg Kain Terpakai</div>
             <input type="number" id="kgInput" step="0.01" autocomplete="off" placeholder="0">
           </div>
           <div class="row-inline" style="margin-top:6px;">
@@ -450,12 +467,12 @@
         </div>
         <div class="row" id="rowRoll" style="position:relative;">
           <div class="row-inline" id="rollInputWrap">
-            <div class="row-label">Kode Roll <span class="badge">opsional</span></div>
+            <div class="row-label" style="color:#000000;font-size:14px;">Kode Roll <span class="badge">wajib isi</span></div>
             <input type="text" id="rollInput" autocomplete="off" inputmode="numeric" pattern="[0-9]*">
           </div>
           <span class="roll-link" id="rollKeDaftarLink" style="display:none;">🔽 Pilih dari stok tersedia</span>
           <div class="row-inline" id="rollPickerWrap" style="display:none;">
-            <div class="row-label">Kode Roll <span class="badge">opsional</span></div>
+            <div class="row-label" style="color:#000000;font-size:14px;">Kode Roll <span class="badge">wajib isi</span></div>
             <div class="custom-select-btn placeholder" id="rollPickerBtn">
               <span id="rollPickerLabel">— pilih roll —</span>
               <span class="chev">▾</span>
@@ -493,7 +510,7 @@
       <div class="qty-grid" id="qtyGrid"></div>
       <span class="toggle-link" id="toggleLain">Tampilkan ukuran lain (3XL–6XL)</span>
       <div class="qty-grid" id="qtyGridLain" style="display:none;"></div>
-      <div class="total-row"><span>Total qty item ini</span><b id="totalQty">0 pcs</b></div>
+      <div class="total-row"><span style="color:#000000;"><b>Total qty item ini</b></span><b id="totalQty" style="font-size:18px;">0 pcs</b></div>
     </div>
 
     <div id="daftarItemSection" style="display:none;">
@@ -927,6 +944,38 @@ function showError(msg){
 }
 function hideError(){ errorBanner.style.display = 'none'; }
 
+// Upload logo header - disimpan di localStorage (base64), tampil di kiri judul. Cuma tampilan
+// lokal per-device (belum disinkron ke server).
+const LOGO_KEY = 'timpotong_logo_v1';
+const topbarLogoWrap = document.getElementById('topbarLogoWrap');
+const topbarLogoImg = document.getElementById('topbarLogoImg');
+const topbarLogoPlaceholder = document.getElementById('topbarLogoPlaceholder');
+const topbarLogoInput = document.getElementById('topbarLogoInput');
+(function terapkanLogoTersimpan_(){
+  try {
+    const dataUrl = localStorage.getItem(LOGO_KEY);
+    if (dataUrl){
+      topbarLogoImg.src = dataUrl;
+      topbarLogoImg.style.display = 'block';
+      topbarLogoPlaceholder.style.display = 'none';
+    }
+  } catch(e){}
+})();
+topbarLogoWrap.addEventListener('click', function(){ topbarLogoInput.click(); });
+topbarLogoInput.addEventListener('change', function(){
+  const file = topbarLogoInput.files && topbarLogoInput.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(){
+    const dataUrl = reader.result;
+    topbarLogoImg.src = dataUrl;
+    topbarLogoImg.style.display = 'block';
+    topbarLogoPlaceholder.style.display = 'none';
+    try { localStorage.setItem(LOGO_KEY, dataUrl); } catch(e){}
+  };
+  reader.readAsDataURL(file);
+});
+
 // Auto-scroll ke kolom aktif - SENGAJA TIDAK dipasang di kolom Qty per Size (lihat
 // renderQtyGrid di bawah): begitu user sudah masuk area qty dan pindah-pindah antar kotak
 // ukuran, scroll tambahan tiap ganti kotak bikin pusing/goyang - jadi field-field lain tetap
@@ -978,12 +1027,15 @@ function renderKategori(){
   renderVarian();
 }
 
+const SOFT_BLUE_COLORS = ['#F1F7FD', '#EAF3FB', '#F5F9FE', '#E6F0FA', '#EFF6FC', '#E3EEF9'];
+
 function renderVarian(){
   const list = KATEGORI_VARIAN[state.kategori] || [];
   varianPickerLabel.textContent = '— pilih —';
   varianPickerBtn.classList.add('placeholder');
   varianDropdown.innerHTML = list.map(function(v, idx){
-    return '<div class="combo-opt" data-idx="' + idx + '">' + v.label + '</div>';
+    const bg = SOFT_BLUE_COLORS[idx % SOFT_BLUE_COLORS.length];
+    return '<div class="combo-opt" data-idx="' + idx + '" style="background:' + bg + ';">' + v.label + '</div>';
   }).join('');
   varianDropdown.querySelectorAll('.combo-opt').forEach(function(el){
     el.addEventListener('click', function(){
@@ -1029,7 +1081,7 @@ document.addEventListener('click', function(e){
 
 function renderQtyGrid(container, sizes){
   container.innerHTML = sizes.map(function(s){
-    return '<div class="qty-cell"><label>'+s+'</label><input type="number" min="0" data-size="'+s+'"></div>';
+    return '<div class="qty-cell"><label style="color:#000000;font-size:13px;">'+s+'</label><input type="number" min="0" data-size="'+s+'"></div>';
   }).join('');
   container.querySelectorAll('input').forEach(function(inp){
     inp.addEventListener('input', function(){
@@ -1577,9 +1629,10 @@ function tampilkanSaranWarna(){
   const q = warnaInput.value.trim().toUpperCase();
   const cocok = q ? sumberList.filter(function(w){ return w.toUpperCase().indexOf(q) !== -1; }) : sumberList;
   if (cocok.length === 0) { warnaDropdown.style.display = 'none'; return; }
-  warnaDropdown.innerHTML = cocok.slice(0,8).map(function(w){
-    return '<div class="warna-opt" style="padding:10px 14px;font-size:14.5px;font-weight:500;' +
-      'border-bottom:0.5px solid #E5E5EA;">' + w + '</div>';
+  warnaDropdown.innerHTML = cocok.slice(0,8).map(function(w, idx){
+    const bg = SOFT_BLUE_COLORS[idx % SOFT_BLUE_COLORS.length];
+    return '<div class="warna-opt" style="padding:10px 14px;font-size:14.5px;font-weight:600;' +
+      'border-bottom:0.5px solid #E5E5EA;background:' + bg + ';">' + w + '</div>';
   }).join('');
   const opts = warnaDropdown.querySelectorAll('.warna-opt');
   opts[opts.length-1].style.borderBottom = 'none';
@@ -1656,14 +1709,13 @@ function formatKg2_(kg){
 // v.10: warna latar baris dropdown Kode Roll - diganti-ganti per baris (bukan putih polos)
 // biar kontras jelas dari latar dropdown yang putih. Muter lagi kalau roll-nya lebih banyak
 // dari daftar warna ini.
-const ROLL_OPT_COLORS = ['#FFE8CC', '#D9F2E3', '#D8E8FC', '#FCE0EC', '#EDE0FC', '#FFF6BF'];
+const ROLL_OPT_COLORS = ['#F1F7FD', '#EAF3FB', '#F5F9FE', '#E6F0FA', '#EFF6FC', '#E3EEF9'];
 
 function renderRollDropdown_(rolls){
   rollDropdown.innerHTML = rolls.map(function(r, idx){
     const bg = ROLL_OPT_COLORS[idx % ROLL_OPT_COLORS.length];
     return '<div class="roll-opt" data-kode="' + r.kodeRoll + '" data-kg="' + r.kg + '" style="background:' + bg + ';">' +
-      '<span class="roll-opt-kode">Roll ' + r.kodeRoll + '</span>' +
-      '<span class="roll-opt-kg">' + formatKg2_(r.kg) + ' kg</span></div>';
+      '<span class="roll-opt-text">Roll ' + r.kodeRoll + ' / ' + formatKg2_(r.kg) + ' kg</span></div>';
   }).join('') + '<div class="roll-opt-manual" id="rollOptManual">✏️ Ketik manual (roll lain)</div>';
 
   rollDropdown.querySelectorAll('.roll-opt').forEach(function(el){
