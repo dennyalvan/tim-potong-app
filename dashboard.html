@@ -1,9 +1,15 @@
 <!--
-  DASHBOARD STOK KAIN - TIM POTONG (v.21)
+  DASHBOARD STOK KAIN - TIM POTONG (v.22)
   Halaman statis, di-hosting di GitHub Pages yang sama dengan index.html (Mini App), diupload
   sebagai "dashboard.html". Backend: apps_script_tim_potong_v16.js.
 
-  v.21 (hari ini):
+  v.22 (hari ini):
+  1. Jarak antara kotak "Daftar Antrian" floating dan tombol "Kirim Rekap" floating dipersempit
+     - sekarang hampir menempel tapi tetap terpisah.
+  2. Angka "Sel" di pecahan kartu (mis. "48/96") sekarang dibungkus lingkaran hitam biar lebih
+     menonjol - kecuali kalau masih kosong ("-/96"), gak diberi bulatan.
+
+  v.21 (sebelumnya):
   1. Kotak "Daftar Antrian" sekarang JUGA floating - nempel pojok kanan bawah (di atas tombol
      Kirim Rekap floating) begitu daftar aslinya keluar viewport pas scroll. Default kebuka
      otomatis (auto expand) tapi headernya tetap bisa diklik buat minimize/expand lagi. Hapus
@@ -256,7 +262,7 @@ h2.section-title{
 
 /* Daftar Antrian floating */
 .antrian-float{
-  position:fixed; right:16px; bottom:78px; z-index:38; width:280px; max-width:calc(100vw - 32px);
+  position:fixed; right:16px; bottom:66px; z-index:38; width:280px; max-width:calc(100vw - 32px);
   background:var(--surface); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow);
   display:none; overflow:hidden;
 }
@@ -315,6 +321,7 @@ h2.section-title{
 .qc-row-meta .dot{ color:var(--line); font-weight:400; }
 .qc-row-right{ flex:0 0 auto; text-align:right; min-width:60px; }
 .qc-row-frac{ font-size:calc(15.5px * var(--scale-card)); font-weight:700; color:var(--ink); }
+.qc-frac-sel{ display:inline-flex; align-items:center; justify-content:center; min-width:1.7em; height:1.7em; padding:0 0.25em; border-radius:999px; background:var(--ink); color:var(--surface); }
 .qc-row-bar{ height:4px; border-radius:2px; background:var(--surface-2); overflow:hidden; display:flex; margin-top:3px; }
 .qc-row-chevron{ width:12px; height:12px; color:var(--ink-muted); transition:transform .15s ease; flex:0 0 auto; margin-left:2px; }
 .qc-row-head.open .qc-row-chevron{ transform:rotate(90deg); }
@@ -1121,7 +1128,7 @@ function renderQCCards(){
           '<div class="qc-row-meta">'+buildMetaLine(item, badgeKanan)+'</div>' +
         '</div>' +
         '<div class="qc-row-right">' +
-          '<span class="qc-row-frac">'+(effSel||'-')+'/'+(item.jumlah||asli)+'</span>' +
+          '<span class="qc-row-frac">'+(effSel ? '<span class="qc-frac-sel">'+effSel+'</span>' : '-')+'/'+(item.jumlah||asli)+'</span>' +
           '<div class="qc-row-bar"><div style="height:100%;background:var(--good);width:'+pctSel+'%;"></div><div style="height:100%;background:var(--warn);width:'+pctRej+'%;"></div></div>' +
         '</div>' +
         '<svg class="qc-row-chevron" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
