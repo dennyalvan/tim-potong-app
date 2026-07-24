@@ -972,8 +972,8 @@ function qcSisaUkuran(item, u){
 function qcLengkapUkuran(item, u){ return qcSisaUkuran(item, u) <= 0; }
 function qcLengkapSemua(item){ return qcDaftarUkuran(item).every(function(u){ return qcLengkapUkuran(item, u); }); }
 function cocokQCQuery(item){ return !qcQuery || item.item.toUpperCase().indexOf(qcQuery.toUpperCase()) !== -1; }
-const ANAK_VARIAN = ["PENDEK KOMBINASI","PANJANG KOMBINASI","ONESET","PENDEK","PANJANG","RUFFLE","SETELAN","SET.","CELANA"];
-const ANAK_WARNA = ["CREAM CHOCO","CREAM MUSTARD","CREAM SAGE","STEEL NAVY","BLACK TERACOTA","WHITE TERACOTA","MUSTARD NAVY","NAVY WHITE","NAVY CREAM","TERACOTA GREEN","WHITE MUSTARD","WHITE SAGE"];
+const ANAK_VARIAN = ["PENDEK KOMBINASI","PANJANG KOMBINASI","ONESET","PENDEK","PANJANG","SETELAN","SET.","CELANA"];
+const ANAK_WARNA = ["CREAM CHOCO","CREAM MUSTARD","CREAM SAGE","STEEL NAVY","BLACK TERACOTA","NAVY WHITE","NAVY CREAM","TERACOTA GREEN","WHITE MUSTARD","WHITE SAGE"];
 function qcIsAnak(item){
   const up = item.item.toUpperCase();
   return ANAK_VARIAN.some(function(v){ return up.indexOf(v) !== -1; }) || ANAK_WARNA.some(function(v){ return up.indexOf(v) !== -1; });
