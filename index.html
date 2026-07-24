@@ -178,15 +178,19 @@
   #rollInput::placeholder{color:var(--ink-3);font-weight:450;}
   .roll-opt{
     padding:11px 14px;font-size:14.5px;font-weight:650;border-bottom:0.5px solid rgba(0,0,0,.06);
-    cursor:pointer;display:flex;justify-content:space-between;align-items:center;color:#1C1C1E;
+    cursor:pointer;display:flex;justify-content:flex-end;align-items:center;gap:10px;color:#1C1C1E;
+    background:var(--theme-accent-soft);
   }
   .roll-opt:last-child{border-bottom:none;}
-  .roll-opt .roll-opt-kode{font-weight:750;}
-  .roll-opt .roll-opt-kg{font-size:12.5px;font-weight:650;opacity:.75;}
+  .roll-opt .roll-opt-kode{font-weight:700;font-size:14.5px;}
+  .roll-opt .roll-opt-sep{font-weight:700;font-size:14.5px;opacity:.6;margin:0 -2px;}
+  .roll-opt .roll-opt-kg{font-size:14.5px;font-weight:700;}
   .roll-opt-manual{
     padding:11px 14px;font-size:13.5px;font-weight:650;color:var(--theme-accent-deep);
     background:#fff;cursor:pointer;text-align:center;
   }
+  .warna-opt{ background:var(--theme-accent-soft); }
+  #varianDropdown .combo-opt{ background:var(--theme-accent-soft); }
   .roll-link{font-size:12.5px;color:var(--theme-accent-deep);font-weight:600;margin-top:6px;display:inline-block;cursor:pointer;}
 
   .item-row{
@@ -1543,8 +1547,8 @@ function tampilkanSaranWarna(){
   const cocok = q ? sumberList.filter(function(w){ return w.toUpperCase().indexOf(q) !== -1; }) : sumberList;
   if (cocok.length === 0) { warnaDropdown.style.display = 'none'; return; }
   warnaDropdown.innerHTML = cocok.slice(0,8).map(function(w){
-    return '<div class="warna-opt" style="padding:10px 14px;font-size:14.5px;font-weight:500;' +
-      'border-bottom:0.5px solid #E5E5EA;">' + w + '</div>';
+    return '<div class="warna-opt" style="padding:10px 14px;font-size:14.5px;font-weight:700;' +
+      'border-bottom:0.5px solid rgba(0,0,0,.06);">' + w + '</div>';
   }).join('');
   const opts = warnaDropdown.querySelectorAll('.warna-opt');
   opts[opts.length-1].style.borderBottom = 'none';
@@ -1618,16 +1622,14 @@ function formatKg2_(kg){
   return (neg ? '-' : '') + intPart + '.' + parts[1];
 }
 
-// v.10: warna latar baris dropdown Kode Roll - diganti-ganti per baris (bukan putih polos)
-// biar kontras jelas dari latar dropdown yang putih. Muter lagi kalau roll-nya lebih banyak
-// dari daftar warna ini.
-const ROLL_OPT_COLORS = ['#FFE8CC', '#D9F2E3', '#D8E8FC', '#FCE0EC', '#EDE0FC', '#FFF6BF'];
-
+// v.10: baris dropdown Kode Roll pakai warna latar senada tema kategori aktif
+// (var(--theme-accent-soft)), sama kayak baris dropdown saran Warna & Varian, biar
+// keduanya konsisten. Kode roll & kg dirapatkan rata kanan (bukan disebar kiri-kanan).
 function renderRollDropdown_(rolls){
   rollDropdown.innerHTML = rolls.map(function(r, idx){
-    const bg = ROLL_OPT_COLORS[idx % ROLL_OPT_COLORS.length];
-    return '<div class="roll-opt" data-kode="' + r.kodeRoll + '" style="background:' + bg + ';">' +
+    return '<div class="roll-opt" data-kode="' + r.kodeRoll + '">' +
       '<span class="roll-opt-kode">Roll ' + r.kodeRoll + '</span>' +
+      '<span class="roll-opt-sep">/</span>' +
       '<span class="roll-opt-kg">' + formatKg2_(r.kg) + ' kg</span></div>';
   }).join('') + '<div class="roll-opt-manual" id="rollOptManual">✏️ Ketik manual (roll lain)</div>';
 
