@@ -1,100 +1,30 @@
 <!--
-  DASHBOARD STOK KAIN - TIM POTONG (v.22)
-  Halaman statis, di-hosting di GitHub Pages yang sama dengan index.html (Mini App), diupload
-  sebagai "dashboard.html". Backend: apps_script_tim_potong_v16.js.
+  HTML QC - ver.01
+  Dashboard web statis (2 tab: "✅ Proses & QC" dan "📦 Stok Kain"), dibuka lewat tombol
+  Telegram (command /stok). Hosting GitHub Pages, upload dengan nama dashboard.html (BUKAN
+  nama file lokalnya). Backend: CODE TIM POTONG.js (1 project sama dengan HTML PRODUKSI.html,
+  beda ?action= saja).
 
-  v.22 (hari ini):
-  1. Jarak antara kotak "Daftar Antrian" floating dan tombol "Kirim Rekap" floating dipersempit
-     - sekarang hampir menempel tapi tetap terpisah.
-  2. Angka "Sel" di pecahan kartu (mis. "48/96") sekarang dibungkus lingkaran hitam biar lebih
-     menonjol - kecuali kalau masih kosong ("-/96"), gak diberi bulatan.
+  TAB "✅ Proses & QC" (default/pertama) - tempat tim QC lapor progress quality control per
+  laporan produksi TIM POTONG. Sumber data: baris TIM POTONG yang Status-nya BUKAN "SELESAI"
+  (TANPA syarat roll kain harus habis dulu). Pola input: antrian lokal ("+ Tambah ke Daftar"
+  per kartu -> "Kirim Rekap" kirim SEMUA sekaligus dalam 1 payload ke ?action=kirimRekapQCBatch),
+  sama persis dengan pola HTML PRODUKSI.html biar konsisten UX. Progress disimpan di sheet
+  LOG QC (append-only, undo = tandai "dibatalkan" bukan hapus fisik) - JANGAN edit manual
+  kolom Status di sheet TIM POTONG, pakai tombol Undo di app.
 
-  v.21 (sebelumnya):
-  1. Kotak "Daftar Antrian" sekarang JUGA floating - nempel pojok kanan bawah (di atas tombol
-     Kirim Rekap floating) begitu daftar aslinya keluar viewport pas scroll. Default kebuka
-     otomatis (auto expand) tapi headernya tetap bisa diklik buat minimize/expand lagi. Hapus
-     item juga bisa langsung dari versi floating ini (sinkron sama daftar aslinya).
+  TAB "📦 Stok Kain" - nampilin warna kain yang rollnya masih ada sisa & BELUM disentuh sama
+  sekali (Kg Terpakai = 0), dikelompokkan per warna kanonik (KAMUS SINONIM WARNA), detail
+  per-roll bisa di-expand.
 
-  v.20 (sebelumnya):
-  1. Filter kategori "Anak" / "Dewasa" ditambah di tab QC (chip Semua/Anak/Dewasa), digabung
-     jadi 1 baris bareng filter urutan yang sudah ada. Chip "Jenis A-Z" dihapus dari filter
-     urutan (baik default maupun panel Atur Tampilan).
-  2. Tombol "Kirim Rekap" sekarang floating - muncul nempel pojok kanan bawah begitu tombol
-     aslinya (di bawah Preview Telegram) keluar dari viewport pas scroll, jadi gak perlu balik
-     ke atas/bawah lagi pas lagi input daftar yang panjang.
-  3. Klik "Kirim Rekap" gak lagi nunggu respons server - daftar antrian langsung dikosongin +
-     toast sukses langsung tampil (efek realtime), request beneran ke server jalan di
-     background. Kalau ternyata ada yang gagal/network error, item terkait otomatis
-     dikembalikan lagi ke antrian begitu balesan datang.
-  4. Pesan konfirmasi checkbox "Tandai Lengkap langsung" diringkas jadi format: nama laporan +
-     "sudah yakin lengkap semua?" / TOTAL (n) / penjelasan singkat.
-  5. Tombol & panel "Tweaks" (Suasana/Kepadatan/Gaya Aksen) dihapus dari tampilan.
-  6. BUG FIX - input angka (Selesai/Reject) yang lagi diketik di kartu LAIN ikut ke-reset ke
-     kosong begitu salah satu kartu ditekan "+ Tambah ke Daftar" (karena seluruh daftar kartu
-     di-render ulang dari nol). Sekarang isian yang belum dikirim disimpan sebelum render ulang
-     dan dikembalikan lagi setelahnya - kecuali kartu yang barusan disubmit (dikosongin biar gak
-     salah re-submit angka yang sama).
-  7. Pecahan angka di kartu (mis. "0/100") sekarang tampil "-/100" selama belum ada angka Sel
-     yang diisi/dikirim, biar gak keliru dibaca sebagai "sudah 0 dari 100 diproses".
+  ⚠️ CATATAN PENAMAAN "TIM QC": tab ini BUKAN proyek "TIM QC v3" (proyek horizontal-layout
+  terpisah dengan sheet ANTRIAN QC/LOG PEMAKAIAN QC/REKAP QC & FIFO batch pairing yang sempat
+  dibahas terpisah) - kalau itu yang dimaksud, filenya belum ada di project ini. Dokumen ini
+  murni soal tab "Proses & QC" yang menyatu di file HTML QC.html ini, berbasis sheet LOG QC
+  & ARSIP SELESAI.
 
-  v.17 (sebelumnya):
-  1. Toggle tab "✅ Proses & QC" dipindah jadi posisi PERTAMA/kiri, "📦 Stok Kain" jadi kedua/
-     kanan (sebelumnya kebalik). Urutan opsi di dropdown "Tab dibuka pertama kali" (panel Atur
-     Tampilan) ikut disesuaikan biar konsisten sama urutan toggle yang baru.
-  2. BUG FIX - section "📜 Arsip Selesai" gak pernah nampilin data apapun (selalu kosong/gagal
-     diam-diam). Penyebabnya: fungsi renderArsip()/muatArsipSelesai() nyoba akses elemen
-     `arsipSummary-stok`/`arsipGrid-stok` yang SEBENARNYA GAK ADA di HTML (arsip cuma pernah
-     dipasang di tab QC, gak pernah ada versi tab Stok) - begitu getElementById balikin null,
-     baris berikutnya (.textContent=...) langsung throw TypeError yang menghentikan SELURUH
-     forEach, termasuk buat tab "qc" yang datanya sebenarnya valid. Diperbaiki: loop cuma proses
-     "qc" (satu-satunya tab yang beneran punya markup arsip), plus jaga2 null-check kalau markup
-     berubah lagi nanti.
-
-  v.16 (sebelumnya):
-  1. Reposisi bagian tab QC - Kartu QC / Daftar Antrian / Preview & Kirim Rekap sekarang masing2
-     dibungkus 1 blok yang bisa diatur urutan tampil + show/hide-nya lewat panel "Atur Tampilan"
-     (grup "Urutan Bagian"). Section Arsip Selesai TETAP dikunci di posisi paling bawah. Tombol
-     "Atur Tampilan" dipindah ke baris yang SELALU kelihatan (di luar blok manapun) - supaya
-     kalau salah satu blok disembunyikan, gak sampai kekunci gak bisa buka panel lagi.
-  2. Adjuster ukuran font per bagian (Kartu QC / Daftar Antrian / Preview) - 4 preset (Kecil/
-     Sedang/Besar/Sangat Besar), diterapkan lewat CSS var --scale-card/--scale-antrian/
-     --scale-preview + calc() di tiap rule font-size terkait.
-  3. OPTIMASI LOADING - dulu (v.15) Stok & QC selalu dimuat BARENGAN begitu dashboard dibuka.
-     Sekarang dipecah 2 tahap: (a) ?action=dashboardCfg - CUMA baca pengaturan dari Script
-     Properties, gak nyentuh Sheet sama sekali, jauh lebih cepat; (b) berdasarkan "Tab dibuka
-     pertama kali", CUMA tab itu yang dimuat datanya duluan - tab satunya tetap lazy (baru
-     dimuat kalau diklik).
-
-  v.11 (sebelumnya): tambah tg.ready()/tg.expand() (Telegram WebApp API), sama pola
-  yang sudah dipakai Mini App Tim Potong (index_v07.html) - biar kalau halaman ini dibuka lewat
-  link Mini App (bukan link browser biasa), tampilannya "menyatu" ke Telegram dan GAK jadi
-  floating window yang nutupin chat pas di-minimize. Syaratnya: Script Property
-  DASHBOARD_MINIAPP_SHORT_NAME sudah didaftarkan di backend (lihat catatan lengkap di header
-  apps_script_tim_potong_v11.js) - kalau belum, tombol "/stok" masih fallback ke link browser
-  biasa seperti sebelumnya (kode di file ini tetap aman jalan di kedua kasus, tg jadi null kalau
-  bukan dibuka dari Telegram/bukan sbg Mini App).
-
-  v.10 (perubahan dari v.09, sesuai permintaan - pola antrian, persis Mini App Tim Potong):
-  1. Tombol "Submit"/"✓" di tiap kartu QC diganti jadi "+ Tambah ke Daftar" - klik itu TIDAK
-     langsung kirim ke server, cuma masuk ke array antrian lokal `qcAntrian`. Form di kartu itu
-     reset, kartu lain tetap bisa diisi juga.
-  2. Kartu yang sudah punya antrian nunjukin badge "🕓 menunggu dikirim" + progress bar udah
-     memperhitungkan angka yang masih di antrian (biar gak kelebihan input dari sisa yang ada).
-     Mode Rincian: ukuran yang penuh CUMA karena antrian (belum dikirim) ditandai "N ANTRE",
-     beda dari yang BENERAN sudah tersimpan di server.
-  3. Section "Daftar Antrian" (di atas bubble preview) - daftar SEMUA laporan yang sudah
-     ditambah dari kartu manapun, tiap baris bisa dihapus (✕) kalau salah, SEBELUM dikirim -
-     begitu dihapus, qty di kartu terkait otomatis balik ke semula (dihitung ulang tiap render).
-  4. Toggle preview "Per Laporan" vs "Rekap Harian" DIHAPUS. Sekarang cuma 1 mode: bubble
-     Telegram menampilkan gabungan SEMUA isi `qcAntrian` saat ini (dibuat di browser, real-time,
-     tanpa perlu tanya ke server dulu).
-  5. Tombol "Kirim Rekap" SATU-SATUNYA jalan data masuk ke server: memanggil
-     ?action=kirimRekapQCBatch (backend v.10) yang menulis SEMUA item di antrian ke Sheet
-     SEKALIGUS (1 lock), baru kirim SATU pesan rekap gabungan ke Telegram. Kalau ADA yang gagal
-     (mis. sisa sudah berubah duluan), yang gagal SAJA disisain di antrian (dicocokkan lewat
-     index balikan server) - yang sukses langsung hilang dari daftar, data terbaru ditarik ulang.
-  6. Undo untuk laporan yang SUDAH lengkap 100% dari sesi-sesi sebelumnya (sudah tersimpan di
-     Sheet) tetap ada, manggil ?action=undoQC seperti biasa.
+  Histori versi SEBELUM ver.01 (dulu "v.05-22") ada lengkap di MD TIM QC.md dan MD STOK KAIN.md,
+  tidak diulang di sini.
 -->
 <!doctype html>
 <html lang="id">
@@ -501,6 +431,11 @@ input[type="number"]{ -moz-appearance:textfield; appearance:textfield; }
 
     <h2 class="section-title">Stok Tersisa per Warna</h2>
     <p class="section-summary" id="stokSummary"></p>
+    <div class="search-wrap" id="secSearchStok">
+      <input type="text" id="searchStok" placeholder="Cari nama kain/warna...">
+      <svg class="icon" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M21 21l-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <button class="search-clear" id="btnClearStok">✕</button>
+    </div>
     <div class="filter-bar" id="stokFilterBar">
       <span class="filter-chip active" data-sort="kg">Kg terbanyak</span>
       <span class="filter-chip" data-sort="az">Nama A-Z</span>
@@ -704,6 +639,7 @@ document.querySelectorAll(".main-tab-btn").forEach(function(btn){
 // ============ STATE (data mentah, dipakai ulang tiap ganti filter/search) ============
 let stokItemsRaw = [];
 let stokSortMode = "kg";
+let stokQuery = "";
 let stokSudahDimuat = false; // v.16: Stok sekarang JUGA lazy-load (dulu selalu dimuat duluan
 // gak peduli tab default apa) - biar dashboard yang defaultnya buka tab QC gak ikut nunggu Stok
 // selesai dimuat juga.
@@ -715,13 +651,14 @@ function urutkanStok(items, mode){
   else copy.sort(function(a,b){ return b.kg - a.kg; });
   return copy;
 }
+function cocokStokQuery(item){ return !stokQuery || item.warna.toUpperCase().indexOf(stokQuery.toUpperCase()) !== -1; }
 
 // ============ RENDER: STOK (grid, expand independen per kartu) ============
 function renderStok(stok){
   document.getElementById("stokValue").innerHTML = fmtKg(stok.totalKg) + "<small>kg</small>";
   document.getElementById("stokSub").innerHTML = "di <b>" + (stok.totalRoll||0) + " roll</b> utuh · " + (stok.totalWarna||0) + " warna";
   stokItemsRaw = stok.items || [];
-  renderStokList(urutkanStok(stokItemsRaw, stokSortMode));
+  renderStokList(urutkanStok(stokItemsRaw.filter(cocokStokQuery), stokSortMode));
 }
 
 function renderStokList(items){
@@ -730,7 +667,7 @@ function renderStokList(items){
   document.getElementById("stokSummary").innerHTML = items.length + " warna · <b>"+totalRoll+" roll</b> · <b>"+fmtKg(totalKg)+" kg</b>";
 
   const wrap = document.getElementById("stok-list");
-  if (!items.length) { wrap.innerHTML = '<div class="empty-state">Belum ada roll yang masih utuh.</div>'; return; }
+  if (!items.length) { wrap.innerHTML = '<div class="empty-state">'+(stokQuery ? 'Gak ada warna yang cocok dengan "'+stokQuery+'".' : 'Belum ada roll yang masih utuh.')+'</div>'; return; }
 
   wrap.innerHTML = items.map(function(s, i){
     const rolls = s.rolls || [];
@@ -772,7 +709,19 @@ function pasangFilterBar(barId, onPilih){
     onPilih(chip.dataset.sort);
   });
 }
-pasangFilterBar("stokFilterBar", function(mode){ stokSortMode = mode; renderStokList(urutkanStok(stokItemsRaw, stokSortMode)); });
+pasangFilterBar("stokFilterBar", function(mode){ stokSortMode = mode; renderStokList(urutkanStok(stokItemsRaw.filter(cocokStokQuery), stokSortMode)); });
+
+const searchStok = document.getElementById("searchStok");
+const btnClearStok = document.getElementById("btnClearStok");
+searchStok.addEventListener("input", function(){
+  stokQuery = searchStok.value.trim();
+  btnClearStok.style.display = stokQuery ? "block" : "none";
+  renderStokList(urutkanStok(stokItemsRaw.filter(cocokStokQuery), stokSortMode));
+});
+btnClearStok.addEventListener("click", function(){
+  searchStok.value = ""; stokQuery = ""; btnClearStok.style.display = "none";
+  renderStokList(urutkanStok(stokItemsRaw.filter(cocokStokQuery), stokSortMode));
+});
 
 // ============ MUAT DASHBOARD UTAMA (Stok saja - Proses digabung ke tab QC) ============
 function muatDashboard(paksaRefresh){
@@ -972,8 +921,8 @@ function qcSisaUkuran(item, u){
 function qcLengkapUkuran(item, u){ return qcSisaUkuran(item, u) <= 0; }
 function qcLengkapSemua(item){ return qcDaftarUkuran(item).every(function(u){ return qcLengkapUkuran(item, u); }); }
 function cocokQCQuery(item){ return !qcQuery || item.item.toUpperCase().indexOf(qcQuery.toUpperCase()) !== -1; }
-const ANAK_VARIAN = ["PENDEK KOMBINASI","PANJANG KOMBINASI","ONESET","PENDEK","PANJANG","SETELAN","SET.","CELANA"];
-const ANAK_WARNA = ["CREAM CHOCO","CREAM MUSTARD","CREAM SAGE","STEEL NAVY","BLACK TERACOTA","NAVY WHITE","NAVY CREAM","TERACOTA GREEN","WHITE MUSTARD","WHITE SAGE"];
+const ANAK_VARIAN = ["PENDEK KOMBINASI","PANJANG KOMBINASI","ONESET","PENDEK","PANJANG","RUFFLE","SETELAN","SET.","CELANA"];
+const ANAK_WARNA = ["CREAM CHOCO","CREAM MUSTARD","CREAM SAGE","STEEL NAVY","BLACK TERACOTA","WHITE TERACOTA","MUSTARD NAVY","NAVY WHITE","NAVY CREAM","TERACOTA GREEN","WHITE MUSTARD","WHITE SAGE"];
 function qcIsAnak(item){
   const up = item.item.toUpperCase();
   return ANAK_VARIAN.some(function(v){ return up.indexOf(v) !== -1; }) || ANAK_WARNA.some(function(v){ return up.indexOf(v) !== -1; });
