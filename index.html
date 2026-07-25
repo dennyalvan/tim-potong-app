@@ -1869,7 +1869,7 @@ function renderRollDropdown_(rolls){
     const bg = ROLL_OPT_COLORS[idx % ROLL_OPT_COLORS.length];
     return '<div class="roll-opt" data-kode="' + r.kodeRoll + '" data-kg="' + r.kg + '" style="background:' + bg + ';">' +
       '<span class="roll-opt-text">Roll ' + r.kodeRoll + ' / ' + formatKg2_(r.kg) + ' kg</span></div>';
-  }).join('') + '<div class="roll-opt-manual" id="rollOptManual">✏️ Ketik manual (roll lain)</div>';
+  }).join('') + '<div class="roll-opt-manual" id="rollOptManual">✏️ Ketik manual</div>';
 
   rollDropdown.querySelectorAll('.roll-opt').forEach(function(el){
     el.addEventListener('click', function(){ pilihRoll_(el.dataset.kode, parseFloat(el.dataset.kg)); });
