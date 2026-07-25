@@ -1,9 +1,22 @@
 <!DOCTYPE html>
 <!--
-  MINI APP TIM POTONG (ver.11) - form input produksi di dalam Telegram.
-  Backend: apps_script_tim_potong_v33.js (butuh ?action=stokRoll - lihat catatan v.09, selain
-  yang lama: ?action=kirimProduksiMiniApp / ?action=standarPemakaian / ?action=inputCfg /
-  ?action=saveInputCfg).
+  HTML PRODUKSI - ver.02 (nama lama: index_v11.html / index.html - lihat MD TIM POTONG §3 soal
+  penamaan baru). Form input produksi tim potong di dalam Telegram (Mini App).
+  Backend: CODE TIM POTONG ver.02 (butuh ?action=stokRoll - lihat catatan v.09, ?action=warnaKanonik
+  - baru di ver.02, selain yang lama: ?action=kirimProduksiMiniApp / ?action=standarPemakaian /
+  ?action=inputCfg / ?action=saveInputCfg).
+
+  ver.02 (hari ini): 2 perbaikan buat mode Kombinasi 3 Warna:
+  1. Dropdown Kode Roll (ambil dari stok) sekarang JUGA muncul buat ketiga warna Kombinasi -
+     sebelumnya SENGAJA manual TETAP (lihat catatan lama di bawah, poin "kombinasi TETAP manual"
+     - itu sudah TIDAK BERLAKU lagi mulai ver.02 ini).
+  2. Fix race condition: kalau warna kombinasi dipilih SEBELUM data stok selesai dimuat dari
+     server, dropdown sekarang tetap otomatis muncul begitu datanya sampai (sebelumnya nyangkut
+     jadi manual selamanya kalau kejadian ini).
+  3. Warna Kombinasi yang namanya beda dari nama baku di stok (mis. "CHOCO" tapi stoknya ditulis
+     "CINNAMON") sekarang otomatis disamakan lewat sheet KAMUS SINONIM WARNA (endpoint baru
+     ?action=warnaKanonik) - nama yang TAMPIL ke tim potong tetap "CHOCO", cuma pencarian roll
+     di belakang layar yang pakai "CINNAMON".
 
   CATATAN FILE INI (index_v11.html - siap upload ke GitHub Pages sebagai index.html):
   PREVIEW_MODE = false - "Kirim ke Telegram" & "Simpan Atur Tampilan" akan BENERAN memanggil
@@ -11,7 +24,7 @@
   dummy (Kategori/Varian, Warna, Kombinasi, Kode Roll, Estimasi Kg) di kode ini TETAP ADA sebagai
   cadangan darurat (kalau fetch ke server gagal total), tapi PREVIEW_MODE = false berarti gak
   pernah kepakai kecuali server-nya BENERAN gak bisa diakses sama sekali.
-  WAJIB: Apps Script v33 (apps_script_tim_potong_v33.js) harus SUDAH di-deploy dulu SEBELUM file
+  WAJIB: Apps Script ver.02 (CODE TIM POTONG ver.02) harus SUDAH di-deploy dulu SEBELUM file
   ini diupload - kalau masih pakai versi lama, dropdown Kode Roll (poin 1 di bawah) gak akan
   nemu data stok (gagal fetch ?action=stokRoll, ditangkap diam-diam, field balik jadi input teks
   manual biasa - fitur lain tetap aman jalan normal).
@@ -700,6 +713,8 @@ const STANDAR_CACHE_KEY = 'timpotong_standar_pemakaian_cache_v1';
 const STANDAR_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 hari - sama pola kayak kombinasi warna
 const STOK_ROLL_CACHE_KEY = 'timpotong_stok_roll_cache_v1';
 const STOK_ROLL_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 1 hari - sama pola kayak WARNA_CACHE (stok kain bergerak tiap hari)
+const WARNA_KANONIK_CACHE_KEY = 'timpotong_warna_kanonik_cache_v1';
+const WARNA_KANONIK_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 hari - sinonim warna jarang ganti, sama pola kayak kombinasi warna
 
 const tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
 
@@ -1264,7 +1279,8 @@ function comboRenderRollDropdown_(idx, rolls){
 function tampilkanStokRollCombo_(idx, warnaWord){
   const wrap = comboRollWrapEl_(idx);
   if (!wrap) return; // baris combo ini belum ke-render (kombinasi warna belum dipilih) - aman dilewati
-  const w = (warnaWord || '').trim().toUpperCase();
+  const wRaw = (warnaWord || '').trim().toUpperCase();
+  const w = WARNA_KANONIK_MAP[wRaw] || wRaw; // v.12: "CHOCO" -> "CINNAMON" dkk kalau ada di KAMUS SINONIM WARNA
   const rolls = w ? STOK_ROLL_PER_WARNA[w] : null;
   const inp = wrap.querySelector('.comboRollInput');
 
@@ -1943,6 +1959,32 @@ function fetchKombinasiFresh(){
     }
   } catch(e){}
   fetchKombinasiFresh();
+})();
+
+// v.12: peta sinonim warna (SINONIM -> KANONIK, mis. "CHOCO" -> "CINNAMON") dari sheet KAMUS
+// SINONIM WARNA - dipakai KHUSUS buat nyari roll warna Kombinasi (lihat tampilkanStokRollCombo_()).
+// Nama yang DITAMPILKAN ke tim potong (chip warna, teks kirim) TETAP pakai kata asli dari sheet
+// KOMBINASI WARNA (mis. "CHOCO") - peta ini cuma dipakai buat translate SEBELUM nyari ke
+// STOK_ROLL_PER_WARNA, gak pernah nimpa tampilan.
+let WARNA_KANONIK_MAP = {};
+function fetchWarnaKanonikFresh(){
+  fetch(WEBAPP_URL + '?action=warnaKanonik', { cache: 'no-store' })
+    .then(function(r){ return r.json(); })
+    .then(function(map){
+      WARNA_KANONIK_MAP = map || {};
+      try { localStorage.setItem(WARNA_KANONIK_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: WARNA_KANONIK_MAP })); } catch(e){}
+      segarkanRollPickerAktif_(); // v.12: sama kayak STOK_ROLL_PER_WARNA - data ini juga bisa datang belakangan
+    })
+    .catch(function(){ /* diamkan - kalau gagal, kombinasi yang gak pas namanya sama stok jatuh ke manual (aman) */ });
+}
+(function bootstrapWarnaKanonik(){
+  try {
+    const cached = JSON.parse(localStorage.getItem(WARNA_KANONIK_CACHE_KEY) || 'null');
+    if (cached && cached.data && (Date.now() - cached.ts) < WARNA_KANONIK_CACHE_TTL_MS){
+      WARNA_KANONIK_MAP = cached.data;
+    }
+  } catch(e){}
+  fetchWarnaKanonikFresh();
 })();
 
 // v.08: tabel Kg standar per varian (dipakai fitur "Kg tidak diketahui - pakai estimasi
