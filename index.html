@@ -2104,4 +2104,2110 @@ document.getElementById('refreshLink').addEventListener('click', function(){
 });
 </script>
 </body>
+</html><!DOCTYPE html>
+<!--
+  HTML PRODUKSI - ver.02 (nama lama: index_v11.html / index.html - lihat MD TIM POTONG §3 soal
+  penamaan baru). Form input produksi tim potong di dalam Telegram (Mini App).
+  Backend: CODE TIM POTONG ver.02 (butuh ?action=stokRoll - lihat catatan v.09, ?action=warnaKanonik
+  - baru di ver.02, selain yang lama: ?action=kirimProduksiMiniApp / ?action=standarPemakaian /
+  ?action=inputCfg / ?action=saveInputCfg).
+
+  ver.02 (hari ini): 2 perbaikan buat mode Kombinasi 3 Warna:
+  1. Dropdown Kode Roll (ambil dari stok) sekarang JUGA muncul buat ketiga warna Kombinasi -
+     sebelumnya SENGAJA manual TETAP (lihat catatan lama di bawah, poin "kombinasi TETAP manual"
+     - itu sudah TIDAK BERLAKU lagi mulai ver.02 ini).
+  2. Fix race condition: kalau warna kombinasi dipilih SEBELUM data stok selesai dimuat dari
+     server, dropdown sekarang tetap otomatis muncul begitu datanya sampai (sebelumnya nyangkut
+     jadi manual selamanya kalau kejadian ini).
+  3. Warna Kombinasi yang namanya beda dari nama baku di stok (mis. "CHOCO" tapi stoknya ditulis
+     "CINNAMON") sekarang otomatis disamakan lewat sheet KAMUS SINONIM WARNA (endpoint baru
+     ?action=warnaKanonik) - nama yang TAMPIL ke tim potong tetap "CHOCO", cuma pencarian roll
+     di belakang layar yang pakai "CINNAMON".
+
+  CATATAN FILE INI (index_v11.html - siap upload ke GitHub Pages sebagai index.html):
+  PREVIEW_MODE = false - "Kirim ke Telegram" & "Simpan Atur Tampilan" akan BENERAN memanggil
+  server (nulis ke Sheet, kirim ke grup Telegram, simpan config ke Script Properties). Semua data
+  dummy (Kategori/Varian, Warna, Kombinasi, Kode Roll, Estimasi Kg) di kode ini TETAP ADA sebagai
+  cadangan darurat (kalau fetch ke server gagal total), tapi PREVIEW_MODE = false berarti gak
+  pernah kepakai kecuali server-nya BENERAN gak bisa diakses sama sekali.
+  WAJIB: Apps Script ver.02 (CODE TIM POTONG ver.02) harus SUDAH di-deploy dulu SEBELUM file
+  ini diupload - kalau masih pakai versi lama, dropdown Kode Roll (poin 1 di bawah) gak akan
+  nemu data stok (gagal fetch ?action=stokRoll, ditangkap diam-diam, field balik jadi input teks
+  manual biasa - fitur lain tetap aman jalan normal).
+
+  ver.11 (perubahan hari ini, lanjutan v.10):
+  1. Kg roll SEKARANG ikut tampil di tombol Kode Roll setelah dipilih (bukan cuma "Roll 0024"
+     doang, sekarang "Roll 0024 · 25.50 kg") - biar tim potong bisa langsung nyontek angka kg-nya
+     pas ngisi "Kg Kain Terpakai", gak perlu buka dropdown lagi buat lihat angkanya.
+  2. Validasi KG MENCURIGAKAN - kalau tim potong ngetik 3 digit atau lebih TANPA titik desimal
+     sama sekali (contoh "253", padahal maksudnya "25.3"), field-nya kasih border+background
+     merah + pesan peringatan di bawahnya, dan tombol "+ Tambah ke Daftar" DI-DISABLE sampai
+     dibetulin. Berlaku di mode biasa maupun kombinasi (3 warna). Alasannya: kain gak pernah
+     seberat itu (paling berat biasanya ±40kg, gak pernah sampai 100kg) - hampir pasti salah
+     ketik lupa titik desimal.
+
+  ver.10 (sebelumnya):
+  1. Kode Roll SEKARANG dropdown ala Varian (bukan lagi list teks horizontal abu-abu) - muncul
+     otomatis begitu Warna dipilih & ada roll yang cocok di STOK KAIN (mode BIASA saja,
+     Kombinasi TETAP manual). Tiap baris opsi dikasih warna latar beda-beda (oranye/hijau/biru/
+     pink/ungu/kuning muda, muter kalau roll-nya lebih banyak dari 6) biar kontras jelas dari
+     dropdown putih. Ada opsi "✏️ Ketik manual (roll lain)" di baris paling bawah buat kasus
+     mau pakai kode di luar daftar. Kalau Warna gak ada stok yang cocok (atau Kode Roll udah
+     diketik manual duluan), field balik/tetap jadi input teks biasa seperti sebelumnya - ada
+     link "🔽 Pilih dari stok tersedia" buat pindah ke dropdown kalau berubah pikiran.
+  2. Format angka Kg di tiap baris dropdown SEKARANG selalu 2 digit di depan koma (di-pad nol
+     kalau cuma 1 digit, misal "07.98") + 2 digit di belakang koma (dibulatin, misal
+     7.979999999999997 -> "07.98") - cuma buat TAMPILAN, angka asli yang dikirim ke server gak
+     berubah sama sekali.
+
+  ver.09 (sebelumnya):
+  1. Kolom Warna - tambah placeholder abu "— pilih warna —" (pola sama kayak "— pilih —" di
+     Varian), biar kelihatan jelas kolom itu emang belum diisi (bukan sengaja dikosongin).
+  2. Kolom Kg Kain Terpakai - panah spinner bawaan number input DIHILANGKAN (via CSS, bukan lagi
+     type="text" - validasi angka tetap jalan seperti biasa), placeholder abu "0" gantiin nilai
+     default kosong biasa.
+  3. Kolom Kode Roll - AUTO-SHOW kode roll + kg sisa dari STOK KAIN begitu Warna dipilih/diketik
+     PERSIS cocok (mode BIASA saja - Kombinasi Anak/Dewasa TETAP manual, gak disentuh). Hint abu
+     di bawah kolom nampilin SEMUA roll yang cocok (format "kg / kode", kg sisa terbesar dulu);
+     kalau CUMA ADA 1 roll yang cocok, Kode Roll langsung terisi otomatis (tetap bisa diedit
+     manual kalau mau ganti roll lain). Data dari action BARU ?action=stokRoll
+     (bacaStokRollPerWarna() di backend) - di-cache 1 hari sama pola kayak ?action=warna.
+
+  ver.08 (sebelumnya):
+  1. Keyboard NUMERIC-ONLY buat kolom Kode Roll (mode biasa & kombinasi) - inputmode="numeric" +
+     pattern="[0-9]*", biar HP nampilin keypad angka aja begitu kolom itu difokus.
+  2. Tombol "Kirim ke Telegram" sekarang OPTIMISTIC/instant - begitu ditap LANGSUNG pindah ke
+     layar "Terkirim & tersimpan" (no delay sama sekali, gak nunggu jaringan), proses kirim
+     beneran (fetch ke server) jalan di BELAKANG LAYAR. Item disimpan dulu ke antrian tertunda
+     (localStorage) SEBELUM fetch jalan - kalau gagal (jaringan jelek) atau app keburu ditutup,
+     data TETAP ada & otomatis dicoba lagi begitu app dibuka ulang (+ tombol "Coba Kirim Ulang"
+     manual kalau masih gagal terus).
+  3. Opsi ESTIMASI KG STANDAR - toggle "Kg tidak diketahui - pakai estimasi standar" (mode biasa)
+     buat kondisi tim potong lupa/gak sempat timbang. Ambil rate Kg/pcs dari sheet baru
+     "STANDAR PEMAKAIAN" (lewat ?action=standarPemakaian, di-cache 7 hari sama pola kayak
+     Kombinasi Warna), dikalikan qty total. Sheet-nya SENGAJA masih kosong - isi kolom "Kg per
+     Pcs" per Varian dulu baru fitur ini kepakai (sebelum itu, toggle bakal bilang "data belum
+     tersedia"). Estimasi CUMA ditandai di Daftar Item lokal (badge "≈ estimasi") - teks yang
+     BENERAN dikirim ke server TETAP format angka biasa (gak ada tambahan teks), jadi parser
+     backend gak kepengaruh sama sekali.
+  4. Panel baru "✏️ Atur Tampilan" (mirip yang ada di Dashboard QC) - atur urutan & show/hide
+     baris Warna/Kg/Roll (Warna & Kg wajib tetap tampil), ukuran font form, dan warna aksen
+     (pilihan "Otomatis" = ikut tema kategori Anak/Dewasa/Lain seperti biasa, atau override manual
+     salah satu preset). Disimpan di server (Script Properties, key terpisah dari config
+     Dashboard) lewat ?action=saveInputCfg - berlaku buat siapapun yang buka Mini App ini.
+
+  ver.07 (sebelumnya):
+  1. "Daftar Item" dipindah dari ATAS ke BAWAH (sebelum tombol), gaya gelap kontras (dark navy,
+     mirip bubble preview Telegram di dashboard QC) - biar jelas kelihatan ini "yang bakal
+     dikirim", bukan nyampur sama form input di atasnya.
+  2. Tombol "Kirim ke Chat" (dulu buka share-sheet Telegram, orangnya masih perlu 1 tap lagi di
+     Telegram) diganti "Kirim ke Telegram" - LANGSUNG kirim: teks diproses server (parse & tulis
+     ke Sheet) + notifikasi ke grup, semua dalam 1 tap, tanpa keluar dari Mini App.
+     PENTING: langkah "Buat Teks" (preview + tombol "Kembali Edit") SENGAJA TETAP ADA - itu
+     sekarang satu-satunya kesempatan ngecek/edit sebelum data BENERAN kekirim & diproses ke
+     Sheet, karena begitu tap "Kirim ke Telegram" udah gak ada tahap konfirmasi lagi.
+-->
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Input Produksi - Tim Potong</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root{
+    --ink:#1C1C1E;
+    --ink-2:#8E8E93;
+    --ink-3:#C6C6C8;
+    --canvas:#F2F2F7;
+    --card:#FFFFFF;
+    --sep:#E5E5EA;
+    --danger:#FF3B30;
+    --danger-bg:#FFF0EF;
+    --success:#34C759;
+
+    --theme-accent:#3AAFC0;
+    --theme-accent-deep:#1F7A88;
+    --theme-accent-soft:#E4F6F8;
+    --theme-bg-image: none;
+    --scale-app:1;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;overflow-x:hidden;max-width:100vw;}
+  body{
+    font-family:"Space Grotesk",-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Segoe UI",Roboto,sans-serif;
+    color:var(--ink);
+    background-color:var(--canvas);
+    background-image:var(--theme-bg-image);
+    transition:background-color .4s ease;
+    padding-bottom:135px;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .topbar{padding:10px 16px 0;}
+  .topbar-top-row{display:flex;align-items:center;justify-content:space-between;}
+  .topbar-eyebrow{
+    font-size:11.5px;font-weight:600;color:var(--theme-accent-deep);letter-spacing:.2px;
+    text-transform:uppercase;transition:color .4s;
+  }
+  .topbar-title{font-size:22px;font-weight:750;letter-spacing:-.3px;line-height:1.1;}
+  .version-badge{
+    display:inline-block;font-size:10px;font-weight:700;color:#fff;
+    background:var(--theme-accent-deep);padding:1px 8px;border-radius:20px;letter-spacing:.3px;
+    transition:background .4s;
+  }
+  #refreshLink{font-size:11.5px;}
+  .topbar-logo{
+    width:38px;height:38px;border-radius:0;background:transparent;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;
+    flex-shrink:0;transition:background .4s;
+  }
+  .topbar-logo #topbarLogoPlaceholder{
+    font-size:8.5px;font-weight:700;color:var(--theme-accent-deep);text-align:center;line-height:1.15;
+  }
+
+  .loading-screen{text-align:center;padding:60px 30px;color:var(--ink-2);font-size:14px;line-height:1.7;}
+
+  .app-body{padding:6px 14px 0;}
+
+  .section-label{
+    font-size:12.5px;font-weight:600;color:var(--ink-2);
+    text-transform:uppercase;letter-spacing:.3px;
+    margin:14px 4px 6px;display:flex;justify-content:space-between;align-items:center;
+  }
+  .section-label .count-chip{
+    background:var(--theme-accent);color:#fff;border-radius:20px;padding:2px 10px;
+    font-size:12.5px;font-weight:700;transition:background .4s;
+  }
+
+  .card{
+    background:var(--card);border-radius:18px;
+    box-shadow:0 1px 2px rgba(0,0,0,.04), 0 0 0 0.5px rgba(0,0,0,.04);
+    overflow:hidden;
+  }
+  .card + .card{margin-top:8px;}
+
+  .row{
+    padding:9px 14px;border-bottom:0.5px solid var(--sep);
+    display:flex;flex-direction:column;
+  }
+  .row:last-child{border-bottom:none;}
+  .row-inline{display:flex;flex-direction:row;align-items:center;gap:10px;min-height:20px;min-width:0;}
+  .row-label{font-size:calc(12px * var(--scale-app));color:var(--ink-2);font-weight:600;flex:0 0 auto;white-space:nowrap;}
+  select,input[type=number],input[type=text]{
+    width:100%;flex:1;min-width:0;border:none;outline:none;font-size:calc(16px * var(--scale-app));color:var(--ink);
+    background:transparent;padding:1px 0;font-family:inherit;font-weight:450;text-align:right;
+  }
+  #warnaInput{text-transform:uppercase;}
+  #warnaInput::placeholder{text-transform:none;color:var(--ink-3);font-weight:450;}
+  select:disabled{color:var(--ink-3);}
+
+  /* v.09: kolom Kg Kain Terpakai - hilangkan panah spinner bawaan number input, ganti placeholder
+     abu "0" (mirip pola "— pilih —" di Varian) drpd nilai default beneran. */
+  #kgInput::-webkit-outer-spin-button,
+  #kgInput::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+  #kgInput{-moz-appearance:textfield;}
+  #kgInput::placeholder{color:var(--ink-3);font-weight:450;}
+
+  /* v.10: Kode Roll - dropdown ala Varian (bukan lagi list teks horizontal) kalau ada roll stok
+     yang cocok sama Warna. Baris opsi dikasih warna latar (beda2 per baris) biar kontras dari
+     dropdown putih - lihat renderRollDropdown_() di script buat cara milih warnanya. */
+  #rollPickerBtn{font-family:inherit;}
+  #rollInput::placeholder{color:var(--ink-3);font-weight:450;}
+  .roll-opt{
+    padding:11px 14px;font-size:14.5px;font-weight:650;border-bottom:0.5px solid rgba(0,0,0,.06);
+    cursor:pointer;display:flex;justify-content:flex-end;align-items:center;color:#1C1C1E;
+  }
+  .roll-opt:last-child{border-bottom:none;}
+  .roll-opt .roll-opt-text{font-weight:600;font-size:14.5px;text-align:right;}
+  .roll-opt-manual{
+    padding:11px 14px;font-size:13.5px;font-weight:650;color:var(--theme-accent-deep);
+    background:#fff;cursor:pointer;text-align:center;
+  }
+  .roll-link{font-size:12.5px;color:var(--theme-accent-deep);font-weight:600;margin-top:6px;display:inline-block;cursor:pointer;}
+
+  .item-row{
+    padding:8px 14px;border-bottom:0.5px solid var(--sep);
+    display:flex;justify-content:space-between;align-items:center;gap:10px;
+  }
+  .item-row:last-child{border-bottom:none;}
+  .item-row-text{font-size:calc(14.5px * var(--scale-app));line-height:1.55;}
+  .item-row-text b{font-weight:650;}
+  .item-row-tag{
+    display:inline-block;font-size:10.5px;font-weight:700;padding:1.5px 7px;border-radius:6px;
+    margin-right:6px;background:var(--theme-accent-soft);color:var(--theme-accent-deep);
+    transition:all .4s;
+  }
+  .item-row-del{
+    color:var(--danger);font-size:20px;line-height:1;cursor:pointer;flex-shrink:0;
+    width:28px;height:28px;display:flex;align-items:center;justify-content:center;
+  }
+  .empty-hint{text-align:center;color:var(--ink-2);font-size:14px;padding:26px 16px;}
+
+  /* v.07: Daftar Item dipindah ke BAWAH (sebelum tombol kirim), gaya gelap kontras - biar
+     kelihatan jelas beda dari form input di atasnya, mirip bubble preview Telegram di dashboard
+     QC (dark navy). Ini yang bakal BENERAN dikirim, jadi sengaja dibikin menonjol. */
+  .daftar-gelap{
+    background:#0E1621; border-radius:16px; padding:12px 12px 6px; margin-top:4px;
+  }
+  .daftar-gelap .section-label{ color:#8FA3B8; margin:2px 4px 8px; }
+  .daftar-gelap .section-label .count-chip{ background:var(--theme-accent); }
+  .daftar-gelap .card{ background:#1E2A38; box-shadow:none; }
+  .daftar-gelap .item-row{ border-bottom:0.5px solid rgba(255,255,255,.08); }
+  .daftar-gelap .item-row-text{ color:#E8EDF2; }
+  .daftar-gelap .item-row-text b{ color:#fff; }
+  .daftar-gelap .item-row-tag{ background:rgba(58,175,192,.22); color:#7FD8E5; }
+  .daftar-gelap .item-row-del{ color:#FF6B60; }
+  .daftar-gelap .empty-hint{ color:#8FA3B8; }
+
+  .tab-row{display:flex;gap:8px;}
+  .tab-card{
+    flex:1;border:none;border-radius:16px;padding:10px 8px;cursor:pointer;
+    display:flex;flex-direction:row;align-items:center;justify-content:center;gap:7px;
+    background:var(--card);
+    box-shadow:0 1px 2px rgba(0,0,0,.04), 0 0 0 0.5px rgba(0,0,0,.04);
+    color:var(--ink-2);transition:all .25s cubic-bezier(.2,.9,.3,1.2);
+  }
+  .tab-icon-badge{
+    width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;
+    background:var(--canvas);transition:all .3s;flex-shrink:0;
+  }
+  .tab-label{font-size:13.5px;font-weight:700;letter-spacing:.2px;text-transform:uppercase;}
+  .tab-card.active{
+    color:#fff;transform:translateY(-3px) scale(1.015);
+    box-shadow:0 10px 22px -6px var(--tab-shadow, rgba(0,0,0,.25));
+  }
+  .tab-card.tab-anak.active{ background:linear-gradient(160deg,#4FC7D6,#217F8D); --tab-shadow:rgba(33,127,141,.4); }
+  .tab-card.tab-dewasa.active{ background:linear-gradient(160deg,#2E4A6E,#122238); --tab-shadow:rgba(18,34,56,.4); }
+  .tab-card.tab-lain.active{ background:linear-gradient(160deg,#9C8EE0,#6B5BC4); --tab-shadow:rgba(107,91,196,.4); }
+  .tab-card.active .tab-icon-badge{ background:rgba(255,255,255,.22); }
+  .tab-card.active .tab-label{ color:#fff; }
+
+  .qty-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:9px 14px;}
+  .qty-cell{display:flex;flex-direction:column;gap:2px;}
+  .qty-cell label{font-size:11px;color:var(--ink-2);font-weight:650;text-align:center;}
+  .qty-cell input{
+    border:1px solid var(--sep);border-radius:10px;padding:6px 4px;
+    text-align:center;font-size:15px;background:var(--canvas);font-weight:600;
+  }
+  .qty-cell input:focus{border-color:var(--theme-accent);background:#fff;}
+  .toggle-link{
+    font-size:12.5px;color:var(--theme-accent-deep);font-weight:600;cursor:pointer;
+    padding:2px 14px 8px;display:inline-block;transition:color .4s;
+  }
+  .total-row{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:8px 14px;border-top:0.5px solid var(--sep);
+    font-size:13px;color:var(--ink-2);font-weight:500;
+  }
+  .total-row b{color:var(--ink);font-size:16px;font-weight:700;}
+
+  .btn-row{
+    position:fixed;bottom:0;left:0;right:0;padding:8px 14px calc(12px + env(safe-area-inset-bottom));
+    background:rgba(242,242,247,.82);backdrop-filter:blur(20px) saturate(1.6);
+    -webkit-backdrop-filter:blur(20px) saturate(1.6);
+    border-top:0.5px solid var(--sep);
+    display:flex;gap:8px;
+  }
+  .btn{
+    flex:1;border:none;border-radius:13px;padding:12px;font-size:15.5px;font-weight:650;
+    cursor:pointer;letter-spacing:-.1px;font-family:"Space Grotesk",inherit;
+  }
+  .btn-primary{background:var(--theme-accent-deep);color:#fff;transition:background .4s;}
+  .btn-primary:disabled{background:var(--ink-3);cursor:not-allowed;}
+  .btn-secondary{background:var(--theme-accent-soft);color:var(--theme-accent-deep);transition:all .4s;}
+  .btn-green{background:var(--success);color:#fff;}
+  .btn-full{width:100%;}
+
+  .error-banner{
+    background:var(--danger-bg);color:var(--danger);border-radius:14px;
+    padding:12px 16px;font-size:14px;margin:0 0 6px;font-weight:550;
+  }
+  .badge{font-size:10.5px;background:var(--canvas);color:var(--ink-2);padding:2px 8px;border-radius:6px;font-weight:650;}
+
+  /* v.11: kg mencurigakan (3+ digit tanpa desimal, contoh "253" yang harusnya "25.3") -
+     border+background merah di input-nya + teks peringatan di bawahnya. */
+  .kg-suspicious{border-color:var(--danger) !important;background:var(--danger-bg) !important;}
+  .kg-warning-text{font-size:11.5px;color:var(--danger);margin-top:4px;font-weight:650;}
+
+  .success-screen{display:flex;flex-direction:column;align-items:center;text-align:center;padding:6px 12px 0;}
+  .success-icon{
+    width:56px;height:56px;border-radius:16px;background:var(--theme-accent-soft);
+    display:flex;align-items:center;justify-content:center;margin-bottom:12px;transition:background .4s;
+  }
+  .success-icon svg{width:28px;height:28px;color:var(--theme-accent-deep);transition:color .4s;}
+  .success-title{font-size:20px;font-weight:700;letter-spacing:-.3px;margin-bottom:4px;}
+
+  .cut-divider{position:relative;height:2px;margin:10px 4px 2px;background-image:repeating-linear-gradient(90deg, var(--ink-3) 0 7px, transparent 7px 15px);}
+  .cut-divider .scissor-chip{
+    position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    background:var(--canvas);width:28px;height:28px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;font-size:13px;
+    border:1.5px dashed var(--ink-3);transition:background .4s;
+  }
+  .success-sub{font-size:14px;color:var(--ink-2);line-height:1.5;margin-bottom:16px;}
+  .teks-box{
+    width:100%;min-height:150px;background:var(--card);border-radius:16px;
+    box-shadow:0 1px 2px rgba(0,0,0,.04), 0 0 0 0.5px rgba(0,0,0,.04);
+    padding:16px;font-size:14px;line-height:1.75;white-space:pre-wrap;
+    font-family:"Space Grotesk",ui-monospace,"SF Mono",Menlo,Consolas,monospace;text-align:left;color:var(--ink);
+  }
+  .copied-flash{color:var(--success);font-size:13.5px;font-weight:650;margin-top:10px;display:none;}
+
+  /* ---- Kombinasi 3 Warna ---- */
+  .combo-picker-btn{
+    width:100%;text-align:left;background:var(--theme-accent-soft);border:1.5px dashed var(--theme-accent);
+    border-radius:12px;padding:11px 13px;font-size:15px;font-weight:600;color:var(--theme-accent-deep);
+    cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:all .4s;
+  }
+  .combo-picker-btn .chev{font-size:13px;opacity:.7;}
+  .combo-dropdown{
+    position:static;margin-top:8px;background:#fff;border-radius:14px;border:1px solid var(--sep);
+    max-height:260px;overflow-y:auto;display:none;
+  }
+  .combo-opt{padding:10px 14px;font-size:14.5px;font-weight:600;border-bottom:0.5px solid var(--sep);cursor:pointer;
+    display:flex;justify-content:space-between;align-items:center;}
+  .combo-opt:last-child{border-bottom:none;}
+  .combo-opt .opt-sub{font-size:12px;color:var(--ink-2);font-weight:500;}
+  .warna-chips{display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;}
+  .warna-chip{
+    flex:1;min-width:80px;background:var(--canvas);border:1.5px solid var(--sep);border-radius:12px;
+    padding:10px 8px;text-align:center;position:relative;
+  }
+  .warna-chip .chip-order{
+    position:absolute;top:-8px;left:8px;background:var(--theme-accent-deep);color:#fff;
+    font-size:10px;font-weight:800;width:18px;height:18px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;transition:background .4s;
+  }
+  .warna-chip .chip-text{font-size:12.5px;font-weight:700;letter-spacing:.2px;}
+  .ganti-link{font-size:12.5px;color:var(--theme-accent-deep);font-weight:600;margin-top:10px;display:inline-block;cursor:pointer;transition:color .4s;}
+  .combo-kgroll-row{display:flex;gap:8px;margin-top:8px;align-items:flex-start;}
+  .combo-kgroll-row input{
+    flex:1;border:1px solid var(--sep);border-radius:8px;padding:9px 8px;font-size:14px;background:var(--canvas);
+  }
+  .combo-kgroll-label{font-size:11.5px;color:var(--ink-2);font-weight:650;margin-top:12px;margin-bottom:2px;}
+
+  /* v.12: dropdown Kode Roll per warna kombinasi (3 warna) - pola SAMA kayak dropdown Kode
+     Roll mode biasa (lihat .roll-opt dkk), cuma ditaruh per baris warna. */
+  .combo-roll-wrap{flex:1;min-width:0;}
+  .combo-roll-wrap input{width:100%;box-sizing:border-box;}
+  .combo-roll-picker-btn{
+    width:100%;box-sizing:border-box;border:1px solid var(--sep);border-radius:8px;padding:9px 8px;
+    font-size:14px;background:var(--canvas);display:flex;justify-content:space-between;align-items:center;
+    cursor:pointer;color:var(--ink);
+  }
+  .combo-roll-picker-btn.placeholder{color:var(--ink-3);}
+  .combo-roll-picker-btn .chev{font-size:11px;color:var(--ink-2);flex-shrink:0;margin-left:6px;}
+  .combo-roll-link{font-size:11.5px;color:var(--theme-accent-deep);font-weight:600;margin-top:5px;display:inline-block;cursor:pointer;}
+
+  /* ---- Varian custom picker (ganti native <select> yang tampilannya gede bawaan Android) ---- */
+  .custom-select-btn{
+    flex:1;display:flex;justify-content:flex-end;align-items:center;gap:6px;cursor:pointer;
+    font-size:16px;font-weight:450;color:var(--ink);text-align:right;min-width:0;
+  }
+  .custom-select-btn.placeholder{color:var(--ink-3);}
+  .custom-select-btn .chev{font-size:11px;color:var(--ink-2);flex-shrink:0;}
+  .custom-select-btn span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+  /* ---- Panel "Atur Tampilan" (v.08) ---- */
+  .cfg-row{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:0.5px solid var(--sep);}
+  .cfg-row:last-child{border-bottom:none;}
+  .cfg-row.off{opacity:.45;}
+  .cfg-row input[type=checkbox]{width:auto;flex:none;}
+  .cfg-row-label{flex:1;font-size:14px;font-weight:600;text-align:left;}
+  .cfg-move{display:flex;gap:4px;flex:none;}
+  .cfg-move button{border:none;background:var(--canvas);border-radius:8px;width:26px;height:26px;font-size:12px;cursor:pointer;color:var(--ink-2);}
+  .cfg-move button:disabled{opacity:.3;}
+  .cfg-swatch{width:36px;height:36px;border-radius:50%;border:2.5px solid transparent;cursor:pointer;flex:none;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:800;}
+  .cfg-swatch.active{border-color:var(--ink);}
+  #cfgFontApp{text-align:left;border:1px solid var(--sep);border-radius:10px;padding:8px;background:#fff;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-top-row">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div>
+        <div class="topbar-title">INPUT PRODUKSI</div>
+        <div class="topbar-eyebrow" id="topbarEyebrow" style="font-size:13px;color:#000000;">Tim Potong</div>
+      </div>
+    </div>
+    <div style="text-align:right;">
+      <div class="version-badge">ver.08</div>
+      <div id="refreshLink" style="margin-top:4px;font-size:11.5px;font-weight:600;color:var(--theme-accent-deep);cursor:pointer;">🔄 Refresh</div>
+      <div id="aturTampilanLink" style="margin-top:4px;font-size:11.5px;font-weight:600;color:var(--theme-accent-deep);cursor:pointer;">✏️ Atur Tampilan</div>
+    </div>
+  </div>
+</div>
+<div id="previewModeBanner" style="display:none;background:#3A2E00;color:#FFD666;font-size:11.5px;font-weight:700;text-align:center;padding:7px 10px;">
+  🧪 MODE PREVIEW - "Kirim ke Telegram" &amp; "Simpan Atur Tampilan" DISIMULASIKAN (gak nulis ke Sheet/kirim ke grup beneran). Kategori/Varian/Warna/Kombinasi/Kode Roll akan pakai data ASLI kalau server bisa diakses - kalau gagal/gak ada koneksi ke server, otomatis pakai data contoh (dummy) biar tetap bisa didemoin.
+</div>
+
+<div id="loadingScreen" class="loading-screen">Memuat data kategori/varian...</div>
+
+<div id="mainWrap" style="display:none;">
+
+  <div class="app-body" id="formScreen">
+    <div id="errorBanner" class="error-banner" style="display:none;"></div>
+
+    <div class="section-label" style="margin-top:6px;">Kategori</div>
+    <div class="tab-row" id="kategoriSeg"></div>
+
+    <div class="cut-divider"><div class="scissor-chip">✂️</div></div>
+
+    <div class="section-label">Detail Item Baru</div>
+    <div class="card">
+      <div class="row" style="position:relative;">
+        <div class="row-inline">
+          <div class="row-label" style="color:#000000;font-size:14px;">Varian</div>
+          <div class="custom-select-btn placeholder" id="varianPickerBtn">
+            <span id="varianPickerLabel">— pilih —</span>
+            <span class="chev">▾</span>
+          </div>
+        </div>
+        <div class="combo-dropdown" id="varianDropdown"></div>
+      </div>
+
+      <div id="biasaRows">
+        <div class="row" id="rowWarna" style="position:relative;">
+          <div class="row-inline" id="warnaInputWrap">
+            <div class="row-label" style="color:#000000;font-size:14px;">Warna</div>
+            <input type="text" id="warnaInput" autocomplete="off" placeholder="— pilih warna —">
+          </div>
+        </div>
+        <div class="row" id="rowKg">
+          <div class="row-inline">
+            <div class="row-label" style="color:#000000;font-size:14px;">Kg Kain Terpakai</div>
+            <input type="number" id="kgInput" step="0.01" autocomplete="off" placeholder="0">
+          </div>
+          <div class="row-inline" style="margin-top:6px;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);font-weight:600;">
+              <input type="checkbox" id="pakaiEstimasiKg" style="width:auto;flex:none;">
+              Kg tidak diketahui - pakai estimasi standar
+            </label>
+          </div>
+          <div id="estimasiKgInfo" style="display:none;font-size:11.5px;color:var(--theme-accent-deep);margin-top:2px;"></div>
+          <div id="kgWarningInfo" class="kg-warning-text" style="display:none;"></div>
+        </div>
+        <div class="row" id="rowRoll" style="position:relative;">
+          <div class="row-inline" id="rollInputWrap">
+            <div class="row-label" style="color:#000000;font-size:14px;">Kode Roll <span class="badge">wajib isi</span></div>
+            <input type="text" id="rollInput" autocomplete="off" inputmode="numeric" pattern="[0-9]*">
+          </div>
+          <span class="roll-link" id="rollKeDaftarLink" style="display:none;">🔽 Pilih dari stok tersedia</span>
+          <div class="row-inline" id="rollPickerWrap" style="display:none;">
+            <div class="row-label" style="color:#000000;font-size:14px;">Kode Roll <span class="badge">wajib isi</span></div>
+            <div class="custom-select-btn placeholder" id="rollPickerBtn">
+              <span id="rollPickerLabel">— pilih roll —</span>
+              <span class="chev">▾</span>
+            </div>
+          </div>
+          <div class="combo-dropdown" id="rollDropdown"></div>
+        </div>
+      </div>
+
+      <div id="kombinasiRows" style="display:none;">
+        <div class="row" style="position:relative;">
+          <div class="row-label">Warna <span class="badge">Kombinasi 3 Warna</span></div>
+          <div id="comboPickerWrap">
+            <div class="combo-picker-btn" id="comboPickerBtn">
+              <span id="comboPickerLabel">Pilih kombinasi warna...</span>
+              <span class="chev">▾</span>
+            </div>
+            <div class="combo-dropdown" id="comboDropdown"></div>
+          </div>
+          <div id="comboHasil" style="display:none;">
+            <div class="warna-chips" id="warnaChips"></div>
+            <span class="ganti-link" id="gantiKombinasi">Ganti kombinasi</span>
+          </div>
+        </div>
+        <div class="row" id="kgRollComboRow" style="display:none;">
+          <div id="kgRollComboWrap"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cut-divider"><div class="scissor-chip">✂️</div></div>
+
+    <div class="section-label">Qty per Size</div>
+    <div class="card">
+      <div class="qty-grid" id="qtyGrid"></div>
+      <span class="toggle-link" id="toggleLain">Tampilkan ukuran lain (3XL–6XL)</span>
+      <div class="qty-grid" id="qtyGridLain" style="display:none;"></div>
+      <div class="total-row"><span style="color:#000000;"><b>Total qty item ini</b></span><b id="totalQty" style="font-size:18px;">0 pcs</b></div>
+    </div>
+
+    <div id="daftarItemSection" style="display:none;">
+      <div class="cut-divider"><div class="scissor-chip">✂️</div></div>
+      <div class="daftar-gelap">
+        <div class="section-label"><span>Daftar Item (siap dikirim)</span><span class="count-chip" id="itemCount">0</span></div>
+        <div class="card">
+          <div id="itemList">
+            <div class="empty-hint" id="emptyHint">Belum ada item ditambahkan</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-body" id="successScreen" style="display:none;">
+    <div class="success-screen">
+      <div class="success-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+      <div class="success-title">Teks siap dikirim</div>
+      <div class="success-sub">Cek dulu teksnya di bawah - kalau ada yang salah ketik, tap "Kembali Edit". Kalau sudah benar, tap "Kirim ke Telegram" buat kirim &amp; proses langsung.</div>
+    </div>
+    <div class="teks-box" id="teksHasil"></div>
+    <div style="text-align:center;">
+      <div class="copied-flash" id="copiedFlash">Tersalin ke clipboard</div>
+    </div>
+  </div>
+
+  <div class="btn-row" id="btnRowForm">
+    <button class="btn btn-secondary" id="btnTambah">+ Tambah ke Daftar</button>
+    <button class="btn btn-primary" id="btnBuatTeks" disabled>Buat Teks (0)</button>
+  </div>
+
+  <div class="btn-row" id="btnRowSukses" style="display:none;flex-direction:column;gap:10px;">
+    <button class="btn btn-green btn-full" id="btnKirimChat">✈️ Kirim ke Telegram</button>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-secondary" id="btnKembali">Kembali Edit</button>
+      <button class="btn btn-secondary" id="btnSalin">Salin Teks</button>
+    </div>
+  </div>
+
+  <div id="cfgOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;align-items:flex-end;justify-content:center;">
+    <div style="background:var(--canvas);width:100%;max-width:480px;border-radius:20px 20px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));max-height:85vh;overflow-y:auto;">
+      <div style="font-size:17px;font-weight:750;margin-bottom:10px;">✏️ Atur Tampilan</div>
+
+      <div class="section-label" style="margin-top:2px;">Urutan &amp; Tampil/Sembunyikan Kolom</div>
+      <div class="card" id="cfgRowsFieldOrder"></div>
+      <p style="font-size:11.5px;color:var(--ink-2);margin:6px 4px 0;">Warna &amp; Kg Kain wajib tetap tampil (dipakai buat proses data).</p>
+
+      <div class="section-label">Ukuran Font</div>
+      <div class="card"><div class="row"><div class="row-inline">
+        <div class="row-label">Font</div>
+        <select id="cfgFontApp"></select>
+      </div></div></div>
+
+      <div class="section-label">Warna Aksen</div>
+      <div style="display:flex;gap:10px;padding:4px 4px 8px;" id="cfgSwatchRow"></div>
+      <p style="font-size:11.5px;color:var(--ink-2);margin:0 4px 0;">"Otomatis" = warna ikut kategori (Anak/Dewasa/Lain) seperti biasa.</p>
+
+      <div style="display:flex;gap:10px;margin-top:18px;">
+        <button class="btn btn-secondary" id="cfgBatal" style="flex:1;">Batal</button>
+        <button class="btn btn-primary" id="cfgSimpan" style="flex:1;">Simpan</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// =====================================================================================
+// MINI APP INPUT PRODUKSI - TIM POTONG - ver.02
+// Catatan revisi tiap rilis (mulai dari ver.02 - histori sebelumnya cuma dicatat via badge,
+// tidak ditulis di sini):
+//
+// ver.02 - Ikon Anak & Dewasa diganti pakai gambar custom (bukan emoji lagi); kg dibalikin
+// jadi 1 kolom biasa (percobaan pemisah koma dibatalkan, terbukti bikin bug tampilan).
+//
+// ver.03 - Format penulisan teks total diubah sesuai tabel spek baru Denny: Kategori ANAK
+// selalu ditulis literal "ANAK" di depan, tapi DEWASA TIDAK PAKAI kata "DEWASA" sama sekali.
+// Prefix Tele sekarang diambil dari kolom "Kode Item" di sheet KATEGORI VARIAN (bukan Label
+// Varian lagi) - jadi PENTING: nilai kolom Kode Item di sheet harus diisi ulang sesuai tabel
+// baru (lihat pesan chat). Kombinasi 3 warna sekarang pakai formula SAMA kayak item biasa
+// (adaPanjang dihapus, gak perlu lagi - Prefix Tele dari sheet sudah otomatis benar). Ditambah
+// autocomplete Warna khusus 8 kombinasi tetap buat varian Ringer (Dewasa).
+//
+// ver.04 - fix bug warna "nempel" (mis. jadi "UNGU MUDA BATA" padahal cuma mau ketik "BATA"):
+// penyebabnya saran autocomplete Warna muncul LANGSUNG begitu kolom disentuh (sebelum ngetik
+// apa-apa), jadi rawan ke-tap gak sengaja. Sekarang saran BARU muncul setelah mulai ngetik,
+// plus teks lama (kalau ada sisa) otomatis ke-select penuh saat kolom disentuh - jadi ngetik
+// selanjutnya otomatis GANTI, bukan nempel di belakang.
+//
+// ver.05 - BUG FIX PENTING: kata "ANAK" ternyata kepasang di SEMUA varian kategori Anak,
+// padahal seharusnya HANYA muncul buat varian Pendek/Panjang (Kode Item kosong/"PJG") - varian
+// lain (Ruffle/Setelan/Oneset Panjang/Oneset Pendek/Celana Pendek) sudah punya kode sendiri dan
+// SEHARUSNYA TANPA kata "ANAK" sama sekali. Ketauan setelah dites langsung tiap baris tabel
+// spek terhadap fungsi bikinAwalan_() - 5 dari 25 kasus gagal sebelum fix ini.
+//
+// ver.06 - fix bug warna nempel BABAK 2: fix ver.04 kemarin cuma nutup celah pas kolom
+// DISENTUH, tapi begitu SUDAH TAP salah satu saran, kolom tetap fokus (sengaja ditahan biar
+// tap-nya kedaftar) - jadi ketik lanjutan masih nempel di belakang kalau lupa hapus dulu.
+// Sekarang begitu 1 saran dipilih, teksnya otomatis ke-select juga (bukan cuma pas fokus awal)
+// - jadi ngetik lagi tanpa keluar-masuk kolom pun tetap otomatis GANTI, bukan nempel.
+// =====================================================================================
+
+// =====================================================================================
+// URL Web App Apps Script - GANTI kalau kamu redeploy ke project/URL yang berbeda
+// =====================================================================================
+const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzaWvCi3Vw2fnFgBPfn1qvFBSqYXOrdWi8yxvKc8WOtaIH78JN83dIMiQtQeockW6EDBw/exec";
+
+// v.10-preview: MODE PREVIEW - biar bisa dites SEBELUM Apps Script v33 di-deploy. Data
+// kategori/varian/warna/kombinasi tetap dibaca LANGSUNG dari server asli (read-only, aman).
+// Yang di-SIMULASIKAN cuma yang: (a) butuh backend BARU yang belum jalan (estimasi Kg, dropdown
+// Kode Roll dari stok, simpan Atur Tampilan), atau (b) beneran NULIS data kalau dites di server
+// produksi (kirim ke Telegram) - lihat masing2 titik "if (PREVIEW_MODE)" di bawah buat detailnya.
+// Set false lalu upload ulang sebagai index.html begitu Apps Script v33 sudah di-deploy DAN
+// preview dropdown Kode Roll-nya sudah di-ACC, biar semuanya jalan ke server beneran.
+const PREVIEW_MODE = false;
+const DUMMY_STANDAR_PEMAKAIAN = [
+  { varian: 'RFL', kodeItem: '', kgPerPcs: 0.18 },
+  { varian: 'Kaos Anak', kodeItem: '', kgPerPcs: 0.15 },
+  { varian: 'Ringer', kodeItem: '', kgPerPcs: 0.22 }
+]; // v.08-preview: cuma dipakai kalau PREVIEW_MODE true DAN sheet STANDAR PEMAKAIAN beneran kosong -
+   // biar tombol "pakai estimasi standar" ada sesuatu buat didemoin. HAPUS/abaikan begitu sheet asli sudah diisi.
+
+// v.10-preview: contoh data stok roll per warna buat demo dropdown Kode Roll - cuma dipakai
+// kalau PREVIEW_MODE true DAN ?action=stokRoll gagal/kosong (backend v33 belum di-deploy).
+// Nilai "NAVY" sengaja dibikin sama kayak contoh screenshot Denny (3 roll, salah satunya angka
+// desimal panjang 7.979999999999997 - buat mastiin formatKg2_() bulatin & pad-nya bener).
+const DUMMY_STOK_ROLL_PER_WARNA = {
+  'NAVY': [
+    { kodeRoll: '1427', kg: 25.1 },
+    { kodeRoll: '1426', kg: 24.85 },
+    { kodeRoll: '0668', kg: 7.979999999999997 }
+  ],
+  'BLACK': [
+    { kodeRoll: '0912', kg: 18.5 }
+  ],
+  'CREAM': [
+    { kodeRoll: '0231', kg: 6.333333333333333 },
+    { kodeRoll: '0455', kg: 112.4 }
+  ]
+};
+
+// v.10-preview: dummy KATEGORI/VARIAN, WARNA, & KOMBINASI WARNA - dipakai kalau fetch ke
+// WEBAPP_URL gagal TOTAL (mis. gak ada akses internet/CORS di lingkungan preview). Sebelumnya
+// cuma STANDAR_PEMAKAIAN & STOK_ROLL yang ada fallback dummy - Kategori/Varian yang GAGAL bikin
+// SELURUH form kosong (loading screen nyangkut), jadi sekarang dilengkapi juga.
+const DUMMY_KATEGORI_VARIAN = {
+  'Anak': [
+    { label: 'Kaos Lengan Panjang', kode: 'PJ' },
+    { label: 'Kaos Lengan Panjang Kombinasi', kode: 'LT' },
+    { label: 'Setelan', kode: 'SET' },
+    { label: 'Celana Pendek', kode: 'CP' }
+  ],
+  'Dewasa': [
+    { label: 'Pendek', kode: 'TS' },
+    { label: 'Panjang', kode: 'LS' },
+    { label: 'Pendek Kombinasi', kode: 'TSK' },
+    { label: 'Panjang Kombinasi', kode: 'LSK' },
+    { label: 'Ruffle', kode: 'RFL' },
+    { label: 'Setelan', kode: 'SETD' }
+  ]
+};
+const DUMMY_WARNA_LIST = ['NAVY', 'BLACK', 'CREAM', 'WHITE', 'GREY', 'MUSTARD', 'TERACOTA'];
+const DUMMY_KOMBINASI_WARNA = [
+  { nama: 'WHITE MUSTARD', ketiga: 'STEEL BLUE' },
+  { nama: 'NAVY CREAM', ketiga: 'TERACOTA' },
+  { nama: 'BLACK TERACOTA', ketiga: 'MUSTARD' }
+];
+
+const SIZES_UTAMA = ["XS","S","M","L","XL","XXL"];
+const SIZES_LAIN = ["3XL","4XL","5XL","6XL"];
+const CACHE_KEY = 'timpotong_kategori_varian_cache_v1';
+const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const WARNA_CACHE_KEY = 'timpotong_warna_cache_v1';
+const WARNA_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 1 hari - stok kain bergerak tiap hari, beda dari kategori/varian yang jarang berubah
+const KOMBINASI_CACHE_KEY = 'timpotong_kombinasi_warna_cache_v1';
+const KOMBINASI_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 hari - kombinasi warna jarang ganti tapi gak sejarang kategori/varian
+const STANDAR_CACHE_KEY = 'timpotong_standar_pemakaian_cache_v1';
+const STANDAR_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 hari - sama pola kayak kombinasi warna
+const STOK_ROLL_CACHE_KEY = 'timpotong_stok_roll_cache_v1';
+const STOK_ROLL_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 1 hari - sama pola kayak WARNA_CACHE (stok kain bergerak tiap hari)
+const WARNA_KANONIK_CACHE_KEY = 'timpotong_warna_kanonik_cache_v1';
+const WARNA_KANONIK_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 hari - sinonim warna jarang ganti, sama pola kayak kombinasi warna
+
+const tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
+
+const THEME = {
+  anak: { key:'anak', accent:'#2FA8BA', accentDeep:'#1B7684', accentSoft:'#D8F1F3', canvas:'#D9F1F3', bgImage:'none' },
+  dewasa: { key:'dewasa', accent:'#264060', accentDeep:'#101F32', accentSoft:'#E7EAEE', canvas:'#FFFFFF', bgImage:'none' },
+  lain: { key:'lain', accent:'#6B5BC4', accentDeep:'#4E3FA0', accentSoft:'#E4E0F7', canvas:'#E4E0F7', bgImage:'none' }
+};
+const ICONS = {
+  anak: `<img src="data:image/png;base64,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" style="width:26px;height:26px;object-fit:contain;">`,
+  dewasa: `<img src="data:image/png;base64,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" style="width:32px;height:32px;object-fit:contain;">`,
+  lain: `<span style="font-size:22px;line-height:1;">✦</span>`
+};
+function themeUntukKategori(nama){
+  const n = nama.toLowerCase();
+  if (n.indexOf('anak') !== -1) return THEME.anak;
+  if (n.indexOf('dewasa') !== -1) return THEME.dewasa;
+  return THEME.lain;
+}
+function terapkanTema(theme){
+  const root = document.documentElement;
+  // v.08: kalau Denny pilih warna aksen manual lewat "Atur Tampilan" (bukan 'auto'), itu
+  // MENIMPA tema otomatis per-kategori di bawah ini - tema otomatis tetap jalan sebagai default.
+  const t = (appGeneralConfig.accent && appGeneralConfig.accent !== 'auto' && ACCENT_PRESETS_APP[appGeneralConfig.accent])
+    ? ACCENT_PRESETS_APP[appGeneralConfig.accent] : theme;
+  root.style.setProperty('--theme-accent', t.accent);
+  root.style.setProperty('--theme-accent-deep', t.accentDeep);
+  root.style.setProperty('--theme-accent-soft', t.accentSoft);
+  root.style.setProperty('--canvas', t.canvas);
+  root.style.setProperty('--theme-bg-image', t.bgImage);
+}
+
+// ============ v.08: PANEL "ATUR TAMPILAN" (urutan kolom, font, warna aksen) ============
+const ACCENT_PRESETS_APP = {
+  teal:  { accent:'#3AAFC0', accentDeep:'#1F7A88', accentSoft:'#E4F6F8', canvas:'#EAF7F8', bgImage:'none' },
+  blue:  { accent:'#2F6FEA', accentDeep:'#1B3F91', accentSoft:'#E1E9FB', canvas:'#EFF3FC', bgImage:'none' },
+  plum:  { accent:'#8B5FBF', accentDeep:'#5B3A82', accentSoft:'#EDE3F7', canvas:'#F4EEFB', bgImage:'none' },
+  amber: { accent:'#D98E1B', accentDeep:'#8F5A0C', accentSoft:'#FCEBD2', canvas:'#FCF3E4', bgImage:'none' }
+};
+const FONT_SCALE_PRESETS_APP = [
+  { key:'kecil', label:'Kecil', value:0.9 },
+  { key:'sedang', label:'Sedang', value:1 },
+  { key:'besar', label:'Besar', value:1.15 },
+  { key:'sangatbesar', label:'Sangat Besar', value:1.3 }
+];
+function fontScaleValueApp(key){
+  const f = FONT_SCALE_PRESETS_APP.filter(function(p){ return p.key === key; })[0];
+  return f ? f.value : 1;
+}
+const ROW_EL_BY_KEY = { warna: 'rowWarna', kg: 'rowKg', roll: 'rowRoll' };
+
+let appGeneralConfig = { accent: 'auto', fontScale: 'sedang' };
+let appFieldOrderConfig = [
+  { key: 'warna', label: 'Warna', show: true },
+  { key: 'kg', label: 'Kg Kain Terpakai', show: true },
+  { key: 'roll', label: 'Kode Roll', show: true }
+];
+
+function applyFontScaleApp(){
+  document.documentElement.style.setProperty('--scale-app', fontScaleValueApp(appGeneralConfig.fontScale));
+}
+
+// Reorder & show/hide baris di dalam #biasaRows sesuai appFieldOrderConfig. Roll boleh
+// disembunyikan (opsional), tapi Warna & Kg WAJIB tetap tampil (dijaga juga di backend).
+function applyFieldOrderApp(){
+  const wrap = document.getElementById('biasaRows');
+  appFieldOrderConfig.forEach(function(f){
+    const el = document.getElementById(ROW_EL_BY_KEY[f.key]);
+    if (!el) return;
+    wrap.appendChild(el); // pindahkan ke urutan paling akhir, satu-satu sesuai urutan config
+    const wajibTampil = (f.key === 'warna' || f.key === 'kg');
+    el.style.display = (f.show || wajibTampil) ? 'block' : 'none';
+  });
+}
+
+function terapkanInputConfigBundle(bundle){
+  if (bundle.fieldOrder) appFieldOrderConfig = bundle.fieldOrder;
+  if (bundle.general) appGeneralConfig = Object.assign({}, appGeneralConfig, bundle.general);
+  applyFieldOrderApp();
+  applyFontScaleApp();
+  // re-terapkan tema kategori yang lagi aktif skrg biar accent override langsung kepakai
+  if (state.kategori) terapkanTema(themeUntukKategori(state.kategori));
+}
+
+fetch(WEBAPP_URL + '?action=inputCfg', { cache: 'no-store' })
+  .then(function(r){ return r.json(); })
+  .then(function(data){ terapkanInputConfigBundle(data.config || {}); })
+  .catch(function(){ /* diamkan - pakai default kalau gagal, gak ganggu form utama */ });
+
+let draftInputCfg = null;
+function cloneFieldOrder(list){ return list.map(function(f){ return { key:f.key, label:f.label, show:f.show }; }); }
+
+function renderCfgFieldOrder(){
+  const wrap = document.getElementById('cfgRowsFieldOrder');
+  const list = draftInputCfg.fieldOrder;
+  wrap.innerHTML = list.map(function(f, i){
+    const wajib = (f.key === 'warna' || f.key === 'kg');
+    return '<div class="cfg-row'+(f.show || wajib ? '' : ' off')+'">' +
+      '<input type="checkbox" data-idx="'+i+'"'+(f.show || wajib ? ' checked' : '')+(wajib ? ' disabled' : '')+'>' +
+      '<span class="cfg-row-label">'+f.label+(wajib ? ' <span class="badge">wajib</span>' : '')+'</span>' +
+      '<div class="cfg-move">' +
+        '<button type="button" data-move="up" data-idx="'+i+'"'+(i===0?' disabled':'')+'>▲</button>' +
+        '<button type="button" data-move="down" data-idx="'+i+'"'+(i===list.length-1?' disabled':'')+'>▼</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+  wrap.querySelectorAll('input[type=checkbox]').forEach(function(cb){
+    cb.addEventListener('change', function(){
+      draftInputCfg.fieldOrder[parseInt(cb.dataset.idx,10)].show = cb.checked;
+    });
+  });
+  wrap.querySelectorAll('button[data-move]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      const i = parseInt(btn.dataset.idx,10);
+      const j = btn.dataset.move === 'up' ? i-1 : i+1;
+      if (j < 0 || j >= list.length) return;
+      const tmp = list[i]; list[i] = list[j]; list[j] = tmp;
+      renderCfgFieldOrder();
+    });
+  });
+}
+
+function renderCfgSwatchesApp(){
+  const row = document.getElementById('cfgSwatchRow');
+  const opsi = [{key:'auto', label:'A'}].concat(Object.keys(ACCENT_PRESETS_APP).map(function(k){ return {key:k, label:k[0].toUpperCase()}; }));
+  row.innerHTML = opsi.map(function(o){
+    const active = draftInputCfg.general.accent === o.key;
+    const bg = o.key === 'auto' ? 'linear-gradient(135deg,#3AAFC0,#264060,#8B5FBF)' : ACCENT_PRESETS_APP[o.key].accent;
+    return '<button type="button" class="cfg-swatch'+(active?' active':'')+'" data-accent="'+o.key+'" style="background:'+bg+';" title="'+o.key+'">'+o.label+'</button>';
+  }).join('');
+  row.querySelectorAll('.cfg-swatch').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      draftInputCfg.general.accent = btn.dataset.accent;
+      if (state.kategori) terapkanTema(themeUntukKategori(state.kategori)); // live preview
+      else { appGeneralConfig.accent = btn.dataset.accent; }
+      renderCfgSwatchesApp();
+    });
+  });
+}
+
+function bukaPanelAturTampilanApp(){
+  draftInputCfg = { fieldOrder: cloneFieldOrder(appFieldOrderConfig), general: Object.assign({}, appGeneralConfig) };
+  renderCfgFieldOrder();
+  renderCfgSwatchesApp();
+  const selFont = document.getElementById('cfgFontApp');
+  selFont.innerHTML = FONT_SCALE_PRESETS_APP.map(function(f){ return '<option value="'+f.key+'">'+f.label+'</option>'; }).join('');
+  selFont.value = draftInputCfg.general.fontScale;
+  document.getElementById('cfgOverlay').style.display = 'flex';
+}
+
+document.getElementById('aturTampilanLink').addEventListener('click', bukaPanelAturTampilanApp);
+document.getElementById('cfgFontApp').addEventListener('change', function(ev){
+  draftInputCfg.general.fontScale = ev.target.value;
+  document.documentElement.style.setProperty('--scale-app', fontScaleValueApp(ev.target.value)); // live preview
+});
+document.getElementById('cfgOverlay').addEventListener('click', function(ev){
+  if (ev.target.id === 'cfgOverlay') { terapkanInputConfigBundle(appGeneralConfig ? { general: appGeneralConfig, fieldOrder: appFieldOrderConfig } : {}); document.getElementById('cfgOverlay').style.display = 'none'; }
+});
+document.getElementById('cfgBatal').addEventListener('click', function(){
+  applyFontScaleApp();
+  if (state.kategori) terapkanTema(themeUntukKategori(state.kategori)); // batal preview, balik ke yang tersimpan
+  document.getElementById('cfgOverlay').style.display = 'none';
+});
+document.getElementById('cfgSimpan').addEventListener('click', function(){
+  const btn = document.getElementById('cfgSimpan');
+  if (PREVIEW_MODE) {
+    // v.08-preview: backend v16 (?action=saveInputCfg) belum tentu sudah di-deploy - simpan
+    // cuma di memori tab ini (gak ke server) biar tetap bisa didemoin urutan/font/warnanya.
+    btn.disabled = true; btn.textContent = 'Menyimpan (simulasi)…';
+    setTimeout(function(){
+      btn.disabled = false; btn.textContent = 'Simpan';
+      terapkanInputConfigBundle(draftInputCfg);
+      document.getElementById('cfgOverlay').style.display = 'none';
+    }, 500);
+    return;
+  }
+  btn.disabled = true; btn.textContent = 'Menyimpan…';
+  const body = new URLSearchParams();
+  body.set('action', 'saveInputCfg');
+  body.set('data', JSON.stringify(draftInputCfg));
+  fetch(WEBAPP_URL, { method: 'POST', body: body })
+    .then(function(res){ return res.json(); })
+    .then(function(hasil){
+      btn.disabled = false; btn.textContent = 'Simpan';
+      if (hasil && hasil.ok){
+        terapkanInputConfigBundle(hasil.config || draftInputCfg);
+        document.getElementById('cfgOverlay').style.display = 'none';
+      } else {
+        showError('Gagal simpan tampilan: ' + ((hasil && hasil.error) || 'tidak diketahui'));
+      }
+    })
+    .catch(function(err){
+      btn.disabled = false; btn.textContent = 'Simpan';
+      showError('Gagal simpan tampilan: ' + err.message);
+    });
+});
+
+let KATEGORI_VARIAN = {};
+let KOMBINASI_WARNA = [];
+let daftarItem = []; // item biasa: {mode:'biasa', kategori, kodeItem, varianLabel, warna, kg, roll, qty}
+                      // item kombinasi: {mode:'kombinasi', kategori, kodeItem, varianLabel, warnaTiga:[w1,w2,w3], kgTiga:[k1,k2,k3], rollTiga:[r1,r2,r3], qty}
+let state = {
+  kategori: null, kodeItem: null, varianLabel: null, mode: 'biasa',
+  warna: '', kg: '', roll: '', kgEstimasi: false,
+  comboWarna: null, comboKg: ['','',''], comboRoll: ['','',''], comboRollAutoFilled: [false,false,false],
+  qty: {}
+};
+
+const varianPickerBtn = document.getElementById('varianPickerBtn');
+const varianPickerLabel = document.getElementById('varianPickerLabel');
+const varianDropdown = document.getElementById('varianDropdown');
+const warnaInput = document.getElementById('warnaInput');
+const kgInput = document.getElementById('kgInput');
+const rollInput = document.getElementById('rollInput');
+const rollInputWrap = document.getElementById('rollInputWrap');
+const rollPickerWrap = document.getElementById('rollPickerWrap');
+const rollPickerBtn = document.getElementById('rollPickerBtn');
+const rollPickerLabel = document.getElementById('rollPickerLabel');
+const rollDropdown = document.getElementById('rollDropdown');
+const rollKeDaftarLink = document.getElementById('rollKeDaftarLink');
+const qtyGrid = document.getElementById('qtyGrid');
+const qtyGridLain = document.getElementById('qtyGridLain');
+const totalQtyEl = document.getElementById('totalQty');
+const kategoriSeg = document.getElementById('kategoriSeg');
+const errorBanner = document.getElementById('errorBanner');
+const itemList = document.getElementById('itemList');
+const emptyHint = document.getElementById('emptyHint');
+const itemCountEl = document.getElementById('itemCount');
+const btnTambah = document.getElementById('btnTambah');
+const btnBuatTeks = document.getElementById('btnBuatTeks');
+const btnKembali = document.getElementById('btnKembali');
+const btnSalin = document.getElementById('btnSalin');
+const btnKirimChat = document.getElementById('btnKirimChat');
+const biasaRows = document.getElementById('biasaRows');
+const kombinasiRows = document.getElementById('kombinasiRows');
+const comboPickerWrap = document.getElementById('comboPickerWrap');
+const comboPickerBtn = document.getElementById('comboPickerBtn');
+const comboPickerLabel = document.getElementById('comboPickerLabel');
+const comboDropdown = document.getElementById('comboDropdown');
+const comboHasil = document.getElementById('comboHasil');
+const warnaChips = document.getElementById('warnaChips');
+const gantiKombinasi = document.getElementById('gantiKombinasi');
+const kgRollComboRow = document.getElementById('kgRollComboRow');
+const kgRollComboWrap = document.getElementById('kgRollComboWrap');
+
+function showError(msg){
+  errorBanner.textContent = '⚠ ' + msg;
+  errorBanner.style.display = 'block';
+  window.scrollTo(0,0);
+}
+function hideError(){ errorBanner.style.display = 'none'; }
+
+// Auto-scroll ke kolom aktif - SENGAJA TIDAK dipasang di kolom Qty per Size (lihat
+// renderQtyGrid di bawah): begitu user sudah masuk area qty dan pindah-pindah antar kotak
+// ukuran, scroll tambahan tiap ganti kotak bikin pusing/goyang - jadi field-field lain tetap
+// auto-scroll, tapi kotak qty dibiarkan diam begitu sudah kelihatan sekali.
+function scrollKeTengah_(el){
+  el.addEventListener('focus', function(){
+    setTimeout(function(){
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 300);
+  });
+}
+[warnaInput, kgInput].forEach(scrollKeTengah_);
+
+rollInput.addEventListener('focus', function(){
+  setTimeout(function(){
+    document.getElementById('qtyGrid').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 300);
+});
+
+function renderKategori(){
+  const kategoriList = Object.keys(KATEGORI_VARIAN);
+  if (kategoriList.length === 0){
+    showError('Sheet KATEGORI VARIAN TIM POTONG masih kosong. Isi dulu dari spreadsheet.');
+    return;
+  }
+  kategoriSeg.innerHTML = '';
+  kategoriList.forEach(function(k, idx){
+    const theme = themeUntukKategori(k);
+    const btn = document.createElement('button');
+    btn.className = 'tab-card tab-' + theme.key + (idx===0 ? ' active':'');
+    btn.innerHTML = '<div class="tab-icon-badge">'+ICONS[theme.key]+'</div><div class="tab-label">'+k+'</div>';
+    btn.onclick = function(){
+      kategoriSeg.querySelectorAll('.tab-card').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      state.kategori = k;
+      state.kodeItem = null;
+      state.varianLabel = null;
+      state.mode = 'biasa';
+      biasaRows.style.display = 'block';
+      kombinasiRows.style.display = 'none';
+      terapkanTema(theme);
+      renderVarian();
+      validate();
+    };
+    kategoriSeg.appendChild(btn);
+  });
+  state.kategori = kategoriList[0];
+  terapkanTema(themeUntukKategori(kategoriList[0]));
+  renderVarian();
+}
+
+const SOFT_BLUE_COLORS = ['#F1F7FD', '#EAF3FB', '#F5F9FE', '#E6F0FA', '#EFF6FC', '#E3EEF9'];
+
+function renderVarian(){
+  const list = KATEGORI_VARIAN[state.kategori] || [];
+  varianPickerLabel.textContent = '— pilih —';
+  varianPickerBtn.classList.add('placeholder');
+  varianDropdown.innerHTML = list.map(function(v, idx){
+    const bg = SOFT_BLUE_COLORS[idx % SOFT_BLUE_COLORS.length];
+    return '<div class="combo-opt" data-idx="' + idx + '" style="background:' + bg + ';">' + v.label + '</div>';
+  }).join('');
+  varianDropdown.querySelectorAll('.combo-opt').forEach(function(el){
+    el.addEventListener('click', function(){
+      pilihVarian(parseInt(el.dataset.idx, 10));
+      varianDropdown.style.display = 'none';
+    });
+  });
+}
+
+function pilihVarian(idx){
+  const list = KATEGORI_VARIAN[state.kategori] || [];
+  const v = list[idx];
+  if (!v) return;
+  varianPickerLabel.textContent = v.label;
+  varianPickerBtn.classList.remove('placeholder');
+  state.kodeItem = v.kode; // BISA jadi string kosong '' - itu VALID (lihat catatan di bawah)
+  state.varianLabel = v.label;
+  state.mode = isKombinasi(v.label) ? 'kombinasi' : 'biasa';
+  if (cbEstimasiKg.checked){ cbEstimasiKg.checked = false; kgInput.disabled = false; kgInput.value = ''; state.kg = ''; state.kgEstimasi = false; estimasiKgInfo.style.display = 'none'; }
+  if (state.mode === 'kombinasi') {
+    biasaRows.style.display = 'none';
+    kombinasiRows.style.display = 'block';
+    resetComboUI();
+  } else {
+    biasaRows.style.display = 'block';
+    kombinasiRows.style.display = 'none';
+  }
+  tampilkanStokRoll_(); // v.09: sinkron ulang hint/kode roll tiap ganti Varian (mode biasa/kombinasi bisa beda)
+  validate();
+}
+
+varianPickerBtn.addEventListener('click', function(){
+  const showing = varianDropdown.style.display === 'block';
+  if (showing){ varianDropdown.style.display = 'none'; return; }
+  varianDropdown.style.display = 'block';
+  setTimeout(function(){ varianPickerBtn.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 200);
+});
+document.addEventListener('click', function(e){
+  if (!varianPickerBtn.contains(e.target) && !varianDropdown.contains(e.target)) {
+    varianDropdown.style.display = 'none';
+  }
+});
+
+function renderQtyGrid(container, sizes){
+  container.innerHTML = sizes.map(function(s){
+    return '<div class="qty-cell"><label style="color:#000000;font-size:13px;">'+s+'</label><input type="number" min="0" data-size="'+s+'"></div>';
+  }).join('');
+  container.querySelectorAll('input').forEach(function(inp){
+    inp.addEventListener('input', function(){
+      state.qty[inp.dataset.size] = parseInt(inp.value)||0;
+      updateTotal();
+      validate();
+    });
+  });
+}
+
+function resetQtyInputs(){
+  document.querySelectorAll('#qtyGrid input, #qtyGridLain input').forEach(function(inp){ inp.value = ''; });
+}
+
+function updateTotal(){
+  const total = Object.keys(state.qty).reduce(function(sum,k){ return sum + (state.qty[k]||0); },0);
+  totalQtyEl.textContent = total + ' pcs';
+  return total;
+}
+
+document.getElementById('toggleLain').addEventListener('click', function(){
+  const showing = qtyGridLain.style.display !== 'none';
+  qtyGridLain.style.display = showing ? 'none' : 'grid';
+  this.textContent = showing ? 'Tampilkan ukuran lain (3XL-6XL)' : 'Sembunyikan ukuran lain';
+});
+
+function isKombinasi(label){
+  const l = (label || '').toLowerCase();
+  return l.indexOf('kombinasi') !== -1 || l.indexOf('trico') !== -1;
+}
+
+function resetComboUI(){
+  comboPickerWrap.style.display = 'block';
+  comboHasil.style.display = 'none';
+  kgRollComboRow.style.display = 'none';
+  comboPickerLabel.textContent = 'Pilih kombinasi warna...';
+  state.comboWarna = null;
+  state.comboKg = ['','',''];
+  state.comboRoll = ['','',''];
+  state.comboRollAutoFilled = [false,false,false];
+}
+
+warnaInput.addEventListener('input', function(){ state.warna = warnaInput.value; validate(); tampilkanSaranWarna(); tampilkanStokRoll_(); });
+warnaInput.addEventListener('focus', function(){ warnaInput.select(); });
+warnaInput.addEventListener('blur', function(){ setTimeout(function(){ warnaDropdown.style.display = 'none'; }, 150); });
+// v.11: kg mencurigakan = 3 digit ATAU LEBIH tanpa tanda desimal sama sekali (contoh "253",
+// "1200") - kain gak pernah seberat itu (paling berat biasanya ±40kg, gak pernah sampai 100kg),
+// hampir pasti tim potong lupa nulis titik desimalnya (maksudnya "25.3" bukan "253"). Dicek dari
+// STRING mentah (bukan angka hasil parseFloat), karena yang mau dideteksi justru KETIADAAN titik-nya.
+function kgMencurigakan_(rawStr){
+  return /^\d{3,}$/.test(String(rawStr || '').trim());
+}
+
+kgInput.addEventListener('input', function(){
+  state.kg = kgInput.value;
+  const curiga = kgMencurigakan_(kgInput.value);
+  kgInput.classList.toggle('kg-suspicious', curiga);
+  kgWarningInfo.style.display = curiga ? 'block' : 'none';
+  kgWarningInfo.textContent = curiga ? '⚠️ ' + kgInput.value + ' kg? Kain jarang di atas 100kg (biasanya maks ±40kg) - cek lagi titik desimalnya, mungkin maksudnya ' + kgInput.value.slice(0, -1) + '.' + kgInput.value.slice(-1) + ' kg.' : '';
+  validate();
+});
+// v.09: rollAutoFilled nandain isi rollInput itu HASIL AUTO-SHOW (bukan diketik manual) - dipakai
+// tampilkanStokRoll_() buat tau boleh timpa/kosongin lagi apa nggak begitu Warna ganti.
+let rollAutoFilled = false;
+rollInput.addEventListener('input', function(){ state.roll = rollInput.value; rollAutoFilled = false; });
+
+comboPickerBtn.addEventListener('click', function(){
+  const showing = comboDropdown.style.display === 'block';
+  if (showing){ comboDropdown.style.display = 'none'; return; }
+  if (KOMBINASI_WARNA.length === 0){
+    showError('Sheet KOMBINASI WARNA masih kosong atau belum termuat. Coba Refresh Data.');
+    return;
+  }
+  comboDropdown.innerHTML = KOMBINASI_WARNA.map(function(c, idx){
+    return '<div class="combo-opt" data-idx="'+idx+'"><span>'+c.nama+'</span><span class="opt-sub">+ '+c.ketiga+'</span></div>';
+  }).join('');
+  comboDropdown.querySelectorAll('.combo-opt').forEach(function(el){
+    el.addEventListener('click', function(){
+      const c = KOMBINASI_WARNA[parseInt(el.dataset.idx,10)];
+      pilihKombinasi(c);
+      comboDropdown.style.display = 'none';
+    });
+  });
+  comboDropdown.style.display = 'block';
+});
+
+function pilihKombinasi(c){
+  const dua = c.nama.split(' ');
+  const tiga = [dua[0], dua[1], c.ketiga];
+  state.comboWarna = tiga;
+  warnaChips.innerHTML = tiga.map(function(w, i){
+    return '<div class="warna-chip"><div class="chip-order">'+(i+1)+'</div><div class="chip-text">'+w+'</div></div>';
+  }).join('');
+  comboPickerWrap.style.display = 'none';
+  comboHasil.style.display = 'block';
+
+  kgRollComboWrap.innerHTML = tiga.map(function(w, i){
+    return '<div class="combo-kgroll-label">Kg + Kode Roll - ' + w + '</div>' +
+      '<div class="combo-kgroll-row">' +
+        '<input type="number" step="0.01" class="comboKgInput" data-idx="'+i+'" placeholder="kg">' +
+        '<div class="combo-roll-wrap" data-idx="'+i+'">' +
+          '<input type="text" class="comboRollInput" data-idx="'+i+'" placeholder="kode roll (opsional)" inputmode="numeric" pattern="[0-9]*">' +
+          '<span class="combo-roll-link" data-idx="'+i+'" style="display:none;">🔽 Pilih dari stok tersedia</span>' +
+          '<div class="combo-roll-picker-btn placeholder" data-idx="'+i+'" style="display:none;">' +
+            '<span class="combo-roll-picker-label">— pilih roll —</span><span class="chev">▾</span>' +
+          '</div>' +
+          '<div class="combo-dropdown combo-roll-dropdown" data-idx="'+i+'"></div>' +
+        '</div>' +
+      '</div>';
+  }).join('');
+  kgRollComboRow.style.display = 'block';
+
+  document.querySelectorAll('.comboKgInput').forEach(function(inp){
+    inp.addEventListener('input', function(){
+      state.comboKg[parseInt(inp.dataset.idx,10)] = inp.value;
+      inp.classList.toggle('kg-suspicious', kgMencurigakan_(inp.value));
+      validate();
+    });
+  });
+  document.querySelectorAll('.comboRollInput').forEach(function(inp){
+    inp.addEventListener('input', function(){
+      const idx = parseInt(inp.dataset.idx,10);
+      state.comboRoll[idx] = inp.value;
+      state.comboRollAutoFilled[idx] = false;
+    });
+  });
+  document.querySelectorAll('.combo-roll-picker-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      const idx = btn.dataset.idx;
+      const dd = kgRollComboWrap.querySelector('.combo-roll-dropdown[data-idx="'+idx+'"]');
+      const showing = dd.style.display === 'block';
+      kgRollComboWrap.querySelectorAll('.combo-roll-dropdown').forEach(function(x){ x.style.display = 'none'; });
+      dd.style.display = showing ? 'none' : 'block';
+    });
+  });
+  document.querySelectorAll('.combo-roll-link').forEach(function(link){
+    link.addEventListener('click', function(){ comboSwitchKePicker_(link.dataset.idx); });
+  });
+
+  // v.12: begitu kombinasi dipilih, langsung cek stok roll buat KETIGA warnanya (sama kayak
+  // tampilkanStokRoll_() di mode biasa, cuma dijalankan 3x - satu per warna). Kalau salah satu
+  // warna gak ada stok yang cocok, warna itu jatuh ke input manual (yang lain tetap dropdown).
+  tiga.forEach(function(w, i){ tampilkanStokRollCombo_(i, w); });
+
+  validate();
+}
+
+// ============ v.12: DROPDOWN KODE ROLL PER WARNA (mode Kombinasi 3 Warna) ============
+// Pola & fungsi-fungsi ini SENGAJA dibikin paralel 1:1 sama punya mode biasa
+// (renderRollDropdown_/pilihRoll_/switchKeManualRoll_/switchKePickerRoll_/resetRollPickerUI_/
+// tampilkanStokRoll_ di bawah) - bedanya cuma versi ini per-index (idx 0/1/2, satu per warna),
+// jadi 3 baris bisa beda kondisi (misal warna 1 & 3 ada stok jadi dropdown, warna 2 gak ada jadi manual).
+function comboRollWrapEl_(idx){ return kgRollComboWrap.querySelector('.combo-roll-wrap[data-idx="'+idx+'"]'); }
+
+function comboSwitchKeManual_(idx, tampilkanLink){
+  const wrap = comboRollWrapEl_(idx);
+  wrap.querySelector('.comboRollInput').style.display = '';
+  wrap.querySelector('.combo-roll-picker-btn').style.display = 'none';
+  wrap.querySelector('.combo-roll-dropdown').style.display = 'none';
+  wrap.querySelector('.combo-roll-link').style.display = tampilkanLink ? 'inline-block' : 'none';
+}
+function comboSwitchKePickerRoll_(idx){
+  const wrap = comboRollWrapEl_(idx);
+  wrap.querySelector('.comboRollInput').style.display = 'none';
+  wrap.querySelector('.combo-roll-link').style.display = 'none';
+  wrap.querySelector('.combo-roll-picker-btn').style.display = '';
+}
+function comboSwitchKePicker_(idx){ comboSwitchKePickerRoll_(idx); } // dipanggil dari link "🔽 Pilih dari stok tersedia"
+
+function comboResetRollPickerUI_(idx){
+  comboSwitchKeManual_(idx, false);
+  const wrap = comboRollWrapEl_(idx);
+  wrap.querySelector('.combo-roll-picker-label').textContent = '— pilih roll —';
+  wrap.querySelector('.combo-roll-picker-btn').classList.add('placeholder');
+  const dd = wrap.querySelector('.combo-roll-dropdown');
+  dd.innerHTML = ''; dd.style.display = 'none';
+}
+function comboPilihRoll_(idx, kode, kg){
+  const wrap = comboRollWrapEl_(idx);
+  wrap.querySelector('.comboRollInput').value = kode;
+  state.comboRoll[idx] = kode;
+  state.comboRollAutoFilled[idx] = true;
+  wrap.querySelector('.combo-roll-picker-label').textContent = 'Roll ' + kode + ((kg !== undefined && kg !== null && !isNaN(kg)) ? '  ·  ' + formatKg2_(kg) + ' kg' : '');
+  wrap.querySelector('.combo-roll-picker-btn').classList.remove('placeholder');
+  wrap.querySelector('.combo-roll-dropdown').style.display = 'none';
+}
+function comboRenderRollDropdown_(idx, rolls){
+  const wrap = comboRollWrapEl_(idx);
+  const dd = wrap.querySelector('.combo-roll-dropdown');
+  dd.innerHTML = rolls.map(function(r, i2){
+    const bg = ROLL_OPT_COLORS[i2 % ROLL_OPT_COLORS.length];
+    return '<div class="roll-opt" data-kode="' + r.kodeRoll + '" data-kg="' + r.kg + '" style="background:' + bg + ';">' +
+      '<span class="roll-opt-text">Roll ' + r.kodeRoll + ' / ' + formatKg2_(r.kg) + ' kg</span></div>';
+  }).join('') + '<div class="roll-opt-manual">✏️ Ketik manual (roll lain)</div>';
+  dd.querySelectorAll('.roll-opt').forEach(function(el){
+    el.addEventListener('click', function(){ comboPilihRoll_(idx, el.dataset.kode, parseFloat(el.dataset.kg)); });
+  });
+  dd.querySelector('.roll-opt-manual').addEventListener('click', function(){
+    dd.style.display = 'none';
+    comboSwitchKeManual_(idx, true);
+    wrap.querySelector('.comboRollInput').focus();
+  });
+}
+function tampilkanStokRollCombo_(idx, warnaWord){
+  const wrap = comboRollWrapEl_(idx);
+  if (!wrap) return; // baris combo ini belum ke-render (kombinasi warna belum dipilih) - aman dilewati
+  const wRaw = (warnaWord || '').trim().toUpperCase();
+  const w = WARNA_KANONIK_MAP[wRaw] || wRaw; // v.12: "CHOCO" -> "CINNAMON" dkk kalau ada di KAMUS SINONIM WARNA
+  const rolls = w ? STOK_ROLL_PER_WARNA[w] : null;
+  const inp = wrap.querySelector('.comboRollInput');
+
+  if (!rolls || rolls.length === 0){
+    if (state.comboRollAutoFilled[idx]){ inp.value = ''; state.comboRoll[idx] = ''; state.comboRollAutoFilled[idx] = false; }
+    comboSwitchKeManual_(idx, false);
+    return;
+  }
+
+  comboRenderRollDropdown_(idx, rolls);
+
+  if (inp.value && !state.comboRollAutoFilled[idx]){
+    comboSwitchKeManual_(idx, true);
+    return;
+  }
+
+  if (rolls.length === 1){
+    comboPilihRoll_(idx, rolls[0].kodeRoll, rolls[0].kg);
+  } else {
+    inp.value = ''; state.comboRoll[idx] = ''; state.comboRollAutoFilled[idx] = false;
+    wrap.querySelector('.combo-roll-picker-label').textContent = '— pilih roll —';
+    wrap.querySelector('.combo-roll-picker-btn').classList.add('placeholder');
+  }
+  comboSwitchKePickerRoll_(idx);
+}
+document.addEventListener('click', function(e){
+  if (!e.target.closest('.combo-roll-wrap')) {
+    document.querySelectorAll('.combo-roll-dropdown').forEach(function(dd){ dd.style.display = 'none'; });
+  }
+});
+
+gantiKombinasi.addEventListener('click', function(){
+  resetComboUI();
+  validate();
+});
+
+document.addEventListener('click', function(e){
+  if (!comboPickerWrap.contains(e.target)) comboDropdown.style.display = 'none';
+});
+
+function validate(){
+  const total = updateTotal();
+  if (cbEstimasiKg && cbEstimasiKg.checked && state.mode !== 'kombinasi'){
+    const est = hitungEstimasiKg_();
+    if (est !== null){ kgInput.value = est; state.kg = String(est); }
+  }
+  let ok;
+  if (state.mode === 'kombinasi') {
+    ok = state.kategori && state.kodeItem !== null && state.comboWarna &&
+      state.comboKg.every(function(k){ return k && parseFloat(k) > 0 && !kgMencurigakan_(k); }) && total > 0;
+  } else {
+    ok = state.kategori && state.kodeItem !== null && state.warna.trim() &&
+      state.kg && parseFloat(state.kg) > 0 && !kgMencurigakan_(state.kg) && total > 0;
+  }
+  btnTambah.disabled = !ok;
+}
+
+function renderItemList(){
+  itemCountEl.textContent = daftarItem.length;
+  btnBuatTeks.textContent = 'Buat Teks (' + daftarItem.length + ')';
+  btnBuatTeks.disabled = daftarItem.length === 0;
+  document.getElementById('daftarItemSection').style.display = daftarItem.length === 0 ? 'none' : 'block';
+  if (daftarItem.length === 0){
+    itemList.innerHTML = '';
+    itemList.appendChild(emptyHint);
+    return;
+  }
+  itemList.innerHTML = '';
+  daftarItem.forEach(function(item, idx){
+    const qtyLines = Object.keys(item.qty).filter(function(s){return item.qty[s]>0;})
+      .map(function(s){ return s+item.qty[s]; }).join(' ');
+    let namaItem, subInfo;
+    if (item.mode === 'kombinasi') {
+      const awalanKombinasi = bikinAwalan_(item.kategori, item.kodeItem);
+      namaItem = (awalanKombinasi ? awalanKombinasi + ' ' : '') +
+        item.warnaTiga[0].toUpperCase() + ' ' + item.warnaTiga[1].toUpperCase();
+      subInfo = item.warnaTiga.map(function(w,i){ return w+' '+item.kgTiga[i]+'kg'; }).join(', ');
+    } else {
+      const awalanBiasa = bikinAwalan_(item.kategori, item.kodeItem);
+      namaItem = (awalanBiasa ? awalanBiasa + ' ' : '') + item.warna.toUpperCase();
+      subInfo = item.kg + 'kg' + (item.kgEstimasi ? ' <span class="badge" style="color:var(--theme-accent-deep);">≈ estimasi</span>' : '') + (item.roll ? ' (roll ' + item.roll + ')' : '');
+    }
+    const row = document.createElement('div');
+    row.className = 'item-row';
+    row.innerHTML =
+      '<div class="item-row-text"><span class="item-row-tag">'+item.kategori+'</span><b>' + namaItem + '</b> - ' +
+      subInfo + '<br>' + qtyLines + '</div>' +
+      '<div class="item-row-del" data-idx="' + idx + '">✕</div>';
+    itemList.appendChild(row);
+  });
+  itemList.querySelectorAll('.item-row-del').forEach(function(el){
+    el.addEventListener('click', function(){
+      daftarItem.splice(parseInt(el.dataset.idx,10), 1);
+      renderItemList();
+    });
+  });
+}
+
+btnTambah.addEventListener('click', function(){
+  hideError();
+  const labelTerpilih = state.varianLabel;
+  if (state.mode === 'kombinasi') {
+    daftarItem.push({
+      mode: 'kombinasi',
+      kategori: state.kategori,
+      kodeItem: state.kodeItem,
+      varianLabel: labelTerpilih,
+      warnaTiga: state.comboWarna.slice(),
+      kgTiga: state.comboKg.slice(),
+      rollTiga: state.comboRoll.slice(),
+      qty: Object.assign({}, state.qty)
+    });
+  } else {
+    daftarItem.push({
+      mode: 'biasa',
+      kategori: state.kategori,
+      kodeItem: state.kodeItem,
+      varianLabel: labelTerpilih,
+      warna: state.warna,
+      kg: state.kg,
+      roll: state.roll,
+      kgEstimasi: !!state.kgEstimasi,
+      qty: Object.assign({}, state.qty)
+    });
+  }
+  renderItemList();
+
+  // Reset field DETAIL ITEM (kategori TETAP, biar cepat isi item berikutnya kategori sama)
+  state.kodeItem = null; state.varianLabel = null; state.mode = 'biasa';
+  state.warna = ''; state.kg = ''; state.roll = ''; state.kgEstimasi = false;
+  state.comboWarna = null; state.comboKg = ['','','']; state.comboRoll = ['','',''];
+  varianPickerLabel.textContent = '— pilih —';
+  varianPickerBtn.classList.add('placeholder');
+  warnaInput.value = ''; kgInput.value = ''; kgInput.disabled = false; rollInput.value = '';
+  rollAutoFilled = false; resetRollPickerUI_();
+  cbEstimasiKg.checked = false; estimasiKgInfo.style.display = 'none';
+  biasaRows.style.display = 'block';
+  kombinasiRows.style.display = 'none';
+  resetComboUI();
+  resetQtyInputs();
+  state.qty = {};
+  validate();
+  window.scrollTo(0,0);
+});
+
+function escapeHtml_(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// rev.49: format penulisan BARU sesuai tabel spek Denny - Kategori ANAK selalu ditulis literal
+// "ANAK" di depan (dibutuhkan aturan konversi buat trigger dengan benar), Kategori DEWASA
+// TIDAK pakai kata "DEWASA" sama sekali (langsung ke kode/warna) - beda dari sebelumnya.
+// Prefix Tele (kolom "Kode Item" di sheet KATEGORI VARIAN) dipakai APA ADANYA di sini (bukan
+// Label Varian lagi), karena sekarang seringkali beda (mis. Label "Panjang" tapi ditulis "PJG").
+// rev.49/ver.05: format penulisan sesuai tabel spek Denny. Kata "ANAK" HANYA muncul untuk
+// varian Pendek/Panjang (Kode Item kosong atau "PJG") - varian Anak lainnya yang SUDAH punya
+// kode sendiri (RFL/SET./ONSET/SPEN/CELANA) TIDAK pakai kata "ANAK" sama sekali. Kategori
+// DEWASA TIDAK PERNAH pakai kata "DEWASA" sama sekali, di varian manapun.
+function bikinAwalan_(kategori, kodeItem){
+  const kodeUpper = kodeItem ? kodeItem.toUpperCase() : '';
+  const butuhKataAnak = kategori.toLowerCase() === 'anak' && (kodeUpper === '' || kodeUpper === 'PJG');
+  if (butuhKataAnak){
+    return kodeUpper ? ('ANAK ' + kodeUpper) : 'ANAK';
+  }
+  return kodeUpper; // semua kasus lain (Anak RFL/SET./ONSET/SPEN/CELANA, dan semua Dewasa) - TANPA kata kategori
+}
+
+function generateTeksHtmlPreview_(){
+  return daftarItem.map(function(item){
+    const daftarSize = Object.keys(item.qty).filter(function(s){ return item.qty[s] > 0; });
+    const totalQtyItem = daftarSize.reduce(function(sum,s){ return sum + item.qty[s]; }, 0);
+    const qtyHtml = daftarSize.map(function(s){ return escapeHtml_(s) + '<b>' + item.qty[s] + '</b>'; }).join(' ') +
+      ' = <b>' + totalQtyItem + '</b>';
+
+    if (item.mode === 'kombinasi') {
+      // Format khusus KOMBINASI 3 warna - memanfaatkan mekanisme "RefStok"/breakdown yang
+      // SUDAH ADA di sistem lama: baris pertama = item utama (warna 1+2, kg warna pertama),
+      // 2 baris berikutnya = breakdown pemakaian kain warna ke-2 & ke-3 secara terpisah,
+      // baris terakhir = qty (berlaku buat 1 item gabungan ini). Awalannya pakai formula yang
+      // SAMA kayak item biasa (bikinAwalan_) - Prefix Tele dari sheet sudah otomatis benar
+      // buat kombinasi (mis. "PJG" buat Panjang Kombinasi, kosong buat Pendek Kombinasi).
+      const awalan = bikinAwalan_(item.kategori, item.kodeItem);
+      const w = item.warnaTiga, kg = item.kgTiga, roll = item.rollTiga;
+      const kataDepanLine1 = (awalan ? awalan + ' ' : '') + w[0].toUpperCase() + ' ' + w[1].toUpperCase();
+      const line1 = escapeHtml_(kataDepanLine1 + ' ' + kg[0]) +
+        (roll[0] ? escapeHtml_(' / ' + roll[0]) : '');
+      const line2 = escapeHtml_(w[1].toUpperCase() + ' ' + kg[1]) + (roll[1] ? escapeHtml_(' / ' + roll[1]) : '');
+      const line3 = escapeHtml_(w[2].toUpperCase() + ' ' + kg[2]) + (roll[2] ? escapeHtml_(' / ' + roll[2]) : '');
+      return line1 + '\n' + line2 + '\n' + line3 + '\n' + qtyHtml;
+    }
+
+    const awalan = bikinAwalan_(item.kategori, item.kodeItem);
+    const namaAwal = (awalan ? awalan + ' ' : '') + item.warna.toUpperCase();
+    let line1Text;
+    if (item.roll) {
+      line1Text = namaAwal + ' ' + item.kg + ' / ' + item.roll;
+    } else {
+      line1Text = namaAwal + ' ' + item.kg + 'kg';
+    }
+    return escapeHtml_(line1Text) + '\n' + qtyHtml;
+  }).join('\n\n');
+}
+
+btnBuatTeks.addEventListener('click', function(){
+  if (daftarItem.length === 0) return;
+  document.getElementById('teksHasil').innerHTML = generateTeksHtmlPreview_();
+  document.getElementById('formScreen').style.display = 'none';
+  document.getElementById('successScreen').style.display = 'block';
+  document.getElementById('btnRowForm').style.display = 'none';
+  document.getElementById('btnRowSukses').style.display = 'flex';
+  document.getElementById('copiedFlash').style.display = 'none';
+  window.scrollTo(0,0);
+});
+
+btnKembali.addEventListener('click', function(){
+  document.getElementById('formScreen').style.display = 'block';
+  document.getElementById('successScreen').style.display = 'none';
+  document.getElementById('btnRowForm').style.display = 'flex';
+  document.getElementById('btnRowSukses').style.display = 'none';
+});
+
+// v.08: dulu tombol ini nunggu respons server dulu (bisa berasa delay/nge-freeze sebentar)
+// baru pindah ke layar "Terkirim & tersimpan". SEKARANG optimistic: begitu ditap, langsung
+// pindah ke layar sukses (no delay, gak nunggu jaringan sama sekali) - proses kirim beneran
+// (fetch ke server) jalan di BELAKANG LAYAR. Kalau gagal (jaringan jelek dll), item TETAP
+// disimpan di localStorage (antrianKirimTertunda) dan dicoba lagi otomatis + ada tombol "Coba
+// Kirim Ulang" manual, jadi data gak pernah hilang biarpun sudah pindah layar/nutup app.
+const PENDING_KIRIM_KEY = 'antrianKirimTertunda_v1';
+
+function bacaAntrianTertunda_(){
+  try { return JSON.parse(localStorage.getItem(PENDING_KIRIM_KEY) || '[]'); } catch(e){ return []; }
+}
+function simpanAntrianTertunda_(list){
+  try { localStorage.setItem(PENDING_KIRIM_KEY, JSON.stringify(list)); } catch(e){}
+}
+function tambahKeAntrianTertunda_(teks){
+  const list = bacaAntrianTertunda_();
+  const tempId = Date.now() + '_' + Math.floor(Math.random()*1000);
+  list.push({ tempId: tempId, teks: teks, ts: Date.now() });
+  simpanAntrianTertunda_(list);
+  return tempId;
+}
+function hapusDariAntrianTertunda_(tempId){
+  simpanAntrianTertunda_(bacaAntrianTertunda_().filter(function(p){ return p.tempId !== tempId; }));
+}
+
+function tampilkanBannerKirim_(pesan, tipe){
+  let el = document.getElementById('kirimStatusBanner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'kirimStatusBanner';
+    el.className = 'error-banner';
+    el.style.cssText = 'position:fixed;left:14px;right:14px;bottom:90px;z-index:50;box-shadow:0 6px 18px rgba(0,0,0,.12);';
+    document.body.appendChild(el);
+  }
+  el.style.background = tipe === 'gagal' ? 'var(--danger-bg)' : 'var(--theme-accent-soft)';
+  el.style.color = tipe === 'gagal' ? 'var(--danger)' : 'var(--theme-accent-deep)';
+  el.innerHTML = '';
+  const span = document.createElement('span');
+  span.textContent = pesan;
+  el.appendChild(span);
+  if (tipe === 'gagal') {
+    const btnRetry = document.createElement('button');
+    btnRetry.textContent = 'Coba Kirim Ulang';
+    btnRetry.className = 'btn btn-secondary';
+    btnRetry.style.cssText = 'margin-top:8px;padding:8px 14px;font-size:13.5px;';
+    btnRetry.addEventListener('click', function(){ procesAntrianTertunda_(); });
+    el.appendChild(document.createElement('br'));
+    el.appendChild(btnRetry);
+  }
+  return el;
+}
+function hapusBannerKirim_(){
+  const el = document.getElementById('kirimStatusBanner');
+  if (el) el.remove();
+}
+
+// Kirim 1 item tertunda ke server. Dipanggil pertama kali begitu tombol ditap, DAN dipanggil
+// lagi otomatis tiap kali app dibuka kalau masih ada sisa yang belum sukses dari sesi
+// sebelumnya (lihat pemanggilan procesAntrianTertunda_() di bagian bawah file).
+function kirimSatuTertunda_(pending, isBackground){
+  if (PREVIEW_MODE) {
+    // v.08-preview: JANGAN beneran nulis ke Sheet/kirim ke grup produksi - simulasikan sukses
+    // setelah jeda kecil (biar kelihatan "proses di background"-nya), baru hapus dari antrian.
+    return new Promise(function(resolve){
+      setTimeout(function(){
+        hapusDariAntrianTertunda_(pending.tempId);
+        hapusBannerKirim_();
+        resolve(true);
+      }, 900);
+    });
+  }
+  const initData = tg ? tg.initData : '';
+  if (!initData) {
+    if (!isBackground) tampilkanBannerKirim_('Mini App ini perlu dibuka dari Telegram - gak bisa kirim dari browser biasa. Data belum hilang, buka lagi lewat tombol Telegram.', 'gagal');
+    return Promise.resolve(false);
+  }
+  const body = new URLSearchParams();
+  body.set('action', 'kirimProduksiMiniApp');
+  body.set('teks', pending.teks);
+  body.set('initData', initData);
+  return fetch(WEBAPP_URL, { method: 'POST', body: body })
+    .then(function(res){ return res.json(); })
+    .then(function(hasil){
+      if (hasil && hasil.ok) {
+        hapusDariAntrianTertunda_(pending.tempId);
+        hapusBannerKirim_();
+        if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+        return true;
+      }
+      if (hasil && hasil.duplikat) {
+        // v.11: server bilang ini kiriman DOBEL (kiriman pertamanya SUDAH berhasil duluan) -
+        // hapus dari antrian tertunda juga, JANGAN dianggap gagal & dicoba kirim ulang terus
+        // (kalau tetap dianggap gagal, ini bakal nyoba kirim ulang selamanya dan selalu ditolak
+        // server sampai 24 jam - banner error nyangkut terus padahal datanya sudah aman tersimpan).
+        hapusDariAntrianTertunda_(pending.tempId);
+        tampilkanBannerKirim_('ℹ️ Data ini sudah terkirim duluan (kiriman ganda terdeteksi) - tidak dikirim ulang.', 'info');
+        setTimeout(hapusBannerKirim_, 4000);
+        return true;
+      }
+      tampilkanBannerKirim_('Gagal mengirim: ' + ((hasil && hasil.error) || 'tidak diketahui') + ' - data masih tersimpan, coba lagi.', 'gagal');
+      return false;
+    })
+    .catch(function(err){
+      tampilkanBannerKirim_('Gagal mengirim (jaringan): ' + err.message + ' - data masih tersimpan, coba lagi.', 'gagal');
+      return false;
+    });
+}
+function procesAntrianTertunda_(){
+  const list = bacaAntrianTertunda_();
+  if (!list.length) return;
+  // proses satu-satu (biar gak dobel-kirim kalau banyak nyangkut dari beberapa sesi)
+  let p = Promise.resolve();
+  list.forEach(function(item){
+    p = p.then(function(){ return kirimSatuTertunda_(item, true); });
+  });
+}
+
+btnKirimChat.addEventListener('click', function(){
+  const teks = document.getElementById('teksHasil').textContent;
+  if (!teks.trim()) return;
+  if (tg && !tg.initData) {
+    tampilkanErrorKirim_('Mini App ini perlu dibuka dari Telegram (initData kosong) - gak bisa kirim langsung dari browser biasa.');
+    return;
+  }
+
+  // 1) Simpan ke antrian tertunda DULU (biar gak hilang walau app ditutup sebelum fetch selesai)
+  const tempId = tambahKeAntrianTertunda_(teks);
+  const jumlahItemDikirim = daftarItem.length;
+
+  // 2) LANGSUNG pindah ke layar sukses - no delay, gak nunggu jaringan sama sekali
+  daftarItem = [];
+  document.getElementById('successScreen').innerHTML =
+    '<div class="success-screen"><div class="success-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>' +
+    '<div class="success-title">Terkirim &amp; tersimpan</div>' +
+    '<div class="success-sub">' + jumlahItemDikirim + ' item ' + (PREVIEW_MODE ? 'DISIMULASIKAN diproses (mode preview, gak beneran masuk Sheet/Telegram).' : 'sedang diproses ke Sheet & dikirim ke grup di latar belakang.') + '</div></div>';
+  document.getElementById('btnRowSukses').style.display = 'none';
+  const btnBaru = document.createElement('button');
+  btnBaru.className = 'btn btn-primary btn-full';
+  btnBaru.textContent = 'Input Laporan Baru';
+  btnBaru.style.marginTop = '10px';
+  btnBaru.addEventListener('click', function(){ window.location.reload(); });
+  document.getElementById('successScreen').appendChild(btnBaru);
+  window.scrollTo(0,0);
+
+  // 3) Proses kirim beneran di belakang layar, gak nge-block UI di atas sama sekali
+  kirimSatuTertunda_({ tempId: tempId, teks: teks }, false);
+});
+
+// Kalau ada sisa antrian yang belum sukses dari sesi sebelumnya (app sempat ketutup/reload
+// sebelum fetch selesai), coba kirim ulang otomatis begitu app ini dibuka lagi.
+if (bacaAntrianTertunda_().length) { procesAntrianTertunda_(); }
+
+function tampilkanErrorKirim_(pesan){
+  let el = document.getElementById('kirimErrorBanner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'kirimErrorBanner';
+    el.className = 'error-banner';
+    document.getElementById('btnRowSukses').insertAdjacentElement('beforebegin', el);
+  }
+  el.textContent = pesan;
+  el.style.display = 'block';
+}
+
+btnSalin.addEventListener('click', function(){
+  const teks = document.getElementById('teksHasil').textContent;
+  const flash = document.getElementById('copiedFlash');
+  function tampilkanSukses(){
+    flash.style.display = 'block';
+    if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(teks).then(tampilkanSukses).catch(function(){
+      fallbackCopy(teks, tampilkanSukses);
+    });
+  } else {
+    fallbackCopy(teks, tampilkanSukses);
+  }
+});
+
+function fallbackCopy(teks, cb){
+  const ta = document.createElement('textarea');
+  ta.value = teks;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.focus(); ta.select();
+  try { document.execCommand('copy'); cb(); } catch(e){}
+  document.body.removeChild(ta);
+}
+
+function initUI(){
+  document.getElementById('loadingScreen').style.display = 'none';
+  document.getElementById('mainWrap').style.display = 'block';
+  renderKategori();
+  renderQtyGrid(qtyGrid, SIZES_UTAMA);
+  renderQtyGrid(qtyGridLain, SIZES_LAIN);
+  renderItemList();
+  validate();
+}
+
+function fetchFresh(isBackground){
+  return fetch(WEBAPP_URL + '?action=kategori', { cache: 'no-store' })
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      KATEGORI_VARIAN = (data && Object.keys(data).length) ? data : (PREVIEW_MODE ? DUMMY_KATEGORI_VARIAN : data);
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: KATEGORI_VARIAN })); } catch(e){}
+      if (!isBackground) initUI();
+    })
+    .catch(function(err){
+      // v.10-preview: kalau gagal TOTAL (bukan cuma kosong) & lagi PREVIEW_MODE, tetap render
+      // pakai data dummy biar bisa didemoin tanpa akses ke server asli.
+      if (PREVIEW_MODE){
+        KATEGORI_VARIAN = DUMMY_KATEGORI_VARIAN;
+        if (!isBackground) initUI();
+        return;
+      }
+      if (!isBackground) {
+        document.getElementById('loadingScreen').textContent = 'Gagal memuat data: ' + err.message + ' (cek WEBAPP_URL di kode)';
+      }
+    });
+}
+
+if (PREVIEW_MODE) document.getElementById('previewModeBanner').style.display = 'block';
+if (tg){ tg.ready(); tg.expand(); }
+
+// ---- Dropdown saran Warna CUSTOM (bukan <datalist> bawaan browser - itu berantakan &
+// gak konsisten posisinya di WebView Android). Ini murni div biasa yang kita kontrol sendiri
+// posisi & tampilannya, nempel PERSIS di bawah kolom Warna, gak nimpa kolom lain. ----
+let WARNA_LIST = [];
+const warnaDropdown = document.createElement('div');
+warnaDropdown.id = 'warnaDropdown';
+warnaDropdown.style.cssText = 'display:none;position:static;width:100%;box-sizing:border-box;margin-top:8px;background:#fff;border-radius:12px;' +
+  'border:1px solid var(--sep);max-height:200px;overflow-y:auto;';
+document.getElementById('warnaInputWrap').insertAdjacentElement('afterend', warnaDropdown);
+
+// rev.49: RINGER (Dewasa) cuma boleh 8 kombinasi 2-warna TETAP ini (beda dari daftar warna
+// stok biasa) - dipakai gantiin saran autocomplete Warna KHUSUS saat varian Ringer dipilih.
+const RING_WARNA_LIST = [
+  'GREY NAVY', 'PUTIH TERACOTA', 'PUTIH HITAM', 'MUSTARD NAVY',
+  'PUTIH COKLAT', 'PUTIH MUSTARD', 'PUTIH MERAH', 'PUTIH BIRU'
+];
+
+function tampilkanSaranWarna(){
+  const sumberList = (state.varianLabel && state.varianLabel.toLowerCase().indexOf('ringer') !== -1)
+    ? RING_WARNA_LIST : WARNA_LIST;
+  if (sumberList.length === 0) { warnaDropdown.style.display = 'none'; return; }
+  const q = warnaInput.value.trim().toUpperCase();
+  const cocok = q ? sumberList.filter(function(w){ return w.toUpperCase().indexOf(q) !== -1; }) : sumberList;
+  if (cocok.length === 0) { warnaDropdown.style.display = 'none'; return; }
+  warnaDropdown.innerHTML = cocok.slice(0,8).map(function(w, idx){
+    const bg = SOFT_BLUE_COLORS[idx % SOFT_BLUE_COLORS.length];
+    return '<div class="warna-opt" style="padding:10px 14px;font-size:14.5px;font-weight:600;' +
+      'border-bottom:0.5px solid #E5E5EA;background:' + bg + ';">' + w + '</div>';
+  }).join('');
+  const opts = warnaDropdown.querySelectorAll('.warna-opt');
+  opts[opts.length-1].style.borderBottom = 'none';
+  opts.forEach(function(el){
+    el.addEventListener('mousedown', function(ev){ ev.preventDefault(); }); // biar blur gak duluan sebelum sempat ke-tap
+    el.addEventListener('click', function(){
+      warnaInput.value = el.textContent;
+      state.warna = el.textContent;
+      warnaDropdown.style.display = 'none';
+      warnaInput.focus();
+      warnaInput.select(); // biar kalau lanjut ngetik tanpa keluar-masuk kolom dulu, otomatis GANTI bukan nempel
+      validate();
+      tampilkanStokRoll_();
+    });
+  });
+  warnaDropdown.style.display = 'block';
+}
+
+function fetchWarnaFresh(){
+  fetch(WEBAPP_URL + '?action=warna', { cache: 'no-store' })
+    .then(function(r){ return r.json(); })
+    .then(function(list){
+      WARNA_LIST = (list && list.length) ? list : (PREVIEW_MODE ? DUMMY_WARNA_LIST : list);
+      try { localStorage.setItem(WARNA_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: WARNA_LIST })); } catch(e){}
+    })
+    .catch(function(){ if (PREVIEW_MODE) WARNA_LIST = DUMMY_WARNA_LIST; /* selain itu diamkan - autocomplete cuma bonus, gak boleh ganggu form kalau gagal */ });
+}
+(function bootstrapWarna(){
+  try {
+    const cached = JSON.parse(localStorage.getItem(WARNA_CACHE_KEY) || 'null');
+    if (cached && cached.data && (Date.now() - cached.ts) < WARNA_CACHE_TTL_MS){
+      WARNA_LIST = cached.data;
+    }
+  } catch(e){}
+  fetchWarnaFresh(); // selalu refresh diam-diam juga, biar ikutan warna baru dari stok masuk
+})();
+
+// v.09: Kode Roll + Kg Sisa per warna KANONIK di STOK KAIN, dipakai buat auto-show Kode Roll
+// begitu Warna dipilih (mode biasa saja - lihat tampilkanStokRoll_()). Bukan cuma bonus tampilan:
+// biar tim potong gak salah ketik nomor roll, tapi field tetap bisa diedit manual kalau ternyata
+// mau pakai roll lain.
+let STOK_ROLL_PER_WARNA = {};
+// v.12: fungsi ini dipanggil begitu data STOK_ROLL_PER_WARNA baru datang dari server (fetch
+// pertama pas app dibuka BISA masih berjalan pas orang udah keburu milih kombinasi/warna -
+// tanpa ini, baris yang kepilih duluan sebelum data sampai bakal nyangkut di manual selamanya,
+// gak pernah dicek ulang lagi). Mode biasa cuma dipanggil kalau memang lagi mode biasa (biar
+// gak nimpa input yang lagi dipakai buat kombinasi), sama juga sebaliknya.
+function segarkanRollPickerAktif_(){
+  if (state.mode === 'kombinasi'){
+    if (state.comboWarna) state.comboWarna.forEach(function(w, i){ tampilkanStokRollCombo_(i, w); });
+  } else {
+    tampilkanStokRoll_();
+  }
+}
+function fetchStokRollFresh(){
+  fetch(WEBAPP_URL + '?action=stokRoll', { cache: 'no-store' })
+    .then(function(r){ return r.json(); })
+    .then(function(map){
+      STOK_ROLL_PER_WARNA = (map && Object.keys(map).length) ? map : (PREVIEW_MODE ? DUMMY_STOK_ROLL_PER_WARNA : {});
+      try { localStorage.setItem(STOK_ROLL_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: STOK_ROLL_PER_WARNA })); } catch(e){}
+      segarkanRollPickerAktif_();
+    })
+    .catch(function(){ STOK_ROLL_PER_WARNA = PREVIEW_MODE ? DUMMY_STOK_ROLL_PER_WARNA : {}; });
+}
+(function bootstrapStokRoll(){
+  try {
+    const cached = JSON.parse(localStorage.getItem(STOK_ROLL_CACHE_KEY) || 'null');
+    if (cached && cached.data && (Date.now() - cached.ts) < STOK_ROLL_CACHE_TTL_MS){
+      STOK_ROLL_PER_WARNA = cached.data;
+    }
+  } catch(e){}
+  fetchStokRollFresh();
+})();
+
+// v.10: 2 digit di depan koma (di-pad nol kalau cuma 1 digit) + selalu 2 di belakang koma -
+// format tampilan kg biar rapi & konsisten di dropdown Kode Roll. Cuma buat TAMPILAN (angka yang
+// beneran dikirim ke server tetap presisi asli, gak kepengaruh).
+function formatKg2_(kg){
+  const n = Math.round((parseFloat(kg) || 0) * 100) / 100;
+  const fixed = n.toFixed(2);
+  const neg = fixed.charAt(0) === '-';
+  const parts = (neg ? fixed.slice(1) : fixed).split('.');
+  const intPart = parts[0].length < 2 ? parts[0].padStart(2, '0') : parts[0];
+  return (neg ? '-' : '') + intPart + '.' + parts[1];
+}
+
+// v.10: warna latar baris dropdown Kode Roll - diganti-ganti per baris (bukan putih polos)
+// biar kontras jelas dari latar dropdown yang putih. Muter lagi kalau roll-nya lebih banyak
+// dari daftar warna ini.
+const ROLL_OPT_COLORS = ['#F1F7FD', '#EAF3FB', '#F5F9FE', '#E6F0FA', '#EFF6FC', '#E3EEF9'];
+
+function renderRollDropdown_(rolls){
+  rollDropdown.innerHTML = rolls.map(function(r, idx){
+    const bg = ROLL_OPT_COLORS[idx % ROLL_OPT_COLORS.length];
+    return '<div class="roll-opt" data-kode="' + r.kodeRoll + '" data-kg="' + r.kg + '" style="background:' + bg + ';">' +
+      '<span class="roll-opt-text">Roll ' + r.kodeRoll + ' / ' + formatKg2_(r.kg) + ' kg</span></div>';
+  }).join('') + '<div class="roll-opt-manual" id="rollOptManual">✏️ Ketik manual (roll lain)</div>';
+
+  rollDropdown.querySelectorAll('.roll-opt').forEach(function(el){
+    el.addEventListener('click', function(){ pilihRoll_(el.dataset.kode, parseFloat(el.dataset.kg)); });
+  });
+  document.getElementById('rollOptManual').addEventListener('click', function(){
+    rollDropdown.style.display = 'none';
+    switchKeManualRoll_(true);
+    rollInput.focus();
+  });
+}
+
+// v.11: param ke-2 `kg` BARU (opsional) - kalau diisi, kg roll itu ikut ditampilkan di tombol
+// Kode Roll (bukan cuma "Roll 0024" doang) - biar tim potong bisa langsung nyontek angka kg-nya
+// pas ngisi "Kg Kain Terpakai", gak perlu buka dropdown lagi buat lihat angkanya.
+function pilihRoll_(kode, kg){
+  rollInput.value = kode;
+  state.roll = kode;
+  rollAutoFilled = true;
+  rollPickerLabel.textContent = 'Roll ' + kode + ((kg !== undefined && kg !== null && !isNaN(kg)) ? '  ·  ' + formatKg2_(kg) + ' kg' : '');
+  rollPickerBtn.classList.remove('placeholder');
+  rollDropdown.style.display = 'none';
+}
+
+function switchKeManualRoll_(tampilkanLinkKeDaftar){
+  rollPickerWrap.style.display = 'none';
+  rollInputWrap.style.display = '';
+  rollDropdown.style.display = 'none';
+  rollKeDaftarLink.style.display = tampilkanLinkKeDaftar ? 'inline-block' : 'none';
+}
+
+function switchKePickerRoll_(){
+  rollInputWrap.style.display = 'none';
+  rollKeDaftarLink.style.display = 'none';
+  rollPickerWrap.style.display = '';
+}
+
+function resetRollPickerUI_(){
+  switchKeManualRoll_(false);
+  rollPickerLabel.textContent = '— pilih roll —';
+  rollPickerBtn.classList.add('placeholder');
+  rollDropdown.innerHTML = '';
+  rollDropdown.style.display = 'none';
+}
+
+rollPickerBtn.addEventListener('click', function(){
+  const showing = rollDropdown.style.display === 'block';
+  rollDropdown.style.display = showing ? 'none' : 'block';
+});
+rollKeDaftarLink.addEventListener('click', function(){ switchKePickerRoll_(); });
+document.addEventListener('click', function(e){
+  if (!rollPickerBtn.contains(e.target) && !rollDropdown.contains(e.target)) {
+    rollDropdown.style.display = 'none';
+  }
+});
+
+// Cocokkan warna yang lagi diketik/dipilih ke STOK_ROLL_PER_WARNA - persis kayak alur
+// bacaPetaWarnaKanonik() di backend (uppercase langsung), jadi cukup cocok persis di sini.
+function tampilkanStokRoll_(){
+  if (state.mode === 'kombinasi'){ resetRollPickerUI_(); return; } // v.10: kombinasi TETAP manual, gak disentuh
+  const w = (state.warna || '').trim().toUpperCase();
+  const rolls = w ? STOK_ROLL_PER_WARNA[w] : null;
+
+  if (!rolls || rolls.length === 0){
+    // Warna gak ada stok yang cocok - balik ke input manual biasa. Kalau isi sebelumnya HASIL
+    // AUTO (bukan diketik manual tim potong), kosongkan lagi biar gak nyangkut punya warna lama.
+    if (rollAutoFilled){ rollInput.value = ''; state.roll = ''; rollAutoFilled = false; }
+    switchKeManualRoll_(false);
+    return;
+  }
+
+  renderRollDropdown_(rolls);
+
+  // Kalau tim potong SUDAH ngetik kode roll sendiri (bukan hasil auto-show), jangan diganggu -
+  // tetap di mode manual, cuma dikasih link buat pindah ke dropdown stok kalau mau.
+  if (rollInput.value && !rollAutoFilled){
+    switchKeManualRoll_(true);
+    return;
+  }
+
+  if (rolls.length === 1){
+    pilihRoll_(rolls[0].kodeRoll, rolls[0].kg); // cuma 1 roll cocok - auto-pilih langsung
+  } else {
+    rollInput.value = ''; state.roll = ''; rollAutoFilled = false;
+    rollPickerLabel.textContent = '— pilih roll —';
+    rollPickerBtn.classList.add('placeholder');
+  }
+  switchKePickerRoll_();
+}
+
+function fetchKombinasiFresh(){
+  fetch(WEBAPP_URL + '?action=kombinasi', { cache: 'no-store' })
+    .then(function(r){ return r.json(); })
+    .then(function(list){
+      KOMBINASI_WARNA = (list && list.length) ? list : (PREVIEW_MODE ? DUMMY_KOMBINASI_WARNA : list);
+      try { localStorage.setItem(KOMBINASI_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: KOMBINASI_WARNA })); } catch(e){}
+    })
+    .catch(function(){ if (PREVIEW_MODE) KOMBINASI_WARNA = DUMMY_KOMBINASI_WARNA; /* selain itu diamkan - combo picker akan kasih pesan error saat dibuka */ });
+}
+(function bootstrapKombinasi(){
+  try {
+    const cached = JSON.parse(localStorage.getItem(KOMBINASI_CACHE_KEY) || 'null');
+    if (cached && cached.data && (Date.now() - cached.ts) < KOMBINASI_CACHE_TTL_MS){
+      KOMBINASI_WARNA = cached.data;
+    }
+  } catch(e){}
+  fetchKombinasiFresh();
+})();
+
+// v.12: peta sinonim warna (SINONIM -> KANONIK, mis. "CHOCO" -> "CINNAMON") dari sheet KAMUS
+// SINONIM WARNA - dipakai KHUSUS buat nyari roll warna Kombinasi (lihat tampilkanStokRollCombo_()).
+// Nama yang DITAMPILKAN ke tim potong (chip warna, teks kirim) TETAP pakai kata asli dari sheet
+// KOMBINASI WARNA (mis. "CHOCO") - peta ini cuma dipakai buat translate SEBELUM nyari ke
+// STOK_ROLL_PER_WARNA, gak pernah nimpa tampilan.
+let WARNA_KANONIK_MAP = {};
+function fetchWarnaKanonikFresh(){
+  fetch(WEBAPP_URL + '?action=warnaKanonik', { cache: 'no-store' })
+    .then(function(r){ return r.json(); })
+    .then(function(map){
+      WARNA_KANONIK_MAP = map || {};
+      try { localStorage.setItem(WARNA_KANONIK_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: WARNA_KANONIK_MAP })); } catch(e){}
+      segarkanRollPickerAktif_(); // v.12: sama kayak STOK_ROLL_PER_WARNA - data ini juga bisa datang belakangan
+    })
+    .catch(function(){ /* diamkan - kalau gagal, kombinasi yang gak pas namanya sama stok jatuh ke manual (aman) */ });
+}
+(function bootstrapWarnaKanonik(){
+  try {
+    const cached = JSON.parse(localStorage.getItem(WARNA_KANONIK_CACHE_KEY) || 'null');
+    if (cached && cached.data && (Date.now() - cached.ts) < WARNA_KANONIK_CACHE_TTL_MS){
+      WARNA_KANONIK_MAP = cached.data;
+    }
+  } catch(e){}
+  fetchWarnaKanonikFresh();
+})();
+
+// v.08: tabel Kg standar per varian (dipakai fitur "Kg tidak diketahui - pakai estimasi
+// standar"). Datanya dibaca dari sheet "STANDAR PEMAKAIAN" (Kategori | Varian | Kg per Pcs) -
+// sheet ini BARU/masih kosong sampai Denny isi datanya sendiri, jadi awalnya toggle akan selalu
+// bilang "belum tersedia" sampai sheet-nya diisi. Lihat cariStandarKg_() buat logic pencocokan.
+let STANDAR_PEMAKAIAN_LIST = [];
+function fetchStandarFresh(){
+  fetch(WEBAPP_URL + '?action=standarPemakaian', { cache: 'no-store' })
+    .then(function(r){ return r.json(); })
+    .then(function(list){
+      STANDAR_PEMAKAIAN_LIST = (list && list.length) ? list : (PREVIEW_MODE ? DUMMY_STANDAR_PEMAKAIAN : []);
+      try { localStorage.setItem(STANDAR_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: STANDAR_PEMAKAIAN_LIST })); } catch(e){}
+    })
+    .catch(function(){ if (PREVIEW_MODE) STANDAR_PEMAKAIAN_LIST = DUMMY_STANDAR_PEMAKAIAN; });
+}
+(function bootstrapStandar(){
+  try {
+    const cached = JSON.parse(localStorage.getItem(STANDAR_CACHE_KEY) || 'null');
+    if (cached && cached.data && (Date.now() - cached.ts) < STANDAR_CACHE_TTL_MS){
+      STANDAR_PEMAKAIAN_LIST = cached.data;
+    }
+  } catch(e){}
+  fetchStandarFresh();
+})();
+
+// Cari Kg per Pcs standar - cocokkan dulu lewat kodeItem (persis), kalau gak ketemu coba lewat
+// varianLabel (case-insensitive). null kalau memang belum ada datanya di sheet.
+function cariStandarKg_(kodeItem, varianLabel){
+  for (let i=0; i<STANDAR_PEMAKAIAN_LIST.length; i++){
+    const s = STANDAR_PEMAKAIAN_LIST[i];
+    if (kodeItem !== null && s.kodeItem && s.kodeItem === kodeItem) return parseFloat(s.kgPerPcs) || null;
+  }
+  for (let i=0; i<STANDAR_PEMAKAIAN_LIST.length; i++){
+    const s = STANDAR_PEMAKAIAN_LIST[i];
+    if (s.varian && varianLabel && s.varian.trim().toLowerCase() === varianLabel.trim().toLowerCase()) return parseFloat(s.kgPerPcs) || null;
+  }
+  return null;
+}
+
+const cbEstimasiKg = document.getElementById('pakaiEstimasiKg');
+const estimasiKgInfo = document.getElementById('estimasiKgInfo');
+const kgWarningInfo = document.getElementById('kgWarningInfo');
+
+function hitungEstimasiKg_(){
+  const total = updateTotal();
+  const kgPerPcs = cariStandarKg_(state.kodeItem, state.varianLabel);
+  if (kgPerPcs === null){
+    estimasiKgInfo.style.display = 'block';
+    estimasiKgInfo.style.color = 'var(--danger)';
+    estimasiKgInfo.textContent = 'Data standar untuk varian ini belum tersedia - isi Kg manual.';
+    return null;
+  }
+  if (total <= 0){
+    estimasiKgInfo.style.display = 'block';
+    estimasiKgInfo.style.color = 'var(--theme-accent-deep)';
+    estimasiKgInfo.textContent = 'Isi qty per ukuran dulu buat hitung estimasinya (' + kgPerPcs + ' kg/pcs).';
+    return null;
+  }
+  const est = Math.round(total * kgPerPcs * 100) / 100;
+  estimasiKgInfo.style.display = 'block';
+  estimasiKgInfo.style.color = 'var(--theme-accent-deep)';
+  estimasiKgInfo.textContent = '≈ ' + est + ' kg (estimasi ' + kgPerPcs + ' kg/pcs × ' + total + ' pcs)';
+  return est;
+}
+
+cbEstimasiKg.addEventListener('change', function(){
+  if (cbEstimasiKg.checked){
+    if (state.kodeItem === null){
+      cbEstimasiKg.checked = false;
+      showError('Pilih Varian dulu sebelum pakai estimasi standar.');
+      return;
+    }
+    const est = hitungEstimasiKg_();
+    if (est === null){
+      cbEstimasiKg.checked = false; // gak ada datanya / qty masih kosong - balik ke input manual
+      validate();
+      return;
+    }
+    kgInput.value = est;
+    kgInput.disabled = true;
+    state.kg = String(est);
+    state.kgEstimasi = true;
+  } else {
+    kgInput.disabled = false;
+    estimasiKgInfo.style.display = 'none';
+    state.kgEstimasi = false;
+  }
+  validate();
+});
+
+let dariCache = false;
+try {
+  const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+  if (cached && cached.data && (Date.now() - cached.ts) < CACHE_TTL_MS){
+    KATEGORI_VARIAN = cached.data;
+    dariCache = true;
+    initUI();
+    fetchFresh(true);
+  }
+} catch(e){}
+if (!dariCache) fetchFresh(false);
+
+document.getElementById('refreshLink').addEventListener('click', function(){
+  try {
+    localStorage.removeItem(CACHE_KEY);
+    localStorage.removeItem(WARNA_CACHE_KEY);
+    localStorage.removeItem(KOMBINASI_CACHE_KEY);
+  } catch(e){}
+  document.getElementById('mainWrap').style.display = 'none';
+  const ls = document.getElementById('loadingScreen');
+  ls.style.display = 'block';
+  ls.textContent = 'Memuat ulang data terbaru...';
+  fetchFresh(false);
+  fetchWarnaFresh();
+  fetchKombinasiFresh();
+});
+</script>
+</body>
 </html>
