@@ -364,11 +364,24 @@
   }
   .warna-chip .chip-text{font-size:12.5px;font-weight:700;letter-spacing:.2px;}
   .ganti-link{font-size:12.5px;color:var(--theme-accent-deep);font-weight:600;margin-top:10px;display:inline-block;cursor:pointer;transition:color .4s;}
-  .combo-kgroll-row{display:flex;gap:8px;margin-top:8px;}
+  .combo-kgroll-row{display:flex;gap:8px;margin-top:8px;align-items:flex-start;}
   .combo-kgroll-row input{
     flex:1;border:1px solid var(--sep);border-radius:8px;padding:9px 8px;font-size:14px;background:var(--canvas);
   }
   .combo-kgroll-label{font-size:11.5px;color:var(--ink-2);font-weight:650;margin-top:12px;margin-bottom:2px;}
+
+  /* v.12: dropdown Kode Roll per warna kombinasi (3 warna) - pola SAMA kayak dropdown Kode
+     Roll mode biasa (lihat .roll-opt dkk), cuma ditaruh per baris warna. */
+  .combo-roll-wrap{flex:1;min-width:0;}
+  .combo-roll-wrap input{width:100%;box-sizing:border-box;}
+  .combo-roll-picker-btn{
+    width:100%;box-sizing:border-box;border:1px solid var(--sep);border-radius:8px;padding:9px 8px;
+    font-size:14px;background:var(--canvas);display:flex;justify-content:space-between;align-items:center;
+    cursor:pointer;color:var(--ink);
+  }
+  .combo-roll-picker-btn.placeholder{color:var(--ink-3);}
+  .combo-roll-picker-btn .chev{font-size:11px;color:var(--ink-2);flex-shrink:0;margin-left:6px;}
+  .combo-roll-link{font-size:11.5px;color:var(--theme-accent-deep);font-weight:600;margin-top:5px;display:inline-block;cursor:pointer;}
 
   /* ---- Varian custom picker (ganti native <select> yang tampilannya gede bawaan Android) ---- */
   .custom-select-btn{
@@ -891,7 +904,7 @@ let daftarItem = []; // item biasa: {mode:'biasa', kategori, kodeItem, varianLab
 let state = {
   kategori: null, kodeItem: null, varianLabel: null, mode: 'biasa',
   warna: '', kg: '', roll: '', kgEstimasi: false,
-  comboWarna: null, comboKg: ['','',''], comboRoll: ['','',''],
+  comboWarna: null, comboKg: ['','',''], comboRoll: ['','',''], comboRollAutoFilled: [false,false,false],
   qty: {}
 };
 
@@ -1084,6 +1097,7 @@ function resetComboUI(){
   state.comboWarna = null;
   state.comboKg = ['','',''];
   state.comboRoll = ['','',''];
+  state.comboRollAutoFilled = [false,false,false];
 }
 
 warnaInput.addEventListener('input', function(){ state.warna = warnaInput.value; validate(); tampilkanSaranWarna(); tampilkanStokRoll_(); });
@@ -1142,9 +1156,16 @@ function pilihKombinasi(c){
 
   kgRollComboWrap.innerHTML = tiga.map(function(w, i){
     return '<div class="combo-kgroll-label">Kg + Kode Roll - ' + w + '</div>' +
-      '<div class="combo-kgroll-row" style="align-items:center;">' +
+      '<div class="combo-kgroll-row">' +
         '<input type="number" step="0.01" class="comboKgInput" data-idx="'+i+'" placeholder="kg">' +
-        '<input type="text" class="comboRollInput" data-idx="'+i+'" placeholder="kode roll (opsional)" inputmode="numeric" pattern="[0-9]*">' +
+        '<div class="combo-roll-wrap" data-idx="'+i+'">' +
+          '<input type="text" class="comboRollInput" data-idx="'+i+'" placeholder="kode roll (opsional)" inputmode="numeric" pattern="[0-9]*">' +
+          '<span class="combo-roll-link" data-idx="'+i+'" style="display:none;">🔽 Pilih dari stok tersedia</span>' +
+          '<div class="combo-roll-picker-btn placeholder" data-idx="'+i+'" style="display:none;">' +
+            '<span class="combo-roll-picker-label">— pilih roll —</span><span class="chev">▾</span>' +
+          '</div>' +
+          '<div class="combo-dropdown combo-roll-dropdown" data-idx="'+i+'"></div>' +
+        '</div>' +
       '</div>';
   }).join('');
   kgRollComboRow.style.display = 'block';
@@ -1157,10 +1178,122 @@ function pilihKombinasi(c){
     });
   });
   document.querySelectorAll('.comboRollInput').forEach(function(inp){
-    inp.addEventListener('input', function(){ state.comboRoll[parseInt(inp.dataset.idx,10)] = inp.value; });
+    inp.addEventListener('input', function(){
+      const idx = parseInt(inp.dataset.idx,10);
+      state.comboRoll[idx] = inp.value;
+      state.comboRollAutoFilled[idx] = false;
+    });
   });
+  document.querySelectorAll('.combo-roll-picker-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      const idx = btn.dataset.idx;
+      const dd = kgRollComboWrap.querySelector('.combo-roll-dropdown[data-idx="'+idx+'"]');
+      const showing = dd.style.display === 'block';
+      kgRollComboWrap.querySelectorAll('.combo-roll-dropdown').forEach(function(x){ x.style.display = 'none'; });
+      dd.style.display = showing ? 'none' : 'block';
+    });
+  });
+  document.querySelectorAll('.combo-roll-link').forEach(function(link){
+    link.addEventListener('click', function(){ comboSwitchKePicker_(link.dataset.idx); });
+  });
+
+  // v.12: begitu kombinasi dipilih, langsung cek stok roll buat KETIGA warnanya (sama kayak
+  // tampilkanStokRoll_() di mode biasa, cuma dijalankan 3x - satu per warna). Kalau salah satu
+  // warna gak ada stok yang cocok, warna itu jatuh ke input manual (yang lain tetap dropdown).
+  tiga.forEach(function(w, i){ tampilkanStokRollCombo_(i, w); });
+
   validate();
 }
+
+// ============ v.12: DROPDOWN KODE ROLL PER WARNA (mode Kombinasi 3 Warna) ============
+// Pola & fungsi-fungsi ini SENGAJA dibikin paralel 1:1 sama punya mode biasa
+// (renderRollDropdown_/pilihRoll_/switchKeManualRoll_/switchKePickerRoll_/resetRollPickerUI_/
+// tampilkanStokRoll_ di bawah) - bedanya cuma versi ini per-index (idx 0/1/2, satu per warna),
+// jadi 3 baris bisa beda kondisi (misal warna 1 & 3 ada stok jadi dropdown, warna 2 gak ada jadi manual).
+function comboRollWrapEl_(idx){ return kgRollComboWrap.querySelector('.combo-roll-wrap[data-idx="'+idx+'"]'); }
+
+function comboSwitchKeManual_(idx, tampilkanLink){
+  const wrap = comboRollWrapEl_(idx);
+  wrap.querySelector('.comboRollInput').style.display = '';
+  wrap.querySelector('.combo-roll-picker-btn').style.display = 'none';
+  wrap.querySelector('.combo-roll-dropdown').style.display = 'none';
+  wrap.querySelector('.combo-roll-link').style.display = tampilkanLink ? 'inline-block' : 'none';
+}
+function comboSwitchKePickerRoll_(idx){
+  const wrap = comboRollWrapEl_(idx);
+  wrap.querySelector('.comboRollInput').style.display = 'none';
+  wrap.querySelector('.combo-roll-link').style.display = 'none';
+  wrap.querySelector('.combo-roll-picker-btn').style.display = '';
+}
+function comboSwitchKePicker_(idx){ comboSwitchKePickerRoll_(idx); } // dipanggil dari link "🔽 Pilih dari stok tersedia"
+
+function comboResetRollPickerUI_(idx){
+  comboSwitchKeManual_(idx, false);
+  const wrap = comboRollWrapEl_(idx);
+  wrap.querySelector('.combo-roll-picker-label').textContent = '— pilih roll —';
+  wrap.querySelector('.combo-roll-picker-btn').classList.add('placeholder');
+  const dd = wrap.querySelector('.combo-roll-dropdown');
+  dd.innerHTML = ''; dd.style.display = 'none';
+}
+function comboPilihRoll_(idx, kode, kg){
+  const wrap = comboRollWrapEl_(idx);
+  wrap.querySelector('.comboRollInput').value = kode;
+  state.comboRoll[idx] = kode;
+  state.comboRollAutoFilled[idx] = true;
+  wrap.querySelector('.combo-roll-picker-label').textContent = 'Roll ' + kode + ((kg !== undefined && kg !== null && !isNaN(kg)) ? '  ·  ' + formatKg2_(kg) + ' kg' : '');
+  wrap.querySelector('.combo-roll-picker-btn').classList.remove('placeholder');
+  wrap.querySelector('.combo-roll-dropdown').style.display = 'none';
+}
+function comboRenderRollDropdown_(idx, rolls){
+  const wrap = comboRollWrapEl_(idx);
+  const dd = wrap.querySelector('.combo-roll-dropdown');
+  dd.innerHTML = rolls.map(function(r, i2){
+    const bg = ROLL_OPT_COLORS[i2 % ROLL_OPT_COLORS.length];
+    return '<div class="roll-opt" data-kode="' + r.kodeRoll + '" data-kg="' + r.kg + '" style="background:' + bg + ';">' +
+      '<span class="roll-opt-text">Roll ' + r.kodeRoll + ' / ' + formatKg2_(r.kg) + ' kg</span></div>';
+  }).join('') + '<div class="roll-opt-manual">✏️ Ketik manual (roll lain)</div>';
+  dd.querySelectorAll('.roll-opt').forEach(function(el){
+    el.addEventListener('click', function(){ comboPilihRoll_(idx, el.dataset.kode, parseFloat(el.dataset.kg)); });
+  });
+  dd.querySelector('.roll-opt-manual').addEventListener('click', function(){
+    dd.style.display = 'none';
+    comboSwitchKeManual_(idx, true);
+    wrap.querySelector('.comboRollInput').focus();
+  });
+}
+function tampilkanStokRollCombo_(idx, warnaWord){
+  const w = (warnaWord || '').trim().toUpperCase();
+  const rolls = w ? STOK_ROLL_PER_WARNA[w] : null;
+  const wrap = comboRollWrapEl_(idx);
+  const inp = wrap.querySelector('.comboRollInput');
+
+  if (!rolls || rolls.length === 0){
+    if (state.comboRollAutoFilled[idx]){ inp.value = ''; state.comboRoll[idx] = ''; state.comboRollAutoFilled[idx] = false; }
+    comboSwitchKeManual_(idx, false);
+    return;
+  }
+
+  comboRenderRollDropdown_(idx, rolls);
+
+  if (inp.value && !state.comboRollAutoFilled[idx]){
+    comboSwitchKeManual_(idx, true);
+    return;
+  }
+
+  if (rolls.length === 1){
+    comboPilihRoll_(idx, rolls[0].kodeRoll, rolls[0].kg);
+  } else {
+    inp.value = ''; state.comboRoll[idx] = ''; state.comboRollAutoFilled[idx] = false;
+    wrap.querySelector('.combo-roll-picker-label').textContent = '— pilih roll —';
+    wrap.querySelector('.combo-roll-picker-btn').classList.add('placeholder');
+  }
+  comboSwitchKePickerRoll_(idx);
+}
+document.addEventListener('click', function(e){
+  if (!e.target.closest('.combo-roll-wrap')) {
+    document.querySelectorAll('.combo-roll-dropdown').forEach(function(dd){ dd.style.display = 'none'; });
+  }
+});
 
 gantiKombinasi.addEventListener('click', function(){
   resetComboUI();
