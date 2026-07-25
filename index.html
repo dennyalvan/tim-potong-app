@@ -1262,9 +1262,10 @@ function comboRenderRollDropdown_(idx, rolls){
   });
 }
 function tampilkanStokRollCombo_(idx, warnaWord){
+  const wrap = comboRollWrapEl_(idx);
+  if (!wrap) return; // baris combo ini belum ke-render (kombinasi warna belum dipilih) - aman dilewati
   const w = (warnaWord || '').trim().toUpperCase();
   const rolls = w ? STOK_ROLL_PER_WARNA[w] : null;
-  const wrap = comboRollWrapEl_(idx);
   const inp = wrap.querySelector('.comboRollInput');
 
   if (!rolls || rolls.length === 0){
@@ -1781,12 +1782,25 @@ function fetchWarnaFresh(){
 // biar tim potong gak salah ketik nomor roll, tapi field tetap bisa diedit manual kalau ternyata
 // mau pakai roll lain.
 let STOK_ROLL_PER_WARNA = {};
+// v.12: fungsi ini dipanggil begitu data STOK_ROLL_PER_WARNA baru datang dari server (fetch
+// pertama pas app dibuka BISA masih berjalan pas orang udah keburu milih kombinasi/warna -
+// tanpa ini, baris yang kepilih duluan sebelum data sampai bakal nyangkut di manual selamanya,
+// gak pernah dicek ulang lagi). Mode biasa cuma dipanggil kalau memang lagi mode biasa (biar
+// gak nimpa input yang lagi dipakai buat kombinasi), sama juga sebaliknya.
+function segarkanRollPickerAktif_(){
+  if (state.mode === 'kombinasi'){
+    if (state.comboWarna) state.comboWarna.forEach(function(w, i){ tampilkanStokRollCombo_(i, w); });
+  } else {
+    tampilkanStokRoll_();
+  }
+}
 function fetchStokRollFresh(){
   fetch(WEBAPP_URL + '?action=stokRoll', { cache: 'no-store' })
     .then(function(r){ return r.json(); })
     .then(function(map){
       STOK_ROLL_PER_WARNA = (map && Object.keys(map).length) ? map : (PREVIEW_MODE ? DUMMY_STOK_ROLL_PER_WARNA : {});
       try { localStorage.setItem(STOK_ROLL_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: STOK_ROLL_PER_WARNA })); } catch(e){}
+      segarkanRollPickerAktif_();
     })
     .catch(function(){ STOK_ROLL_PER_WARNA = PREVIEW_MODE ? DUMMY_STOK_ROLL_PER_WARNA : {}; });
 }
