@@ -381,9 +381,10 @@ function renderRollSuggestions(query) {
   const box = document.getElementById('rollSuggestions');
   if (!box) return;
   const q = String(query || '').trim().toUpperCase();
-  if (!q) { box.innerHTML = ''; return; } // v.02: gak tampilin apa-apa sebelum ada huruf diketik
   const semua = daftarRollUntukWarna(itemBaru.warna);
-  const cocok = semua.filter(function (r) { return String(r.kodeRoll).toUpperCase().indexOf(q) === 0; });
+  // v.03: begitu warna udah kepilih, langsung tampilin SEMUA roll yang ada buat warna itu
+  // (gak perlu ketik dulu) - beda dari saran Warna yang emang sengaja nunggu ketikan.
+  const cocok = q ? semua.filter(function (r) { return String(r.kodeRoll).toUpperCase().indexOf(q) === 0; }) : semua;
   box.innerHTML = cocok.slice(0, 8).map(function (r) {
     return '<div class="suggestion-item roll-suggestion" data-pick-roll="' + escapeAttr(r.kodeRoll) + '">Roll ' + escapeHtml(r.kodeRoll) + ' / ' + r.kg + 'kg</div>';
   }).join('');
@@ -584,6 +585,7 @@ function pasangEventDetailCard() {
       itemBaru.kombinasi = { warna: [w1w2[0], w1w2.slice(1).join(' '), w3], kg: ['', '', ''], kodeRoll: [null, null, null] };
       openDropdown = null;
       renderDetailCard();
+      itemBaru.kombinasi.warna.forEach(function (w, i) { renderKombiRollSuggestions(i, ''); });
     });
   });
   document.querySelectorAll('[data-nama-ring]').forEach(function (el) {
@@ -592,6 +594,7 @@ function pasangEventDetailCard() {
       itemBaru.kombinasi = { warna: [parts[0], parts.slice(1).join(' ')], kg: ['', ''], kodeRoll: [null, null] };
       openDropdown = null;
       renderDetailCard();
+      itemBaru.kombinasi.warna.forEach(function (w, i) { renderKombiRollSuggestions(i, ''); });
     });
   });
   const linkGanti = document.getElementById('linkGantiKombinasi');
@@ -622,10 +625,9 @@ function renderKombiRollSuggestions(idx, query) {
   const box = document.getElementById('kombiRollSuggestions-' + idx);
   if (!box) return;
   const q = String(query || '').trim().toUpperCase();
-  if (!q) { box.innerHTML = ''; return; }
   const warna = itemBaru.kombinasi.warna[idx];
   const semua = daftarRollUntukWarna(warna);
-  const cocok = semua.filter(function (r) { return String(r.kodeRoll).toUpperCase().indexOf(q) === 0; });
+  const cocok = q ? semua.filter(function (r) { return String(r.kodeRoll).toUpperCase().indexOf(q) === 0; }) : semua;
   box.innerHTML = cocok.slice(0, 8).map(function (r) {
     return '<div class="suggestion-item roll-suggestion" data-pick-kombi-roll="' + escapeAttr(r.kodeRoll) + '">Roll ' + escapeHtml(r.kodeRoll) + ' / ' + r.kg + 'kg</div>';
   }).join('');
