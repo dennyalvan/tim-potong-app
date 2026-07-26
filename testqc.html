@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Dashboard Stok Kain + QC</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: #eef2fb;
+    --card-bg: #ffffff;
+    --indigo: #4f5fd1;
+    --indigo-dark: #3d4bb8;
+    --navy-dark: #1c2340;
+    --blue-link: #2563eb;
+    --orange-link: #d97706;
+    --gray-label: #9aa3b2;
+    --gray-text: #6b7280;
+    --border: #e2e8f0;
+    --green: #16a34a;
+    --danger: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: #1c1c1e; padding-bottom: 20px; }
+  #app { max-width: 520px; margin: 0 auto; padding: 16px; }
+
+  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
+  .header .brand { font-size: 12px; color: var(--blue-link); font-weight: 700; margin: 0 0 2px; }
+  .header h1 { font-size: 20px; margin: 0; }
+  .header-right { text-align: right; }
+  .btn-refresh { background: #fff; border: 1px solid var(--border); border-radius: 20px; padding: 8px 16px; font-weight: 700; font-size: 13px; cursor: pointer; color: #374151; }
+  .last-update { font-size: 11px; color: var(--gray-text); margin-top: 4px; }
+
+  .tab-toggle { display: flex; gap: 10px; margin-bottom: 12px; }
+  .tab-btn { flex: 1; padding: 12px; border-radius: 12px; border: none; background: #fff; font-weight: 700; font-size: 14px; cursor: pointer; color: #374151; display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .tab-btn.active { background: var(--indigo); color: #fff; }
+
+  .link-orange { text-align: right; font-size: 13px; color: var(--orange-link); margin-bottom: 14px; cursor: pointer; }
+
+  .card { background: var(--card-bg); border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+  .section-label { font-size: 12px; color: var(--gray-label); font-weight: 700; letter-spacing: 0.5px; margin: 14px 0 8px; }
+
+  .empty-box { border: 1px dashed var(--border); border-radius: 14px; padding: 16px; color: var(--gray-text); font-size: 13px; text-align: center; margin-bottom: 12px; }
+  .btn-kirim-rekap { background: var(--indigo); color: #fff; border: none; border-radius: 12px; padding: 12px 20px; font-weight: 700; font-size: 14px; cursor: pointer; width: 100%; margin-bottom: 12px; }
+  .btn-kirim-rekap:disabled { background: #b9c0e8; cursor: default; }
+  .status-bar { background: var(--navy-dark); color: #fff; border-radius: 12px; padding: 14px 16px; font-size: 13px; margin-bottom: 14px; }
+
+  .search-box { width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; font-size: 14px; margin-bottom: 8px; background: #fff; }
+  .count-label { font-size: 12px; color: var(--gray-text); margin-bottom: 8px; }
+  .filter-chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 10px; }
+  .chip { flex-shrink: 0; padding: 8px 14px; border-radius: 20px; border: 1px solid var(--border); background: #fff; font-size: 13px; font-weight: 600; cursor: pointer; color: #374151; white-space: nowrap; }
+  .chip.active { background: var(--indigo); color: #fff; border-color: var(--indigo); }
+
+  .laporan-card { background: #fff; border-radius: 14px; padding: 14px; margin-bottom: 10px; }
+  .laporan-top { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+  .laporan-top .idx { color: var(--gray-label); font-size: 13px; font-weight: 700; padding-top: 2px; }
+  .laporan-top .chk { margin-top: 4px; }
+  .laporan-info { flex: 1; }
+  .laporan-info .nama { font-weight: 700; font-size: 14px; }
+  .badge-kat { display: inline-block; font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 5px; margin-left: 6px; background: #1c2340; color: #fff; }
+  .badge-kat.anak { background: #0d9488; }
+  .laporan-meta { font-size: 12px; color: var(--gray-text); margin-top: 3px; }
+  .laporan-meta .roll { color: var(--orange-link); font-weight: 600; }
+  .progress-circle { text-align: right; }
+  .progress-circle .fraction { font-weight: 800; font-size: 15px; }
+  .progress-bar-mini { width: 70px; height: 4px; background: #e5e9f2; border-radius: 4px; margin-top: 4px; overflow: hidden; }
+  .progress-bar-mini .fill { height: 100%; background: var(--green); }
+
+  .laporan-expand { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px; }
+  .ukuran-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .ukuran-badge { background: #eef2fb; border-radius: 8px; padding: 4px 9px; font-size: 12px; font-weight: 700; color: #374151; }
+  .progress-bar-full { width: 100%; height: 8px; background: #e5e9f2; border-radius: 8px; overflow: hidden; margin-bottom: 8px; }
+  .progress-bar-full .fill { height: 100%; background: var(--green); }
+  .stats-line { display: flex; justify-content: space-between; font-size: 12px; color: var(--gray-text); font-weight: 600; margin-bottom: 12px; }
+  .stats-line .sel { color: var(--green); }
+  .stats-line .rej { color: var(--danger); }
+
+  .mode-toggle { display: flex; gap: 8px; margin-bottom: 12px; }
+  .mode-btn { flex: 1; padding: 9px; border-radius: 10px; border: 1px solid var(--border); background: #fff; font-weight: 700; font-size: 13px; cursor: pointer; color: #374151; }
+  .mode-btn.active { background: var(--indigo); color: #fff; border-color: var(--indigo); }
+
+  .ringkas-fields { display: flex; gap: 10px; margin-bottom: 12px; }
+  .ringkas-fields .field { flex: 1; }
+  .ringkas-fields label { font-size: 12px; font-weight: 700; display: block; margin-bottom: 5px; }
+  .ringkas-fields input { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 10px; font-size: 15px; }
+
+  table.rincian-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 13px; }
+  table.rincian-table th { text-align: left; color: var(--gray-label); font-weight: 700; font-size: 11px; padding: 4px 2px; }
+  table.rincian-table td { padding: 6px 2px; border-top: 1px solid #f1f4f9; }
+  table.rincian-table input { width: 48px; padding: 6px; border: 1px solid var(--border); border-radius: 6px; text-align: center; }
+
+  .btn-tambah-antrian { width: 100%; background: var(--indigo); color: #fff; border: none; border-radius: 10px; padding: 12px; font-weight: 700; font-size: 14px; cursor: pointer; }
+
+  .arsip-toggle { background: #fff; border-radius: 14px; padding: 14px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; margin-top: 14px; font-weight: 700; font-size: 13px; }
+  .arsip-toggle .sub { display: block; font-weight: 400; color: var(--gray-text); font-size: 12px; margin-top: 2px; }
+  .arsip-list { margin-top: 8px; }
+  .arsip-item { background: #fff; border-radius: 12px; padding: 10px 12px; margin-bottom: 6px; font-size: 13px; display: flex; justify-content: space-between; }
+  .arsip-item .nama { font-weight: 700; }
+  .arsip-item .meta { color: var(--gray-text); font-size: 11px; }
+
+  .total-card { background: #fff; border-radius: 16px; padding: 16px; margin-bottom: 14px; border-top: 3px solid var(--green); }
+  .total-card .label { font-size: 12px; color: var(--gray-text); }
+  .total-card .value { font-size: 30px; font-weight: 800; }
+  .total-card .value .unit { font-size: 15px; font-weight: 600; color: var(--gray-text); }
+  .total-card .sub { font-size: 12px; color: var(--gray-text); margin-top: 2px; }
+
+  .warna-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .warna-card { background: #fff; border-radius: 14px; padding: 12px 14px; cursor: pointer; }
+  .warna-card-top { display: flex; align-items: center; gap: 8px; }
+  .warna-card .swatch { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+  .warna-card .nama { font-weight: 700; font-size: 13px; flex: 1; }
+  .warna-card .kg { font-weight: 800; font-size: 13px; }
+  .warna-card .roll-count { font-size: 11px; color: var(--gray-text); margin-top: 2px; }
+  .warna-detail { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px; }
+  .warna-detail .roll-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; border-bottom: 1px dashed #f1f4f9; }
+
+  .toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); background: #1c1c1e; color: #fff; padding: 10px 18px; border-radius: 10px; font-size: 13px; z-index: 999; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div class="header">
+    <div>
+      <p class="brand">TIM POTONG · REKAP MAKLOON</p>
+      <h1 id="pageTitle">Dashboard Stok Kain</h1>
+      <p class="last-update" id="lastUpdate"></p>
+    </div>
+    <div class="header-right">
+      <button class="btn-refresh" id="btnRefresh">🔄 Refresh</button>
+    </div>
+  </div>
+
+  <div class="tab-toggle">
+    <button class="tab-btn active" data-tab="qc">✅ Proses & QC</button>
+    <button class="tab-btn" data-tab="stok">🧵 Stok Kain</button>
+  </div>
+  <div class="link-orange">✏️ Atur Tampilan</div>
+
+  <!-- ============ TAB: PROSES & QC ============ -->
+  <div id="tabQC">
+    <div class="section-label">DAFTAR ANTRIAN</div>
+    <div id="antrianKosong" class="empty-box">Belum ada laporan di daftar antrian. Buka 1 laporan di bawah, isi form QC, lalu tekan "+ Tambah ke Daftar".</div>
+    <div id="antrianIsiWrap" style="display:none">
+      <div class="status-bar" id="antrianRingkasan"></div>
+    </div>
+    <button class="btn-kirim-rekap" id="btnKirimRekap" disabled>🚀 Kirim Rekap (0)</button>
+
+    <input type="text" class="search-box" id="searchLaporan" placeholder="Cari laporan/warna...">
+    <div class="count-label" id="countLabel">0 dari 0 laporan</div>
+    <div class="filter-chips">
+      <div class="chip active" data-filter="semua">Semua</div>
+      <div class="chip" data-filter="anak">Anak</div>
+      <div class="chip" data-filter="dewasa">Dewasa</div>
+      <div class="chip active" data-sort="lama">Paling lama</div>
+      <div class="chip" data-sort="baru">Tanggal terbaru</div>
+    </div>
+
+    <div id="daftarLaporan"></div>
+
+    <div class="arsip-toggle" id="arsipToggle">
+      <span>📁 Arsip Selesai (3 hari terakhir)<span class="sub" id="arsipSub">Ketuk buat lihat</span></span>
+      <span id="arsipChevron">▾</span>
+    </div>
+    <div class="arsip-list" id="arsipList" style="display:none"></div>
+  </div>
+
+  <!-- ============ TAB: STOK KAIN ============ -->
+  <div id="tabStok" style="display:none">
+    <div class="total-card">
+      <div class="label">Total Kain Tersisa</div>
+      <div class="value" id="totalKgTersisa">0 <span class="unit">kg</span></div>
+      <div class="sub" id="totalKgSub">di 0 roll · 0 warna</div>
+    </div>
+    <div class="section-label">STOK TERSISA PER WARNA</div>
+    <input type="text" class="search-box" id="searchWarna" placeholder="Cari nama kain/warna...">
+    <div class="filter-chips">
+      <div class="chip active" data-sortwarna="kg">Kg terbanyak</div>
+      <div class="chip" data-sortwarna="nama">Nama A-Z</div>
+      <div class="chip" data-sortwarna="roll">Roll terbanyak</div>
+    </div>
+    <div class="warna-grid" id="warnaGrid"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+// KONFIGURASI - GANTI sesuai URL Worker produksi
+// ============================================================
+const WORKER_URL = 'https://tim-potong-api.dennyalvan.workers.dev';
+const DAFTAR_UKURAN_URUT = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL', '5XL', '6XL'];
+const WARNA_KE_HEX = {}; // opsional, kalau mau dipetakan ke warna asli - default abu-abu
+
+const tg = window.Telegram ? window.Telegram.WebApp : null;
+if (tg) { tg.ready(); tg.expand(); }
+
+let daftarLaporanData = [];
+let antrianQC = []; // [{timPotongId, mode, ringkas, rincian, preview}]
+let filterKategori = 'semua';
+let sortLaporan = 'lama';
+let searchQuery = '';
+let laporanTerbuka = {}; // { [id]: true } - state expand per baris
+let modePerLaporan = {}; // { [id]: 'ringkas'|'rincian' }
+
+let stokUtuhData = null;
+let sortWarna = 'kg';
+let searchWarnaQuery = '';
+let warnaTerbuka = {};
+
+// ------------------------------------------------------------
+// TAB SWITCH
+// ------------------------------------------------------------
+document.querySelectorAll('.tab-btn').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    const tab = btn.dataset.tab;
+    document.getElementById('tabQC').style.display = tab === 'qc' ? 'block' : 'none';
+    document.getElementById('tabStok').style.display = tab === 'stok' ? 'block' : 'none';
+    document.getElementById('pageTitle').textContent = tab === 'qc' ? 'Dashboard Stok Kain' : 'Dashboard Stok Kain';
+    if (tab === 'stok' && !stokUtuhData) muatStokUtuh();
+  });
+});
+
+document.getElementById('btnRefresh').addEventListener('click', function () {
+  tampilkanToast('Memuat ulang...');
+  muatDaftarLaporan();
+  if (stokUtuhData) muatStokUtuh();
+});
+
+function updateJamRefresh() {
+  const now = new Date();
+  document.getElementById('lastUpdate').textContent = 'Diperbarui ' + now.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) + ', ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+}
+
+// ------------------------------------------------------------
+// MUAT DAFTAR LAPORAN
+// ------------------------------------------------------------
+function muatDaftarLaporan() {
+  fetch(WORKER_URL + '/data/laporan-qc')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      daftarLaporanData = Array.isArray(data) ? data : [];
+      updateJamRefresh();
+      renderDaftarLaporan();
+    })
+    .catch(function (e) { tampilkanToast('Gagal memuat laporan: ' + e.message); });
+}
+
+function hariLaluTeks(tanggalStr) {
+  if (!tanggalStr) return '';
+  const tgl = new Date(tanggalStr + 'T00:00:00');
+  const now = new Date();
+  const diffHari = Math.floor((now - tgl) / (1000 * 60 * 60 * 24));
+  if (diffHari <= 0) return 'hari ini';
+  if (diffHari === 1) return '1 hari lalu';
+  return diffHari + ' hari lalu';
+}
+
+function renderDaftarLaporan() {
+  let data = daftarLaporanData.slice();
+
+  if (filterKategori !== 'semua') {
+    data = data.filter(function (r) { return String(r.kategoriBadge || '').toLowerCase() === filterKategori; });
+  }
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    data = data.filter(function (r) { return String(r.jenisWarnaBaju || '').toLowerCase().indexOf(q) !== -1; });
+  }
+  data.sort(function (a, b) {
+    if (sortLaporan === 'lama') return new Date(a.tanggal) - new Date(b.tanggal);
+    return new Date(b.tanggal) - new Date(a.tanggal);
+  });
+
+  document.getElementById('countLabel').textContent = data.length + ' dari ' + daftarLaporanData.length + ' laporan';
+
+  const container = document.getElementById('daftarLaporan');
+  container.innerHTML = data.map(function (r, idx) { return renderLaporanCard(r, idx + 1); }).join('');
+  pasangEventLaporanCard();
+}
+
+function renderLaporanCard(r, nomor) {
+  const persen = r.jumlah > 0 ? Math.round((r.totalSelesai / r.jumlah) * 100) : 0;
+  const terbuka = !!laporanTerbuka[r.id];
+  const badgeClass = String(r.kategoriBadge || '').toLowerCase() === 'anak' ? 'anak' : '';
+
+  let html = '<div class="laporan-card" data-id="' + r.id + '">' +
+    '<div class="laporan-top" data-toggle="' + r.id + '">' +
+    '<span class="idx">' + nomor + '</span>' +
+    '<div class="laporan-info">' +
+    '<span class="nama">' + escapeHtml(r.jenisWarnaBaju) + '</span>' +
+    (r.kategoriBadge ? '<span class="badge-kat ' + badgeClass + '">' + escapeHtml(r.kategoriBadge) + '</span>' : '') +
+    '<div class="laporan-meta">' + escapeHtml(r.tanggal) + ' · <span class="roll">Roll ' + (r.kodeRoll ? escapeHtml(r.kodeRoll) : '-') + '</span> · ' + (r.pemakaianKainKg || 0) + 'kg · ' + hariLaluTeks(r.tanggal) + '</div>' +
+    '</div>' +
+    '<div class="progress-circle"><span class="fraction">' + r.totalSelesai + '/' + r.jumlah + '</span>' +
+    '<div class="progress-bar-mini"><div class="fill" style="width:' + persen + '%"></div></div></div>' +
+    '</div>';
+
+  if (terbuka) {
+    html += renderLaporanExpand(r);
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderLaporanExpand(r) {
+  const persen = r.jumlah > 0 ? Math.round((r.totalSelesai / r.jumlah) * 100) : 0;
+  const mode = modePerLaporan[r.id] || 'ringkas';
+  const perUkuranSorted = r.perUkuran.slice().sort(function (a, b) { return DAFTAR_UKURAN_URUT.indexOf(a.ukuran) - DAFTAR_UKURAN_URUT.indexOf(b.ukuran); });
+
+  let html = '<div class="laporan-expand">' +
+    '<div class="ukuran-badges">' + perUkuranSorted.map(function (u) { return '<span class="ukuran-badge">' + u.ukuran + ' ' + u.qty + '</span>'; }).join('') + '</div>' +
+    '<div class="progress-bar-full"><div class="fill" style="width:' + persen + '%"></div></div>' +
+    '<div class="stats-line"><span class="sel">Sel ' + r.totalSelesai + '</span><span class="rej">Rej ' + r.totalReject + '</span><span>Sisa ' + r.sisa + '</span></div>' +
+    '<div class="mode-toggle">' +
+    '<button class="mode-btn ' + (mode === 'ringkas' ? 'active' : '') + '" data-modebtn="ringkas" data-id="' + r.id + '">Ringkas</button>' +
+    '<button class="mode-btn ' + (mode === 'rincian' ? 'active' : '') + '" data-modebtn="rincian" data-id="' + r.id + '">Rincian</button>' +
+    '</div>';
+
+  if (mode === 'ringkas') {
+    html += '<div class="ringkas-fields">' +
+      '<div class="field"><label>Selesai</label><input type="number" min="0" id="ringkasSelesai-' + r.id + '" value="0"></div>' +
+      '<div class="field"><label>Reject</label><input type="number" min="0" id="ringkasReject-' + r.id + '" value="0"></div>' +
+      '</div>';
+  } else {
+    html += '<table class="rincian-table"><thead><tr><th>UK</th><th>QTY</th><th>SEL</th><th>REJ</th><th>SISA</th></tr></thead><tbody>';
+    perUkuranSorted.forEach(function (u) {
+      const selesai = u.sisa <= 0
+        ? u.selesai
+        : '<input type="number" min="0" max="' + u.sisa + '" id="rincianSel-' + r.id + '-' + u.ukuran + '" value="0">';
+      const reject = u.sisa <= 0
+        ? u.reject
+        : '<input type="number" min="0" max="' + u.sisa + '" id="rincianRej-' + r.id + '-' + u.ukuran + '" value="0">';
+      html += '<tr><td>' + u.ukuran + '</td><td>' + u.qty + '</td><td>' + selesai + '</td><td>' + reject + '</td><td>' + u.sisa + '</td></tr>';
+    });
+    html += '</tbody></table>';
+  }
+
+  html += '<button class="btn-tambah-antrian" data-tambah="' + r.id + '">+ Tambah ke Daftar</button></div>';
+  return html;
+}
+
+function pasangEventLaporanCard() {
+  document.querySelectorAll('[data-toggle]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      const id = el.dataset.toggle;
+      laporanTerbuka[id] = !laporanTerbuka[id];
+      renderDaftarLaporan();
+    });
+  });
+  document.querySelectorAll('[data-modebtn]').forEach(function (el) {
+    el.addEventListener('click', function (e) {
+      e.stopPropagation();
+      modePerLaporan[el.dataset.id] = el.dataset.modebtn;
+      renderDaftarLaporan();
+    });
+  });
+  document.querySelectorAll('[data-tambah]').forEach(function (el) {
+    el.addEventListener('click', function (e) {
+      e.stopPropagation();
+      tambahKeAntrian(parseInt(el.dataset.tambah, 10));
+    });
+  });
+}
+
+function tambahKeAntrian(id) {
+  const r = daftarLaporanData.find(function (x) { return x.id === id; });
+  const mode = modePerLaporan[id] || 'ringkas';
+  let entry = { timPotongId: id, mode: mode, preview: r.jenisWarnaBaju };
+
+  if (mode === 'ringkas') {
+    const s = parseFloat(document.getElementById('ringkasSelesai-' + id).value) || 0;
+    const rj = parseFloat(document.getElementById('ringkasReject-' + id).value) || 0;
+    if (s <= 0 && rj <= 0) { tampilkanToast('Isi dulu Selesai/Reject.'); return; }
+    entry.ringkas = { selesai: s, reject: rj };
+    entry.preview += ' - Ringkas Sel ' + s + ' Rej ' + rj;
+  } else {
+    const rincian = [];
+    r.perUkuran.forEach(function (u) {
+      if (u.sisa <= 0) return;
+      const selEl = document.getElementById('rincianSel-' + id + '-' + u.ukuran);
+      const rejEl = document.getElementById('rincianRej-' + id + '-' + u.ukuran);
+      const s = selEl ? (parseFloat(selEl.value) || 0) : 0;
+      const rj = rejEl ? (parseFloat(rejEl.value) || 0) : 0;
+      if (s > 0 || rj > 0) rincian.push({ ukuran: u.ukuran, selesai: s, reject: rj });
+    });
+    if (rincian.length === 0) { tampilkanToast('Isi dulu minimal 1 ukuran.'); return; }
+    entry.rincian = rincian;
+    entry.preview += ' - Rincian ' + rincian.map(function (x) { return x.ukuran + ':' + x.selesai + '/' + x.reject; }).join(', ');
+  }
+
+  antrianQC.push(entry);
+  laporanTerbuka[id] = false;
+  renderDaftarLaporan();
+  renderAntrian();
+  tampilkanToast('✓ Ditambahkan ke antrian');
+}
+
+function renderAntrian() {
+  const kosong = document.getElementById('antrianKosong');
+  const isiWrap = document.getElementById('antrianIsiWrap');
+  const ringkasan = document.getElementById('antrianRingkasan');
+  const btnKirim = document.getElementById('btnKirimRekap');
+
+  if (antrianQC.length === 0) {
+    kosong.style.display = 'block';
+    isiWrap.style.display = 'none';
+  } else {
+    kosong.style.display = 'none';
+    isiWrap.style.display = 'block';
+    ringkasan.innerHTML = antrianQC.map(function (a, i) {
+      return (i + 1) + '. ' + escapeHtml(a.preview);
+    }).join('<br>');
+  }
+  btnKirim.textContent = '🚀 Kirim Rekap (' + antrianQC.length + ')';
+  btnKirim.disabled = antrianQC.length === 0;
+}
+
+document.getElementById('btnKirimRekap').addEventListener('click', function () {
+  if (!tg || !tg.initData) { tampilkanToast('Harus dibuka lewat Telegram.'); return; }
+  if (antrianQC.length === 0) return;
+  const btn = this;
+  btn.disabled = true;
+  btn.textContent = 'Mengirim...';
+
+  const antrianSalinan = antrianQC.slice();
+  let berhasil = 0, gagalPesan = [];
+
+  function prosesSatuPersatu(i) {
+    if (i >= antrianSalinan.length) {
+      antrianQC = [];
+      renderAntrian();
+      muatDaftarLaporan();
+      if (gagalPesan.length > 0) {
+        tampilkanToast(berhasil + ' berhasil, ' + gagalPesan.length + ' gagal - cek detail.');
+        alert('Gagal:\n' + gagalPesan.join('\n'));
+      } else {
+        tampilkanToast('✓ Semua (' + berhasil + ') berhasil dikirim!');
+      }
+      return;
+    }
+    const item = antrianSalinan[i];
+    const payload = { initData: tg.initData, timPotongId: item.timPotongId, mode: item.mode };
+    if (item.mode === 'ringkas') payload.ringkas = item.ringkas; else payload.rincian = item.rincian;
+
+    fetch(WORKER_URL + '/submit-qc', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.ok) berhasil++; else gagalPesan.push(item.preview + ': ' + data.error);
+        prosesSatuPersatu(i + 1);
+      })
+      .catch(function (e) {
+        gagalPesan.push(item.preview + ': ' + e.message);
+        prosesSatuPersatu(i + 1);
+      });
+  }
+  prosesSatuPersatu(0);
+});
+
+// ------------------------------------------------------------
+// SEARCH & FILTER
+// ------------------------------------------------------------
+document.getElementById('searchLaporan').addEventListener('input', function () {
+  searchQuery = this.value;
+  renderDaftarLaporan();
+});
+document.querySelectorAll('.chip[data-filter]').forEach(function (el) {
+  el.addEventListener('click', function () {
+    document.querySelectorAll('.chip[data-filter]').forEach(function (c) { c.classList.remove('active'); });
+    el.classList.add('active');
+    filterKategori = el.dataset.filter;
+    renderDaftarLaporan();
+  });
+});
+document.querySelectorAll('.chip[data-sort]').forEach(function (el) {
+  el.addEventListener('click', function () {
+    document.querySelectorAll('.chip[data-sort]').forEach(function (c) { c.classList.remove('active'); });
+    el.classList.add('active');
+    sortLaporan = el.dataset.sort;
+    renderDaftarLaporan();
+  });
+});
+
+// ------------------------------------------------------------
+// ARSIP SELESAI
+// ------------------------------------------------------------
+let arsipDimuat = false;
+document.getElementById('arsipToggle').addEventListener('click', function () {
+  const list = document.getElementById('arsipList');
+  const terbuka = list.style.display === 'block';
+  list.style.display = terbuka ? 'none' : 'block';
+  document.getElementById('arsipChevron').textContent = terbuka ? '▾' : '▴';
+  if (!terbuka && !arsipDimuat) muatArsip();
+});
+function muatArsip() {
+  fetch(WORKER_URL + '/data/arsip-selesai?hari=3')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      arsipDimuat = true;
+      const list = Array.isArray(data) ? data : [];
+      document.getElementById('arsipSub').textContent = list.length + ' laporan';
+      document.getElementById('arsipList').innerHTML = list.map(function (a) {
+        return '<div class="arsip-item"><div><div class="nama">' + escapeHtml(a.jenisWarnaBaju) + '</div>' +
+          '<div class="meta">' + (a.tanggal || '') + ' · ' + (a.jumlah || 0) + ' pcs</div></div>' +
+          '<div class="meta">' + new Date(a.waktu).toLocaleString('id-ID') + '</div></div>';
+      }).join('');
+    })
+    .catch(function (e) { tampilkanToast('Gagal memuat arsip: ' + e.message); });
+}
+
+// ------------------------------------------------------------
+// TAB STOK KAIN
+// ------------------------------------------------------------
+function muatStokUtuh() {
+  fetch(WORKER_URL + '/data/stok-utuh')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      stokUtuhData = data;
+      document.getElementById('totalKgTersisa').innerHTML = formatAngka(data.totalKg) + ' <span class="unit">kg</span>';
+      document.getElementById('totalKgSub').textContent = 'di ' + data.totalRoll + ' roll · ' + data.totalWarna + ' warna';
+      renderWarnaGrid();
+    })
+    .catch(function (e) { tampilkanToast('Gagal memuat stok: ' + e.message); });
+}
+function renderWarnaGrid() {
+  if (!stokUtuhData) return;
+  let list = stokUtuhData.perWarna.slice();
+  if (searchWarnaQuery) {
+    const q = searchWarnaQuery.toLowerCase();
+    list = list.filter(function (w) { return w.warna.toLowerCase().indexOf(q) !== -1; });
+  }
+  if (sortWarna === 'kg') list.sort(function (a, b) { return b.totalKg - a.totalKg; });
+  else if (sortWarna === 'nama') list.sort(function (a, b) { return a.warna.localeCompare(b.warna); });
+  else if (sortWarna === 'roll') list.sort(function (a, b) { return b.jumlahRoll - a.jumlahRoll; });
+
+  document.getElementById('warnaGrid').innerHTML = list.map(function (w, i) {
+    const terbuka = !!warnaTerbuka[w.warna];
+    let html = '<div class="warna-card" data-warnatoggle="' + escapeAttr(w.warna) + '">' +
+      '<div class="warna-card-top"><span class="swatch" style="background:' + (WARNA_KE_HEX[w.warna] || '#9aa3b2') + '"></span>' +
+      '<span class="nama">' + (i + 1) + '. ' + escapeHtml(w.warna) + '</span></div>' +
+      '<div style="display:flex;justify-content:space-between;margin-top:4px"><span class="roll-count">' + w.jumlahRoll + ' roll</span><span class="kg">' + formatAngka(w.totalKg) + ' kg</span></div>';
+    if (terbuka) {
+      html += '<div class="warna-detail">' + w.rolls.map(function (r) {
+        return '<div class="roll-row"><span>Roll ' + escapeHtml(r.kodeRoll) + '</span><span>' + formatAngka(r.kg) + ' kg</span></div>';
+      }).join('') + '</div>';
+    }
+    html += '</div>';
+    return html;
+  }).join('');
+
+  document.querySelectorAll('[data-warnatoggle]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      const w = el.dataset.warnatoggle;
+      warnaTerbuka[w] = !warnaTerbuka[w];
+      renderWarnaGrid();
+    });
+  });
+}
+document.getElementById('searchWarna').addEventListener('input', function () {
+  searchWarnaQuery = this.value;
+  renderWarnaGrid();
+});
+document.querySelectorAll('.chip[data-sortwarna]').forEach(function (el) {
+  el.addEventListener('click', function () {
+    document.querySelectorAll('.chip[data-sortwarna]').forEach(function (c) { c.classList.remove('active'); });
+    el.classList.add('active');
+    sortWarna = el.dataset.sortwarna;
+    renderWarnaGrid();
+  });
+});
+
+// ------------------------------------------------------------
+// HELPER
+// ------------------------------------------------------------
+function escapeHtml(t) { return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function escapeAttr(t) { return escapeHtml(t).replace(/"/g, '&quot;'); }
+function formatAngka(n) { return Number(n).toLocaleString('id-ID', { maximumFractionDigits: 1 }); }
+function tampilkanToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(function () { el.classList.remove('show'); }, 2500);
+}
+
+// ------------------------------------------------------------
+// BOOTSTRAP
+// ------------------------------------------------------------
+muatDaftarLaporan();
+</script>
+</body>
+</html>
