@@ -387,14 +387,16 @@ function renderRollSuggestions(query) {
   // (gak perlu ketik dulu) - beda dari saran Warna yang emang sengaja nunggu ketikan.
   const cocok = q ? semua.filter(function (r) { return String(r.kodeRoll).toUpperCase().indexOf(q) === 0; }) : semua;
   box.innerHTML = cocok.slice(0, 8).map(function (r) {
-    return '<div class="suggestion-item roll-suggestion" data-pick-roll="' + escapeAttr(r.kodeRoll) + '">Roll ' + escapeHtml(r.kodeRoll) + ' / ' + r.kg + 'kg</div>';
+    return '<div class="suggestion-item roll-suggestion" data-pick-roll="' + escapeAttr(r.kodeRoll) + '" data-kg="' + r.kg + '">Roll ' + escapeHtml(r.kodeRoll) + ' / ' + r.kg + 'kg</div>';
   }).join('');
   box.querySelectorAll('[data-pick-roll]').forEach(function (el) {
     el.addEventListener('mousedown', function (e) {
       e.preventDefault();
       itemBaru.kodeRoll = el.dataset.pickRoll;
       const inputRoll = document.getElementById('inputKodeRoll');
-      if (inputRoll) inputRoll.value = itemBaru.kodeRoll;
+      // v.03: tampilin format lengkap "Roll <kode> / <kg>kg" di kotaknya sendiri (bukan cuma
+      // kodenya doang) - biar tim potong gampang nyontek angka kg-nya tanpa buka daftar lagi.
+      if (inputRoll) inputRoll.value = 'Roll ' + itemBaru.kodeRoll + ' / ' + el.dataset.kg + 'kg';
       box.innerHTML = '';
     });
   });
@@ -573,7 +575,7 @@ function pasangEventDetailCard() {
       itemBaru.kodeRoll = inputKodeRoll.value;
       renderRollSuggestions(inputKodeRoll.value);
     });
-    inputKodeRoll.addEventListener('focus', function () { renderRollSuggestions(inputKodeRoll.value); });
+    inputKodeRoll.addEventListener('focus', function () { inputKodeRoll.select(); renderRollSuggestions(inputKodeRoll.value); });
     inputKodeRoll.addEventListener('blur', function () { setTimeout(function () { const b = document.getElementById('rollSuggestions'); if (b) b.innerHTML = ''; }, 150); });
   }
 
@@ -610,7 +612,7 @@ function pasangEventDetailCard() {
       itemBaru.kombinasi.kodeRoll[idx] = el.value;
       renderKombiRollSuggestions(idx, el.value);
     });
-    el.addEventListener('focus', function () { renderKombiRollSuggestions(idx, el.value); });
+    el.addEventListener('focus', function () { el.select(); renderKombiRollSuggestions(idx, el.value); });
     el.addEventListener('blur', function () { setTimeout(function () { const b = document.getElementById('kombiRollSuggestions-' + idx); if (b) b.innerHTML = ''; }, 150); });
   });
 
@@ -630,14 +632,14 @@ function renderKombiRollSuggestions(idx, query) {
   const semua = daftarRollUntukWarna(warna);
   const cocok = q ? semua.filter(function (r) { return String(r.kodeRoll).toUpperCase().indexOf(q) === 0; }) : semua;
   box.innerHTML = cocok.slice(0, 8).map(function (r) {
-    return '<div class="suggestion-item roll-suggestion" data-pick-kombi-roll="' + escapeAttr(r.kodeRoll) + '">Roll ' + escapeHtml(r.kodeRoll) + ' / ' + r.kg + 'kg</div>';
+    return '<div class="suggestion-item roll-suggestion" data-pick-kombi-roll="' + escapeAttr(r.kodeRoll) + '" data-kg="' + r.kg + '">Roll ' + escapeHtml(r.kodeRoll) + ' / ' + r.kg + 'kg</div>';
   }).join('');
   box.querySelectorAll('[data-pick-kombi-roll]').forEach(function (el) {
     el.addEventListener('mousedown', function (e) {
       e.preventDefault();
       itemBaru.kombinasi.kodeRoll[idx] = el.dataset.pickKombiRoll;
       const inputEl = document.querySelector('.roll-mini-input[data-kidx="' + idx + '"]');
-      if (inputEl) inputEl.value = itemBaru.kombinasi.kodeRoll[idx];
+      if (inputEl) inputEl.value = 'Roll ' + itemBaru.kombinasi.kodeRoll[idx] + ' / ' + el.dataset.kg + 'kg';
       box.innerHTML = '';
     });
   });
