@@ -32,9 +32,14 @@
   <div id="hasilData"></div>
 
   <hr>
-  <h4>Tahap 3 - Submit Produksi (contoh)</h4>
-  <p>Contoh: kategori Dewasa, kode item "TS" (Pendek 24S), warna NAVY, kg 5, roll TES0001, size S=2 M=3</p>
-  <button onclick="tesSubmit()">Tes Submit Produksi (data contoh)</button>
+  <h4>Tahap 3-4 - Submit Produksi (isi manual)</h4>
+  <p>Kategori: <select id="fKategori"><option value="Dewasa">Dewasa</option><option value="Anak">Anak</option></select></p>
+  <p>Kode Item (prefix, misal "TS"): <input type="text" id="fKodeItem" value="TS"></p>
+  <p>Warna: <input type="text" id="fWarna" placeholder="misal NAVY"></p>
+  <p>Kg: <input type="number" id="fKg" step="0.01" placeholder="misal 2.5"></p>
+  <p>Kode Roll (kosongkan kalau gak ada): <input type="text" id="fKodeRoll" placeholder="misal 0962"></p>
+  <p>Qty ukuran (JSON, misal {"S":2,"M":3}): <input type="text" id="fUkuran" value='{"S":1}'></p>
+  <button onclick="tesSubmit()">Kirim Submit Produksi</button>
   <div id="hasilSubmit"></div>
 
   <script>
@@ -84,24 +89,25 @@
         hasilDiv.innerHTML = '<p class="gagal">Harus dibuka dari Telegram.</p>';
         return;
       }
-      const contoh = {
-        initData: tg.initData,
-        items: [
-          {
-            kategori: 'Dewasa',
-            kodeItem: 'TS',
-            warna: 'NAVY',
-            kg: 5,
-            kodeRoll: 'TES0001',
-            ukuran: { S: 2, M: 3 }
-          }
-        ]
+      let ukuran;
+      try { ukuran = JSON.parse(document.getElementById('fUkuran').value); } catch (e) {
+        hasilDiv.innerHTML = '<p class="gagal">Format JSON ukuran salah.</p>';
+        return;
+      }
+      const item = {
+        kategori: document.getElementById('fKategori').value,
+        kodeItem: document.getElementById('fKodeItem').value.trim(),
+        warna: document.getElementById('fWarna').value.trim(),
+        kg: parseFloat(document.getElementById('fKg').value) || null,
+        kodeRoll: document.getElementById('fKodeRoll').value.trim() || null,
+        ukuran: ukuran
       };
+      const payload = { initData: tg.initData, items: [item] };
       hasilDiv.innerHTML = '<p>Mengirim...</p>';
       fetch(workerBase + '/submit-produksi', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(contoh)
+        body: JSON.stringify(payload)
       })
         .then(function (res) { return res.json(); })
         .then(function (data) {
