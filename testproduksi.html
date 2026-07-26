@@ -23,6 +23,14 @@
   <button onclick="tesValidasi()">Tes Validasi initData</button>
   <div id="hasil"></div>
 
+  <hr>
+  <h4>Tahap 2 - Data Referensi</h4>
+  <button onclick="tesData('kategori-varian')">Tes /data/kategori-varian</button>
+  <button onclick="tesData('kombinasi-warna')">Tes /data/kombinasi-warna</button>
+  <button onclick="tesData('warna-kanonik')">Tes /data/warna-kanonik</button>
+  <button onclick="tesData('stok-roll')">Tes /data/stok-roll</button>
+  <div id="hasilData"></div>
+
   <script>
     const tg = window.Telegram ? window.Telegram.WebApp : null;
     if (tg) tg.ready();
@@ -48,6 +56,19 @@
         })
         .catch(function (err) {
           hasilDiv.innerHTML = '<p class="gagal">Error jaringan: ' + err.message + '</p>';
+        });
+    }
+    function tesData(namaEndpoint) {
+      const hasilDiv = document.getElementById('hasilData');
+      const workerBase = document.getElementById('workerUrl').value.trim().replace('/tes-validasi-initdata', '');
+      hasilDiv.innerHTML = '<p>Mengirim ke /data/' + namaEndpoint + '...</p>';
+      fetch(workerBase + '/data/' + namaEndpoint)
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          hasilDiv.innerHTML = '<p class="ok">✅ Respons diterima</p><pre>' + JSON.stringify(data, null, 2) + '</pre>';
+        })
+        .catch(function (err) {
+          hasilDiv.innerHTML = '<p class="gagal">Error: ' + err.message + '</p>';
         });
     }
   </script>
