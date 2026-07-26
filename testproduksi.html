@@ -2,229 +2,882 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tes Worker Produksi</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Input Produksi - Tim Potong</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
-  body { font-family: sans-serif; padding: 16px; background: #f2f2f2; }
-  button { padding: 12px 20px; font-size: 16px; margin: 8px 0; width: 100%; }
-  pre { background: #fff; padding: 12px; border-radius: 8px; white-space: pre-wrap; word-break: break-all; font-size: 12px; }
-  .ok { color: green; font-weight: bold; }
-  .gagal { color: red; font-weight: bold; }
+  :root {
+    --bg: #eef2fb;
+    --card-bg: #ffffff;
+    --teal: #14b8a6;
+    --teal-dark: #0d9488;
+    --navy: #1e3a5f;
+    --navy-dark: #16324a;
+    --blue-link: #2563eb;
+    --orange-link: #d97706;
+    --gray-label: #9aa3b2;
+    --gray-text: #6b7280;
+    --border: #e2e8f0;
+    --green: #22c55e;
+    --green-dark: #16a34a;
+    --danger: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: #1c1c1e;
+    padding-bottom: 90px;
+  }
+  #app, #previewScreen { max-width: 480px; margin: 0 auto; padding: 16px; }
+
+  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
+  .header h1 { font-size: 20px; margin: 0; letter-spacing: 0.3px; }
+  .header .subtitle { margin: 2px 0 0; font-size: 13px; color: var(--gray-text); font-weight: 600; }
+  .header-right { text-align: right; }
+  .ver-badge { display: inline-block; background: var(--navy); color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; margin-bottom: 6px; }
+  .link-btn { display: block; background: none; border: none; font-size: 13px; cursor: pointer; padding: 2px 0; text-align: right; width: 100%; }
+  .link-btn.refresh { color: var(--blue-link); }
+  .link-btn.atur { color: var(--orange-link); }
+
+  .section-label { font-size: 12px; color: var(--gray-label); font-weight: 700; letter-spacing: 0.5px; margin: 14px 0 8px; }
+
+  .kategori-toggle { display: flex; gap: 10px; }
+  .kat-btn {
+    flex: 1; padding: 14px 10px; border-radius: 14px; border: 2px solid var(--border);
+    background: #fff; font-weight: 700; font-size: 14px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 8px; color: #374151;
+  }
+  .kat-btn .emoji { font-size: 18px; }
+  .kat-btn.active {
+    background: linear-gradient(135deg, #2dd4bf, #0d9488);
+    color: #fff; border-color: transparent;
+  }
+
+  .cut-divider { text-align: center; color: #c7cedb; font-size: 15px; margin: 16px 0; position: relative; }
+  .cut-divider::before, .cut-divider::after {
+    content: ""; position: absolute; top: 50%; width: 42%; border-top: 2px dashed #d3dae8;
+  }
+  .cut-divider::before { left: 0; }
+  .cut-divider::after { right: 0; }
+
+  .card { background: var(--card-bg); border-radius: 16px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+  .field-row {
+    display: flex; justify-content: space-between; align-items: center; padding: 14px 16px;
+    border-bottom: 1px solid var(--border); cursor: pointer; gap: 10px;
+  }
+  .field-row:last-child { border-bottom: none; }
+  .field-row .flabel { font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 6px; }
+  .field-row .fvalue { color: #9aa3b2; font-size: 14px; text-align: right; }
+  .field-row .fvalue.filled { color: #1c1c1e; font-weight: 600; }
+  .badge-wajib { background: #f3f4f6; color: #6b7280; font-size: 10px; padding: 2px 6px; border-radius: 5px; font-weight: 600; }
+  .chevron { color: #c7cedb; margin-left: 4px; }
+
+  .dropdown-list { max-height: 220px; overflow-y: auto; border-bottom: 1px solid var(--border); }
+  .dropdown-item { padding: 12px 16px; font-weight: 600; font-size: 14px; cursor: pointer; }
+  .dropdown-item:nth-child(even) { background: #f7f9fd; }
+  .dropdown-item:hover { background: #e8f0fe; }
+  .dropdown-item .accent { float: right; color: #9aa3b2; font-weight: 500; font-size: 13px; }
+  .dropdown-item.manual { color: var(--orange-link); }
+
+  .subrow { padding: 10px 16px; }
+  .kg-input-full {
+    width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 10px; font-size: 15px;
+    text-align: right;
+  }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; padding: 0 16px 14px; font-size: 13px; color: var(--gray-text); }
+
+  .kombi-chips { display: flex; gap: 8px; padding: 10px 16px; flex-wrap: wrap; }
+  .kombi-chip { background: #eef2fb; border-radius: 10px; padding: 8px 12px; font-weight: 700; font-size: 13px; position: relative; }
+  .kombi-chip .num { position: absolute; top: -6px; left: -6px; background: var(--navy); color: #fff; width: 18px; height: 18px; border-radius: 50%; font-size: 10px; display: flex; align-items: center; justify-content: center; }
+  .ganti-kombinasi { padding: 0 16px 10px; }
+  .ganti-kombinasi a { color: var(--blue-link); font-size: 13px; cursor: pointer; }
+
+  .kombi-warna-section { padding: 10px 16px 14px; border-bottom: 1px solid var(--border); }
+  .kombi-warna-section .sub-title { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+  .kombi-warna-section .sub-fields { display: flex; gap: 8px; }
+  .kombi-warna-section input.kg-mini { flex: 1; padding: 10px; border: 1px solid var(--border); border-radius: 10px; text-align: right; }
+  .kombi-warna-section .roll-mini { flex: 1.3; padding: 10px; border: 1px solid var(--border); border-radius: 10px; color: #9aa3b2; text-align: center; cursor: pointer; font-size: 13px; }
+
+  .autocomplete-input { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 10px; font-size: 15px; }
+  .suggestion-list { max-height: 180px; overflow-y: auto; }
+  .suggestion-item { padding: 10px 12px; font-size: 14px; font-weight: 600; cursor: pointer; border-bottom: 1px solid #f1f4f9; }
+  .suggestion-item:hover { background: #e8f0fe; }
+  .suggestion-item .kg-hint { float: right; color: #9aa3b2; font-weight: 500; font-size: 13px; }
+  .suggestion-item.roll-suggestion { text-align: right; }
+
+  .qty-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 16px; }
+  .qty-cell { text-align: center; }
+  .qty-cell label { display: block; font-weight: 700; font-size: 13px; margin-bottom: 6px; }
+  .qty-cell input { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 10px; text-align: center; font-size: 15px; }
+  .toggle-ukuran { padding: 0 16px 10px; }
+  .toggle-ukuran a { color: var(--blue-link); font-size: 13px; cursor: pointer; }
+  .total-qty { display: flex; justify-content: space-between; padding: 14px 16px; border-top: 1px solid var(--border); font-weight: 700; }
+
+  .queue-box { background: var(--navy); border-radius: 16px; padding: 14px 16px; color: #fff; }
+  .queue-box .qtitle { display: flex; justify-content: space-between; align-items: center; font-size: 12px; letter-spacing: 0.5px; color: #b8c4d9; font-weight: 700; margin-bottom: 10px; }
+  .queue-box .qbadge { background: var(--blue-link); color: #fff; border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+  .queue-item { background: var(--navy-dark); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .queue-item:last-child { margin-bottom: 0; }
+  .queue-item .qtag { display: inline-block; background: #2dd4bf; color: #043a35; font-size: 10px; font-weight: 800; padding: 1px 7px; border-radius: 5px; margin-bottom: 4px; }
+  .queue-item .qdesc { font-weight: 700; font-size: 13px; }
+  .queue-item .qsizes { color: #b8c4d9; font-size: 12px; margin-top: 2px; }
+  .queue-item .qremove { background: none; border: none; color: #f87171; font-size: 16px; cursor: pointer; }
+
+  .bottom-bar {
+    position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg);
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); display: flex; gap: 10px;
+    max-width: 480px; margin: 0 auto; box-shadow: 0 -2px 8px rgba(0,0,0,0.05);
+  }
+  .btn { flex: 1; padding: 14px; border-radius: 12px; border: none; font-weight: 700; font-size: 14px; cursor: pointer; }
+  .btn.tambah { background: #dbe4fb; color: var(--navy); }
+  .btn.buatteks { background: var(--navy); color: #fff; }
+  .btn.buatteks:disabled { background: #c4c4c4; color: #8a8a8a; }
+  .btn.kirim { background: var(--green); color: #fff; width: 100%; padding: 16px; font-size: 15px; border-radius: 12px; border: none; font-weight: 700; cursor: pointer; }
+  .btn.kirim:disabled { background: #9ad9ae; cursor: wait; }
+  .btn.secondary { flex: 1; background: #dbe4fb; color: var(--navy); padding: 14px; border-radius: 12px; border: none; font-weight: 700; cursor: pointer; }
+
+  .preview-center { text-align: center; padding: 30px 10px 10px; }
+  .preview-center .icon { width: 48px; height: 48px; background: #dbe4fb; border-radius: 12px; display: flex; align-items: center; justify-content: center; margin: 0 auto 14px; font-size: 22px; }
+  .preview-center h2 { margin: 0 0 8px; }
+  .preview-center p { color: var(--gray-text); font-size: 13px; line-height: 1.5; max-width: 320px; margin: 0 auto; }
+  .preview-box { background: #fff; border-radius: 14px; padding: 16px; margin: 20px 0; white-space: pre-wrap; font-size: 14px; line-height: 1.6; min-height: 60px; }
+  .preview-actions { display: flex; gap: 10px; }
+  .peringatan-box { background: #fef3c7; border-radius: 10px; padding: 10px 12px; font-size: 12px; color: #92400e; margin-bottom: 14px; }
+
+  .toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); background: #1c1c1e; color: #fff; padding: 10px 18px; border-radius: 10px; font-size: 13px; z-index: 999; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
 </style>
 </head>
 <body>
-  <h3>Tes Worker Produksi (Tahap 1)</h3>
-  <p>Halaman ini SEMENTARA, cuma buat ngetes - bukan Mini App produksi yang sebenarnya.</p>
 
-  <!-- GANTI URL INI sesuai URL Worker yang sudah Denny deploy -->
-  <p>URL Worker: <input type="text" id="workerUrl" style="width:100%" value="https://tim-potong-api.GANTI-SESUAI-USER.workers.dev/tes-validasi-initdata"></p>
+<div id="app">
+  <div class="header">
+    <div>
+      <h1>INPUT PRODUKSI</h1>
+      <p class="subtitle">TIM POTONG</p>
+    </div>
+    <div class="header-right">
+      <span class="ver-badge">ver.01</span>
+      <button class="link-btn refresh" id="btnRefresh">🔄 Refresh</button>
+    </div>
+  </div>
 
-  <button onclick="tesValidasi()">Tes Validasi initData</button>
-  <div id="hasil"></div>
+  <div class="section-label">KATEGORI</div>
+  <div class="kategori-toggle">
+    <button class="kat-btn active" data-kat="Anak"><span class="emoji">🧒</span> ANAK</button>
+    <button class="kat-btn" data-kat="Dewasa"><span class="emoji">🧑</span> DEWASA</button>
+  </div>
 
-  <hr>
-  <h4>Tahap 2 - Data Referensi</h4>
-  <button onclick="tesData('kategori-varian')">Tes /data/kategori-varian</button>
-  <button onclick="tesData('kombinasi-warna')">Tes /data/kombinasi-warna</button>
-  <button onclick="tesData('warna-kanonik')">Tes /data/warna-kanonik</button>
-  <button onclick="tesData('stok-roll')">Tes /data/stok-roll</button>
-  <div id="hasilData"></div>
+  <div class="cut-divider">✂️</div>
 
-  <hr>
-  <h4>Dashboard Tahap 1 - Daftar Laporan QC</h4>
-  <button onclick="tesData('laporan-qc')">Tes /data/laporan-qc</button>
+  <div class="section-label">DETAIL ITEM BARU</div>
+  <div class="card" id="cardDetail">
+    <!-- diisi lewat JS: renderDetailCard() -->
+  </div>
 
-  <hr>
-  <h4>Dashboard Tahap 2 - Submit QC</h4>
-  <p>ID tim_potong: <input type="number" id="qcTimPotongId" placeholder="misal 130"></p>
-  <p>Mode: <select id="qcMode"><option value="ringkas">Ringkas</option><option value="rincian">Rincian</option></select></p>
-  <p><b>Kalau mode Ringkas</b> - Selesai: <input type="number" id="qcRingkasSelesai" value="0"> Reject: <input type="number" id="qcRingkasReject" value="0"></p>
-  <p><b>Kalau mode Rincian</b> - JSON array, misal [{"ukuran":"S","selesai":1,"reject":0}]: <input type="text" id="qcRincianJson" style="width:100%" value='[]'></p>
-  <button onclick="tesSubmitQC()">Kirim Submit QC</button>
-  <div id="hasilSubmitQC"></div>
+  <div class="cut-divider">✂️</div>
 
-  <hr>
-  <h4>Dashboard Tahap 3 - Stok Utuh</h4>
-  <button onclick="tesData('stok-utuh')">Tes /data/stok-utuh</button>
+  <div class="section-label">QTY PER SIZE</div>
+  <div class="card">
+    <div class="qty-grid" id="qtyGridUtama"></div>
+    <div class="qty-grid" id="qtyGridLain" style="display:none"></div>
+    <div class="toggle-ukuran"><a id="toggleUkuranLain">Tampilkan ukuran lain (3XL–6XL)</a></div>
+    <div class="total-qty"><span>Total qty item ini</span><span id="totalQtyItem">0 pcs</span></div>
+  </div>
 
-  <hr>
-  <h4>Dashboard Tahap 4 - Arsip Selesai</h4>
-  <button onclick="tesData('arsip-selesai?hari=3')">Tes /data/arsip-selesai (3 hari)</button>
+  <div id="queueWrap" style="display:none">
+    <div class="cut-divider">✂️</div>
+    <div class="queue-box">
+      <div class="qtitle"><span>DAFTAR ITEM (SIAP DIKIRIM)</span><span class="qbadge" id="queueBadge">0</span></div>
+      <div id="queueList"></div>
+    </div>
+  </div>
+</div>
 
-  <hr>
-  <h4>Tahap 3-4 - Submit Produksi (isi manual)</h4>
-  <p>Kategori: <select id="fKategori"><option value="Dewasa">Dewasa</option><option value="Anak">Anak</option></select></p>
-  <p>Kode Item (prefix, misal "TS"): <input type="text" id="fKodeItem" value="TS"></p>
-  <p>Warna: <input type="text" id="fWarna" placeholder="misal NAVY"></p>
-  <p>Kg: <input type="number" id="fKg" step="0.01" placeholder="misal 2.5"></p>
-  <p>Kode Roll (kosongkan kalau gak ada): <input type="text" id="fKodeRoll" placeholder="misal 0962"></p>
-  <p>Qty ukuran (JSON, misal {"S":2,"M":3}): <input type="text" id="fUkuran" value='{"S":1}'></p>
-  <button onclick="tesSubmit()">Kirim Submit Produksi</button>
-  <div id="hasilSubmit"></div>
+<div id="previewScreen" style="display:none">
+  <div class="header">
+    <div>
+      <h1>INPUT PRODUKSI</h1>
+      <p class="subtitle">TIM POTONG</p>
+    </div>
+    <div class="header-right"><span class="ver-badge">ver.01</span></div>
+  </div>
+  <div class="preview-center">
+    <div class="icon">✅</div>
+    <h2>Siap dikirim</h2>
+    <p>Cek dulu ringkasannya di bawah - kalau ada yang salah, tap "Kembali Edit". Kalau sudah benar, tap "Kirim ke Telegram" buat kirim &amp; proses langsung.</p>
+  </div>
+  <div id="peringatanBox"></div>
+  <div class="preview-box" id="previewBox"></div>
+  <button class="btn kirim" id="btnKirim">🛫 Kirim ke Telegram</button>
+  <button class="btn kirim" id="btnInputBaru" style="display:none">+ Input Laporan Baru</button>
+  <div style="height:10px"></div>
+  <div class="preview-actions">
+    <button class="btn secondary" id="btnKembaliEdit">Kembali Edit</button>
+    <button class="btn secondary" id="btnSalinTeks">Salin Teks</button>
+  </div>
+</div>
 
-  <hr>
-  <h4>Tahap 4b - Submit Kombinasi (2-3 warna)</h4>
-  <p>Kode Item (misal "RING" atau "LST"): <input type="text" id="kKodeItem" value="RING"></p>
-  <p>Kategori: <select id="kKategori"><option value="Dewasa">Dewasa</option><option value="Anak">Anak</option></select></p>
-  <p>Warna (pisah koma, 2 atau 3, misal "GREY,NAVY"): <input type="text" id="kWarna" placeholder="GREY,NAVY"></p>
-  <p>Kg per warna (pisah koma, urutan sama): <input type="text" id="kKg" placeholder="2,1.5"></p>
-  <p>Kode Roll per warna (pisah koma, boleh kosong per elemen): <input type="text" id="kRoll" placeholder="0962,0110"></p>
-  <p>Qty ukuran (JSON): <input type="text" id="kUkuran" value='{"S":1}'></p>
-  <button onclick="tesSubmitKombinasi()">Kirim Submit Kombinasi</button>
-  <div id="hasilKombinasi"></div>
+<div class="bottom-bar" id="bottomBar">
+  <button class="btn tambah" id="btnTambah">+ Tambah ke Daftar</button>
+  <button class="btn buatteks" id="btnBuatTeks" disabled>Buat Teks (0)</button>
+</div>
 
-  <script>
-    const tg = window.Telegram ? window.Telegram.WebApp : null;
-    if (tg) tg.ready();
+<div class="toast" id="toast"></div>
 
-    function tesValidasi() {
-      const hasilDiv = document.getElementById('hasil');
-      const workerUrl = document.getElementById('workerUrl').value.trim();
-      if (!tg || !tg.initData) {
-        hasilDiv.innerHTML = '<p class="gagal">Halaman ini HARUS dibuka dari Telegram (lewat Mini App), bukan browser biasa - initData kosong.</p>';
-        return;
-      }
-      hasilDiv.innerHTML = '<p>Mengirim...</p>';
-      fetch(workerUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData: tg.initData })
-      })
-        .then(function (res) { return res.json(); })
-        .then(function (data) {
-          hasilDiv.innerHTML =
-            '<p class="' + (data.ok ? 'ok' : 'gagal') + '">' + (data.ok ? '✅ VALID' : '❌ GAGAL') + '</p>' +
-            '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
-        })
-        .catch(function (err) {
-          hasilDiv.innerHTML = '<p class="gagal">Error jaringan: ' + err.message + '</p>';
-        });
+<script>
+// ============================================================
+// KONFIGURASI - GANTI sesuai URL Worker produksi yang sudah di-deploy
+// ============================================================
+const WORKER_URL = 'https://tim-potong-api.dennyalvan.workers.dev';
+
+const DAFTAR_UKURAN_UTAMA = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+const DAFTAR_UKURAN_LAIN = ['3XL', '4XL', '5XL', '6XL'];
+const RING_WARNA_LIST = ['GREY NAVY', 'PUTIH TERACOTA', 'PUTIH HITAM', 'MUSTARD NAVY', 'PUTIH COKLAT', 'PUTIH MUSTARD', 'PUTIH MERAH', 'PUTIH BIRU'];
+
+const tg = window.Telegram ? window.Telegram.WebApp : null;
+if (tg) { tg.ready(); tg.expand(); }
+
+// ------------------------------------------------------------
+// STATE
+// ------------------------------------------------------------
+let kategoriVarianData = [];   // dari /data/kategori-varian
+let kombinasiWarnaData = [];   // dari /data/kombinasi-warna
+let stokRollData = {};         // dari /data/stok-roll : { WARNA_KANONIK: [{kodeRoll, kg}] }
+let warnaKanonikMap = {};      // dari /data/warna-kanonik
+let standarPemakaianData = []; // dari /data/standar-pemakaian
+
+let kategoriAktif = 'Anak';
+let itemBaru = kosongkanItemBaru();
+let daftarAntrian = [];
+let antrianSeq = 0;
+let ukuranLainTerbuka = false;
+let openDropdown = null; // 'varian' | 'warna' | 'kodeRoll' | 'kombinasiWarna' | 'roll-<idx>' | null
+
+function kosongkanItemBaru() {
+  return {
+    kategori: kategoriAktif,
+    varianLabel: null,
+    kodeItem: null,
+    isKombinasi: false,
+    isCustom: false,
+    namaCustom: '',
+    warna: null,
+    kg: '',
+    estimasi: false,
+    kodeRoll: null,
+    kombinasi: null, // { warna: [...], kg: [...], kodeRoll: [...] }
+    ukuran: {}
+  };
+}
+
+// ------------------------------------------------------------
+// AMBIL DATA REFERENSI
+// ------------------------------------------------------------
+function muatDataReferensi() {
+  Promise.all([
+    fetch(WORKER_URL + '/data/kategori-varian').then(function (r) { return r.json(); }),
+    fetch(WORKER_URL + '/data/kombinasi-warna').then(function (r) { return r.json(); }),
+    fetch(WORKER_URL + '/data/stok-roll').then(function (r) { return r.json(); }),
+    fetch(WORKER_URL + '/data/warna-kanonik').then(function (r) { return r.json(); }),
+    fetch(WORKER_URL + '/data/standar-pemakaian').then(function (r) { return r.json(); })
+  ]).then(function (hasil) {
+    kategoriVarianData = hasil[0] || [];
+    kombinasiWarnaData = hasil[1] || [];
+    stokRollData = hasil[2] || {};
+    warnaKanonikMap = hasil[3] || {};
+    standarPemakaianData = hasil[4] || [];
+    renderDetailCard();
+    renderQtyGrid();
+  }).catch(function (err) {
+    tampilkanToast('Gagal memuat data referensi: ' + err.message);
+  });
+}
+
+// ------------------------------------------------------------
+// KATEGORI TOGGLE
+// ------------------------------------------------------------
+document.querySelectorAll('.kat-btn').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    document.querySelectorAll('.kat-btn').forEach(function (b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    kategoriAktif = btn.dataset.kat;
+    itemBaru = kosongkanItemBaru();
+    openDropdown = null;
+    renderDetailCard();
+    renderQtyGrid();
+  });
+});
+
+document.getElementById('btnRefresh').addEventListener('click', function () {
+  tampilkanToast('Memuat ulang data...');
+  muatDataReferensi();
+});
+
+// ------------------------------------------------------------
+// HELPER VARIAN
+// ------------------------------------------------------------
+function daftarVarianUntukKategori() {
+  return kategoriVarianData.filter(function (v) { return String(v.kategori).toLowerCase() === kategoriAktif.toLowerCase(); });
+}
+function isVarianKombinasi(label) {
+  return String(label || '').toUpperCase().indexOf('KOMBINASI') !== -1;
+}
+function isVarianRinger(label) {
+  return String(label || '').toUpperCase().indexOf('RINGER') !== -1;
+}
+
+// Porting PERSIS dari bikinAwalan_() (HTML PRODUKSI.html lama)
+function bikinAwalanPreview(kategori, kodeItem) {
+  const kodeUpper = kodeItem ? String(kodeItem).toUpperCase() : '';
+  const butuhKataAnak = String(kategori || '').toLowerCase() === 'anak' && (kodeUpper === '' || kodeUpper === 'PJG');
+  if (butuhKataAnak) return kodeUpper ? ('ANAK ' + kodeUpper) : 'ANAK';
+  return kodeUpper;
+}
+
+function getSinonimGrup(warna) {
+  const w = String(warna || '').toUpperCase();
+  const kan = warnaKanonikMap[w] || w;
+  return kan;
+}
+
+function daftarRollUntukWarna(warna) {
+  const kanonik = getSinonimGrup(warna);
+  return stokRollData[kanonik] || [];
+}
+
+// ------------------------------------------------------------
+// AUTOCOMPLETE - filter di memori (data sudah ke-load duluan), jadi instan tanpa
+// nembak server tiap ketik. Cuma update <div> saran-nya doang (bukan render ulang
+// seluruh kartu), supaya fokus/kursor di kotak ketik gak keganggu/reset.
+// ------------------------------------------------------------
+function renderWarnaSuggestions(query) {
+  const box = document.getElementById('warnaSuggestions');
+  if (!box) return;
+  const q = String(query || '').trim().toUpperCase();
+  if (!q) { box.innerHTML = ''; return; } // v.02: gak tampilin apa-apa sebelum ada huruf diketik
+  const semua = Object.keys(stokRollData).sort();
+  const cocok = semua.filter(function (w) { return w.indexOf(q) === 0; });
+  box.innerHTML = cocok.slice(0, 8).map(function (w) {
+    return '<div class="suggestion-item" data-pick-warna="' + escapeAttr(w) + '">' + escapeHtml(w) + '</div>';
+  }).join('');
+  box.querySelectorAll('[data-pick-warna]').forEach(function (el) {
+    el.addEventListener('mousedown', function (e) {
+      e.preventDefault(); // supaya kepilih SEBELUM event blur nutup daftar saran
+      itemBaru.warna = el.dataset.pickWarna;
+      itemBaru.kodeRoll = null;
+      const inputWarna = document.getElementById('inputWarna');
+      const inputRoll = document.getElementById('inputKodeRoll');
+      if (inputWarna) inputWarna.value = itemBaru.warna;
+      if (inputRoll) inputRoll.value = '';
+      box.innerHTML = '';
+      renderRollSuggestions('');
+    });
+  });
+}
+
+function renderRollSuggestions(query) {
+  const box = document.getElementById('rollSuggestions');
+  if (!box) return;
+  const q = String(query || '').trim().toUpperCase();
+  const semua = daftarRollUntukWarna(itemBaru.warna);
+  // v.03: begitu warna udah kepilih, langsung tampilin SEMUA roll yang ada buat warna itu
+  // (gak perlu ketik dulu) - beda dari saran Warna yang emang sengaja nunggu ketikan.
+  const cocok = q ? semua.filter(function (r) { return String(r.kodeRoll).toUpperCase().indexOf(q) === 0; }) : semua;
+  box.innerHTML = cocok.slice(0, 8).map(function (r) {
+    return '<div class="suggestion-item roll-suggestion" data-pick-roll="' + escapeAttr(r.kodeRoll) + '">Roll ' + escapeHtml(r.kodeRoll) + ' / ' + r.kg + 'kg</div>';
+  }).join('');
+  box.querySelectorAll('[data-pick-roll]').forEach(function (el) {
+    el.addEventListener('mousedown', function (e) {
+      e.preventDefault();
+      itemBaru.kodeRoll = el.dataset.pickRoll;
+      const inputRoll = document.getElementById('inputKodeRoll');
+      if (inputRoll) inputRoll.value = itemBaru.kodeRoll;
+      box.innerHTML = '';
+    });
+  });
+}
+
+// ------------------------------------------------------------
+// RENDER: CARD DETAIL ITEM BARU
+// ------------------------------------------------------------
+function renderDetailCard() {
+  const card = document.getElementById('cardDetail');
+  let html = '';
+
+  // --- Baris Varian ---
+  const varianTampil = itemBaru.isCustom ? 'ITEM CUSTOM' : (itemBaru.varianLabel || null);
+  html += '<div class="field-row" id="rowVarian">' +
+    '<span class="flabel">Varian</span>' +
+    '<span class="fvalue' + (varianTampil ? ' filled' : '') + '">' + (varianTampil || '— pilih —') + ' <span class="chevron">▾</span></span>' +
+    '</div>';
+  if (openDropdown === 'varian') {
+    html += '<div class="dropdown-list">';
+    daftarVarianUntukKategori().forEach(function (v) {
+      html += '<div class="dropdown-item" data-varian="' + escapeAttr(v.label_varian) + '" data-kode="' + escapeAttr(v.prefix_tele || '') + '">' + escapeHtml(v.label_varian) + '</div>';
+    });
+    html += '<div class="dropdown-item manual" data-varian="__CUSTOM__">+ Item Custom (nama manual)</div>';
+    html += '</div>';
+  }
+
+  if (!itemBaru.isCustom) {
+    // --- Baris Warna (biasa / kombinasi / ringer) ---
+    if (itemBaru.isKombinasi) {
+      html += renderWarnaKombinasiSection();
+    } else if (itemBaru.varianLabel && isVarianRinger(itemBaru.varianLabel)) {
+      html += renderWarnaRingerSection();
+    } else {
+      html += '<div class="subrow" style="padding-bottom:6px">' +
+        '<label style="font-weight:700;font-size:14px;display:block;margin-bottom:6px;">Warna</label>' +
+        '<input type="text" class="autocomplete-input" id="inputWarna" placeholder="Ketik warna, misal NAVY" autocomplete="off" value="' + escapeAttr(itemBaru.warna || '') + '">' +
+        '<div class="suggestion-list" id="warnaSuggestions"></div>' +
+        '</div>';
+
+      // --- Kg Kain Terpakai (single, non kombinasi) ---
+      html += '<div class="subrow">' +
+        '<input type="number" class="kg-input-full" id="inputKg" placeholder="0" value="' + (itemBaru.kg || '') + '">' +
+        '</div>' +
+        '<div class="checkbox-row"><input type="checkbox" id="chkEstimasi" ' + (itemBaru.estimasi ? 'checked' : '') + '> Kg tidak diketahui - pakai estimasi standar</div>';
+
+      // --- Kode Roll ---
+      html += '<div class="subrow" style="padding-bottom:6px">' +
+        '<label style="font-weight:700;font-size:14px;display:block;margin-bottom:6px;">Kode Roll <span class="badge-wajib">wajib isi</span></label>' +
+        '<input type="text" class="autocomplete-input" id="inputKodeRoll" placeholder="Ketik atau pilih kode roll" autocomplete="off" value="' + escapeAttr(itemBaru.kodeRoll || '') + '">' +
+        '<div class="suggestion-list" id="rollSuggestions"></div>' +
+        '</div>';
     }
-    function tesData(namaEndpoint) {
-      const hasilDiv = document.getElementById('hasilData');
-      const workerBase = document.getElementById('workerUrl').value.trim().replace('/tes-validasi-initdata', '');
-      hasilDiv.innerHTML = '<p>Mengirim ke /data/' + namaEndpoint + '...</p>';
-      fetch(workerBase + '/data/' + namaEndpoint)
-        .then(function (res) { return res.json(); })
-        .then(function (data) {
-          hasilDiv.innerHTML = '<p class="ok">✅ Respons diterima</p><pre>' + JSON.stringify(data, null, 2) + '</pre>';
-        })
-        .catch(function (err) {
-          hasilDiv.innerHTML = '<p class="gagal">Error: ' + err.message + '</p>';
-        });
+  } else {
+    // --- Item Custom: 1 kotak nama bebas + kg + roll (sederhana) ---
+    html += '<div class="subrow"><input type="text" class="kg-input-full" style="text-align:left" id="inputNamaCustom" placeholder="Nama item lengkap, misal: SPECIAL ORDER BIRU MUDA" value="' + escapeAttr(itemBaru.namaCustom) + '"></div>';
+    html += '<div class="subrow"><input type="number" class="kg-input-full" id="inputKgCustom" placeholder="Kg kain terpakai (opsional)" value="' + (itemBaru.kg || '') + '"></div>';
+    html += '<div class="subrow"><input type="text" class="kg-input-full" style="text-align:left" id="inputRollCustom" placeholder="Kode roll (opsional)" value="' + escapeAttr(itemBaru.kodeRoll || '') + '"></div>';
+  }
+
+  card.innerHTML = html;
+  pasangEventDetailCard();
+}
+
+function renderWarnaKombinasiSection() {
+  let html = '<div class="subrow" style="padding-bottom:0"><span class="flabel">Warna</span> <span class="badge-wajib">Kombinasi 3 Warna</span></div>';
+  if (!itemBaru.kombinasi) {
+    html += '<div class="field-row" id="rowKombinasiWarna"><span class="fvalue">Pilih kombinasi warna... <span class="chevron">▾</span></span></div>';
+    if (openDropdown === 'kombinasiWarna') {
+      html += '<div class="dropdown-list">';
+      kombinasiWarnaData.forEach(function (k) {
+        html += '<div class="dropdown-item" data-nama="' + escapeAttr(k.nama_warna) + '" data-ketiga="' + escapeAttr(k.warna_ketiga) + '">' +
+          escapeHtml(k.nama_warna) + '<span class="accent">+ ' + escapeHtml(k.warna_ketiga) + '</span></div>';
+      });
+      html += '</div>';
     }
-    function tesSubmit() {
-      const hasilDiv = document.getElementById('hasilSubmit');
-      const workerBase = document.getElementById('workerUrl').value.trim().replace('/tes-validasi-initdata', '');
-      if (!tg || !tg.initData) {
-        hasilDiv.innerHTML = '<p class="gagal">Harus dibuka dari Telegram.</p>';
-        return;
-      }
-      let ukuran;
-      try { ukuran = JSON.parse(document.getElementById('fUkuran').value); } catch (e) {
-        hasilDiv.innerHTML = '<p class="gagal">Format JSON ukuran salah.</p>';
-        return;
-      }
-      const item = {
-        kategori: document.getElementById('fKategori').value,
-        kodeItem: document.getElementById('fKodeItem').value.trim(),
-        warna: document.getElementById('fWarna').value.trim(),
-        kg: parseFloat(document.getElementById('fKg').value) || null,
-        kodeRoll: document.getElementById('fKodeRoll').value.trim() || null,
-        ukuran: ukuran
-      };
-      const payload = { initData: tg.initData, items: [item] };
-      hasilDiv.innerHTML = '<p>Mengirim...</p>';
-      fetch(workerBase + '/submit-produksi', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-        .then(function (res) { return res.json(); })
-        .then(function (data) {
-          hasilDiv.innerHTML =
-            '<p class="' + (data.ok ? 'ok' : 'gagal') + '">' + (data.ok ? '✅ SUKSES' : '❌ GAGAL') + '</p>' +
-            '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
-        })
-        .catch(function (err) {
-          hasilDiv.innerHTML = '<p class="gagal">Error: ' + err.message + '</p>';
-        });
+  } else {
+    const w = itemBaru.kombinasi.warna;
+    html += '<div class="kombi-chips">';
+    w.forEach(function (warna, i) {
+      html += '<div class="kombi-chip"><span class="num">' + (i + 1) + '</span>' + escapeHtml(warna) + '</div>';
+    });
+    html += '</div>';
+    html += '<div class="ganti-kombinasi"><a id="linkGantiKombinasi">Ganti kombinasi</a></div>';
+    w.forEach(function (warna, i) {
+      html += '<div class="kombi-warna-section">' +
+        '<div class="sub-title">Kg + Kode Roll - ' + escapeHtml(warna) + '</div>' +
+        '<div class="sub-fields">' +
+        '<input type="number" class="kg-mini" data-kidx="' + i + '" placeholder="kg" value="' + (itemBaru.kombinasi.kg[i] || '') + '">' +
+        '<input type="text" class="autocomplete-input roll-mini-input" data-kidx="' + i + '" placeholder="Kode roll" autocomplete="off" value="' + escapeAttr(itemBaru.kombinasi.kodeRoll[i] || '') + '">' +
+        '</div>' +
+        '<div class="suggestion-list" id="kombiRollSuggestions-' + i + '"></div>' +
+        '</div>';
+    });
+  }
+  return html;
+}
+
+function renderWarnaRingerSection() {
+  let html = '<div class="subrow" style="padding-bottom:0"><span class="flabel">Warna</span> <span class="badge-wajib">Ringer - 8 kombinasi tetap</span></div>';
+  if (!itemBaru.kombinasi) {
+    html += '<div class="field-row" id="rowKombinasiWarna"><span class="fvalue">Pilih kombinasi warna... <span class="chevron">▾</span></span></div>';
+    if (openDropdown === 'kombinasiWarna') {
+      html += '<div class="dropdown-list">';
+      RING_WARNA_LIST.forEach(function (pasangan) {
+        html += '<div class="dropdown-item" data-nama-ring="' + escapeAttr(pasangan) + '">' + escapeHtml(pasangan) + '</div>';
+      });
+      html += '</div>';
     }
-    function tesSubmitKombinasi() {
-      const hasilDiv = document.getElementById('hasilKombinasi');
-      const workerBase = document.getElementById('workerUrl').value.trim().replace('/tes-validasi-initdata', '');
-      if (!tg || !tg.initData) {
-        hasilDiv.innerHTML = '<p class="gagal">Harus dibuka dari Telegram.</p>';
-        return;
-      }
-      let ukuran;
-      try { ukuran = JSON.parse(document.getElementById('kUkuran').value); } catch (e) {
-        hasilDiv.innerHTML = '<p class="gagal">Format JSON ukuran salah.</p>';
-        return;
-      }
-      const warnaArr = document.getElementById('kWarna').value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
-      const kgArr = document.getElementById('kKg').value.split(',').map(function (s) { return parseFloat(s.trim()); });
-      const rollArr = document.getElementById('kRoll').value.split(',').map(function (s) { return s.trim() || null; });
-      const item = {
-        kategori: document.getElementById('kKategori').value,
-        kodeItem: document.getElementById('kKodeItem').value.trim(),
-        kombinasi: { warna: warnaArr, kg: kgArr, kodeRoll: rollArr },
-        ukuran: ukuran
-      };
-      const payload = { initData: tg.initData, items: [item] };
-      hasilDiv.innerHTML = '<p>Mengirim...</p>';
-      fetch(workerBase + '/submit-produksi', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-        .then(function (res) { return res.json(); })
-        .then(function (data) {
-          hasilDiv.innerHTML =
-            '<p class="' + (data.ok ? 'ok' : 'gagal') + '">' + (data.ok ? '✅ SUKSES' : '❌ GAGAL') + '</p>' +
-            '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
-        })
-        .catch(function (err) {
-          hasilDiv.innerHTML = '<p class="gagal">Error: ' + err.message + '</p>';
-        });
-    }
-    function tesSubmitQC() {
-      const hasilDiv = document.getElementById('hasilSubmitQC');
-      const workerBase = document.getElementById('workerUrl').value.trim().replace('/tes-validasi-initdata', '');
-      if (!tg || !tg.initData) {
-        hasilDiv.innerHTML = '<p class="gagal">Harus dibuka dari Telegram.</p>';
-        return;
-      }
-      const mode = document.getElementById('qcMode').value;
-      const payload = { initData: tg.initData, timPotongId: parseInt(document.getElementById('qcTimPotongId').value, 10), mode: mode };
-      if (mode === 'ringkas') {
-        payload.ringkas = {
-          selesai: parseFloat(document.getElementById('qcRingkasSelesai').value) || 0,
-          reject: parseFloat(document.getElementById('qcRingkasReject').value) || 0
-        };
+  } else {
+    const w = itemBaru.kombinasi.warna;
+    html += '<div class="kombi-chips">';
+    w.forEach(function (warna, i) {
+      html += '<div class="kombi-chip"><span class="num">' + (i + 1) + '</span>' + escapeHtml(warna) + '</div>';
+    });
+    html += '</div>';
+    html += '<div class="ganti-kombinasi"><a id="linkGantiKombinasi">Ganti kombinasi</a></div>';
+    w.forEach(function (warna, i) {
+      html += '<div class="kombi-warna-section">' +
+        '<div class="sub-title">Kg + Kode Roll - ' + escapeHtml(warna) + '</div>' +
+        '<div class="sub-fields">' +
+        '<input type="number" class="kg-mini" data-kidx="' + i + '" placeholder="kg" value="' + (itemBaru.kombinasi.kg[i] || '') + '">' +
+        '<input type="text" class="autocomplete-input roll-mini-input" data-kidx="' + i + '" placeholder="Kode roll" autocomplete="off" value="' + escapeAttr(itemBaru.kombinasi.kodeRoll[i] || '') + '">' +
+        '</div>' +
+        '<div class="suggestion-list" id="kombiRollSuggestions-' + i + '"></div>' +
+        '</div>';
+    });
+  }
+  return html;
+}
+
+function pasangEventDetailCard() {
+  const rowVarian = document.getElementById('rowVarian');
+  if (rowVarian) rowVarian.addEventListener('click', function () { openDropdown = (openDropdown === 'varian') ? null : 'varian'; renderDetailCard(); });
+
+  document.querySelectorAll('[data-varian]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      const label = el.dataset.varian;
+      if (label === '__CUSTOM__') {
+        itemBaru = kosongkanItemBaru();
+        itemBaru.isCustom = true;
       } else {
-        try { payload.rincian = JSON.parse(document.getElementById('qcRincianJson').value); } catch (e) {
-          hasilDiv.innerHTML = '<p class="gagal">Format JSON rincian salah.</p>';
-          return;
-        }
+        itemBaru = kosongkanItemBaru();
+        itemBaru.varianLabel = label;
+        itemBaru.kodeItem = el.dataset.kode || '';
+        itemBaru.isKombinasi = isVarianKombinasi(label);
       }
-      hasilDiv.innerHTML = '<p>Mengirim...</p>';
-      fetch(workerBase + '/submit-qc', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-        .then(function (res) { return res.json(); })
-        .then(function (data) {
-          hasilDiv.innerHTML =
-            '<p class="' + (data.ok ? 'ok' : 'gagal') + '">' + (data.ok ? '✅ SUKSES' : '❌ GAGAL') + '</p>' +
-            '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
-        })
-        .catch(function (err) {
-          hasilDiv.innerHTML = '<p class="gagal">Error: ' + err.message + '</p>';
-        });
-    }
-  </script>
+      openDropdown = null;
+      renderDetailCard();
+      updateBottomBar();
+    });
+  });
+
+  const inputWarna = document.getElementById('inputWarna');
+  if (inputWarna) {
+    inputWarna.addEventListener('input', function () {
+      itemBaru.warna = inputWarna.value.toUpperCase();
+      itemBaru.kodeRoll = null;
+      const inputRoll = document.getElementById('inputKodeRoll');
+      if (inputRoll) inputRoll.value = '';
+      renderWarnaSuggestions(inputWarna.value);
+      renderRollSuggestions('');
+    });
+    inputWarna.addEventListener('focus', function () { renderWarnaSuggestions(inputWarna.value); });
+    inputWarna.addEventListener('blur', function () { setTimeout(function () { const b = document.getElementById('warnaSuggestions'); if (b) b.innerHTML = ''; }, 150); });
+  }
+
+  const inputKg = document.getElementById('inputKg');
+  if (inputKg) inputKg.addEventListener('input', function () { itemBaru.kg = inputKg.value; });
+  const chkEstimasi = document.getElementById('chkEstimasi');
+  if (chkEstimasi) chkEstimasi.addEventListener('change', function () { itemBaru.estimasi = chkEstimasi.checked; });
+
+  const inputKodeRoll = document.getElementById('inputKodeRoll');
+  if (inputKodeRoll) {
+    inputKodeRoll.addEventListener('input', function () {
+      itemBaru.kodeRoll = inputKodeRoll.value;
+      renderRollSuggestions(inputKodeRoll.value);
+    });
+    inputKodeRoll.addEventListener('focus', function () { renderRollSuggestions(inputKodeRoll.value); });
+    inputKodeRoll.addEventListener('blur', function () { setTimeout(function () { const b = document.getElementById('rollSuggestions'); if (b) b.innerHTML = ''; }, 150); });
+  }
+
+  const rowKombi = document.getElementById('rowKombinasiWarna');
+  if (rowKombi) rowKombi.addEventListener('click', function () { openDropdown = (openDropdown === 'kombinasiWarna') ? null : 'kombinasiWarna'; renderDetailCard(); });
+  document.querySelectorAll('[data-nama]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      const w1w2 = el.dataset.nama.split(' ');
+      const w3 = el.dataset.ketiga;
+      itemBaru.kombinasi = { warna: [w1w2[0], w1w2.slice(1).join(' '), w3], kg: ['', '', ''], kodeRoll: [null, null, null] };
+      openDropdown = null;
+      renderDetailCard();
+      itemBaru.kombinasi.warna.forEach(function (w, i) { renderKombiRollSuggestions(i, ''); });
+    });
+  });
+  document.querySelectorAll('[data-nama-ring]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      const parts = el.dataset.namaRing.split(' ');
+      itemBaru.kombinasi = { warna: [parts[0], parts.slice(1).join(' ')], kg: ['', ''], kodeRoll: [null, null] };
+      openDropdown = null;
+      renderDetailCard();
+      itemBaru.kombinasi.warna.forEach(function (w, i) { renderKombiRollSuggestions(i, ''); });
+    });
+  });
+  const linkGanti = document.getElementById('linkGantiKombinasi');
+  if (linkGanti) linkGanti.addEventListener('click', function () { itemBaru.kombinasi = null; renderDetailCard(); });
+
+  document.querySelectorAll('.kg-mini').forEach(function (el) {
+    el.addEventListener('input', function () { itemBaru.kombinasi.kg[parseInt(el.dataset.kidx, 10)] = el.value; });
+  });
+  document.querySelectorAll('.roll-mini-input').forEach(function (el) {
+    const idx = parseInt(el.dataset.kidx, 10);
+    el.addEventListener('input', function () {
+      itemBaru.kombinasi.kodeRoll[idx] = el.value;
+      renderKombiRollSuggestions(idx, el.value);
+    });
+    el.addEventListener('focus', function () { renderKombiRollSuggestions(idx, el.value); });
+    el.addEventListener('blur', function () { setTimeout(function () { const b = document.getElementById('kombiRollSuggestions-' + idx); if (b) b.innerHTML = ''; }, 150); });
+  });
+
+  const inputNamaCustom = document.getElementById('inputNamaCustom');
+  if (inputNamaCustom) inputNamaCustom.addEventListener('input', function () { itemBaru.namaCustom = inputNamaCustom.value; });
+  const inputKgCustom = document.getElementById('inputKgCustom');
+  if (inputKgCustom) inputKgCustom.addEventListener('input', function () { itemBaru.kg = inputKgCustom.value; });
+  const inputRollCustom = document.getElementById('inputRollCustom');
+  if (inputRollCustom) inputRollCustom.addEventListener('input', function () { itemBaru.kodeRoll = inputRollCustom.value; });
+}
+
+function renderKombiRollSuggestions(idx, query) {
+  const box = document.getElementById('kombiRollSuggestions-' + idx);
+  if (!box) return;
+  const q = String(query || '').trim().toUpperCase();
+  const warna = itemBaru.kombinasi.warna[idx];
+  const semua = daftarRollUntukWarna(warna);
+  const cocok = q ? semua.filter(function (r) { return String(r.kodeRoll).toUpperCase().indexOf(q) === 0; }) : semua;
+  box.innerHTML = cocok.slice(0, 8).map(function (r) {
+    return '<div class="suggestion-item roll-suggestion" data-pick-kombi-roll="' + escapeAttr(r.kodeRoll) + '">Roll ' + escapeHtml(r.kodeRoll) + ' / ' + r.kg + 'kg</div>';
+  }).join('');
+  box.querySelectorAll('[data-pick-kombi-roll]').forEach(function (el) {
+    el.addEventListener('mousedown', function (e) {
+      e.preventDefault();
+      itemBaru.kombinasi.kodeRoll[idx] = el.dataset.pickKombiRoll;
+      const inputEl = document.querySelector('.roll-mini-input[data-kidx="' + idx + '"]');
+      if (inputEl) inputEl.value = itemBaru.kombinasi.kodeRoll[idx];
+      box.innerHTML = '';
+    });
+  });
+}
+
+// ------------------------------------------------------------
+// RENDER: QTY PER SIZE
+// ------------------------------------------------------------
+function renderQtyGrid() {
+  const gridUtama = document.getElementById('qtyGridUtama');
+  const gridLain = document.getElementById('qtyGridLain');
+  gridUtama.innerHTML = DAFTAR_UKURAN_UTAMA.map(qtyCellHtml).join('');
+  gridLain.innerHTML = DAFTAR_UKURAN_LAIN.map(qtyCellHtml).join('');
+  document.querySelectorAll('.qty-grid input').forEach(function (el) {
+    el.addEventListener('input', function () {
+      const u = el.dataset.ukuran;
+      const v = parseInt(el.value, 10) || 0;
+      if (v > 0) itemBaru.ukuran[u] = v; else delete itemBaru.ukuran[u];
+      hitungTotalQty();
+      updateBottomBar();
+    });
+  });
+}
+function qtyCellHtml(u) {
+  return '<div class="qty-cell"><label>' + u + '</label><input type="number" min="0" data-ukuran="' + u + '" value="' + (itemBaru.ukuran[u] || '') + '"></div>';
+}
+document.getElementById('toggleUkuranLain').addEventListener('click', function () {
+  ukuranLainTerbuka = !ukuranLainTerbuka;
+  document.getElementById('qtyGridLain').style.display = ukuranLainTerbuka ? 'grid' : 'none';
+});
+function hitungTotalQty() {
+  const total = Object.keys(itemBaru.ukuran).reduce(function (s, k) { return s + itemBaru.ukuran[k]; }, 0);
+  document.getElementById('totalQtyItem').textContent = total + ' pcs';
+}
+
+// ------------------------------------------------------------
+// TAMBAH KE DAFTAR / QUEUE
+// ------------------------------------------------------------
+function itemBaruValid() {
+  const totalQty = Object.keys(itemBaru.ukuran).reduce(function (s, k) { return s + itemBaru.ukuran[k]; }, 0);
+  if (totalQty <= 0) return false;
+  if (itemBaru.isCustom) return !!itemBaru.namaCustom.trim();
+  if (itemBaru.isKombinasi || (itemBaru.varianLabel && isVarianRinger(itemBaru.varianLabel))) {
+    if (!itemBaru.kombinasi) return false;
+    return itemBaru.kombinasi.warna.every(function (w, i) { return w && itemBaru.kombinasi.kg[i]; });
+  }
+  return !!itemBaru.varianLabel && !!itemBaru.warna;
+}
+
+function updateBottomBar() {
+  const btnTambah = document.getElementById('btnTambah');
+  btnTambah.disabled = false; // tetap boleh dicoba, validasi muncul via toast
+}
+
+document.getElementById('btnTambah').addEventListener('click', function () {
+  if (!itemBaruValid()) {
+    tampilkanToast('Lengkapi dulu detail item & qty ukuran.');
+    return;
+  }
+  daftarAntrian.push(Object.assign({ tempId: ++antrianSeq }, JSON.parse(JSON.stringify(itemBaru))));
+  itemBaru = kosongkanItemBaru();
+  openDropdown = null;
+  renderDetailCard();
+  renderQtyGrid();
+  hitungTotalQty();
+  renderQueue();
+  tampilkanToast('✓ Item ditambahkan ke daftar');
+});
+
+function renderQueue() {
+  const wrap = document.getElementById('queueWrap');
+  const list = document.getElementById('queueList');
+  const badge = document.getElementById('queueBadge');
+  const btnBuatTeks = document.getElementById('btnBuatTeks');
+
+  badge.textContent = daftarAntrian.length;
+  btnBuatTeks.textContent = 'Buat Teks (' + daftarAntrian.length + ')';
+  btnBuatTeks.disabled = daftarAntrian.length === 0;
+  wrap.style.display = daftarAntrian.length > 0 ? 'block' : 'none';
+
+  list.innerHTML = daftarAntrian.map(function (it) {
+    const deskripsi = deskripsiSingkatItem(it);
+    const ukuranTeks = Object.keys(it.ukuran).map(function (u) { return u + it.ukuran[u]; }).join(' ');
+    return '<div class="queue-item">' +
+      '<div><span class="qtag">' + escapeHtml(it.kategori) + '</span>' +
+      '<div class="qdesc">' + escapeHtml(deskripsi) + '</div>' +
+      '<div class="qsizes">' + escapeHtml(ukuranTeks) + '</div></div>' +
+      '<button class="qremove" data-tempid="' + it.tempId + '">✕</button>' +
+      '</div>';
+  }).join('');
+
+  document.querySelectorAll('.qremove').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const id = parseInt(btn.dataset.tempid, 10);
+      daftarAntrian = daftarAntrian.filter(function (it) { return it.tempId !== id; });
+      renderQueue();
+    });
+  });
+}
+
+function deskripsiSingkatItem(it) {
+  if (it.isCustom) return it.namaCustom + (it.kg ? (' - ' + it.kg + 'kg') : '') + (it.kodeRoll ? (' (roll ' + it.kodeRoll + ')') : '');
+  if (it.isKombinasi || it.kombinasi) {
+    const awalan = bikinAwalanPreview(it.kategori, it.kodeItem);
+    const nama = (awalan ? awalan + ' ' : '') + it.kombinasi.warna.slice(0, 2).join(' ');
+    return nama + ' - ' + it.kombinasi.kg[0] + 'kg (roll ' + (it.kombinasi.kodeRoll[0] || '-') + ')';
+  }
+  const awalan = bikinAwalanPreview(it.kategori, it.kodeItem);
+  const nama = (awalan ? awalan + ' ' : '') + it.warna;
+  return nama + (it.kg ? (' - ' + it.kg + 'kg') : '') + (it.kodeRoll ? (' (roll ' + it.kodeRoll + ')') : '');
+}
+
+// ------------------------------------------------------------
+// BUAT TEKS / PREVIEW / KIRIM
+// ------------------------------------------------------------
+document.getElementById('btnBuatTeks').addEventListener('click', function () {
+  if (daftarAntrian.length === 0) return;
+  const teks = daftarAntrian.map(function (it, i) {
+    const deskripsi = deskripsiSingkatItem(it);
+    const ukuranTeks = Object.keys(it.ukuran).map(function (u) { return u + it.ukuran[u] + ' = ' + it.ukuran[u]; }).join('\n');
+    return (i + 1) + '. ' + deskripsi + '\n' + ukuranTeks;
+  }).join('\n\n');
+  document.getElementById('previewBox').textContent = teks;
+  document.getElementById('peringatanBox').innerHTML = '';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('bottomBar').style.display = 'none';
+  document.getElementById('previewScreen').style.display = 'block';
+});
+
+document.getElementById('btnKembaliEdit').addEventListener('click', function () {
+  document.getElementById('previewScreen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('bottomBar').style.display = 'flex';
+});
+
+// v.02: dipencet setelah sukses kirim - balikin Mini App ke KONDISI SIAP INPUT lagi dari nol
+// (form kosong, tombol Kirim kelihatan lagi, dsb) buat laporan BERIKUTNYA di hari yang sama.
+document.getElementById('btnInputBaru').addEventListener('click', function () {
+  itemBaru = kosongkanItemBaru();
+  openDropdown = null;
+  ukuranLainTerbuka = false;
+  renderDetailCard();
+  renderQtyGrid();
+  hitungTotalQty();
+  renderQueue();
+  document.getElementById('peringatanBox').innerHTML = '';
+  document.getElementById('previewScreen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('bottomBar').style.display = 'flex';
+  document.getElementById('btnKirim').style.display = 'block';
+  document.getElementById('btnKirim').disabled = false;
+  document.getElementById('btnKirim').textContent = '🛫 Kirim ke Telegram';
+  document.getElementById('btnInputBaru').style.display = 'none';
+});
+
+document.getElementById('btnSalinTeks').addEventListener('click', function () {
+  const teks = document.getElementById('previewBox').textContent;
+  navigator.clipboard.writeText(teks).then(function () { tampilkanToast('Teks disalin'); });
+});
+
+document.getElementById('btnKirim').addEventListener('click', function () {
+  if (!tg || !tg.initData) {
+    tampilkanToast('Harus dibuka lewat Mini App Telegram.');
+    return;
+  }
+  const btnKirim = document.getElementById('btnKirim');
+  btnKirim.disabled = true;
+  btnKirim.textContent = 'Mengirim...';
+
+  const items = daftarAntrian.map(bangunPayloadItem);
+
+  fetch(WORKER_URL + '/submit-produksi', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ initData: tg.initData, items: items })
+  })
+    .then(function (res) { return res.json(); })
+    .then(function (data) {
+      if (data.ok) {
+        // v.02: baik ADA peringatan stok maupun TIDAK, datanya SAMA-SAMA sudah tersimpan
+        // (data.ok true) - jangan biarkan tombol "Kirim ke Telegram" bisa ditekan lagi (nanti
+        // dianggap submit baru & kena tolak anti-duplikat, membingungkan). Bersihkan antrian,
+        // tampilkan peringatan (kalau ada) secara permanen, kasih tombol buat mulai input baru.
+        if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+        daftarAntrian = [];
+        if (data.peringatanStok && data.peringatanStok.length > 0) {
+          document.getElementById('peringatanBox').innerHTML =
+            '<div class="peringatan-box">⚠️ Tersimpan, tapi ada yang perlu dicek manual:<br>' + data.peringatanStok.map(escapeHtml).join('<br>') + '</div>';
+        }
+        document.getElementById('previewBox').textContent = '✅ Berhasil dikirim & tersimpan.';
+        btnKirim.style.display = 'none';
+        document.getElementById('btnInputBaru').style.display = 'block';
+      } else if (data.duplikat) {
+        tampilkanToast(data.error);
+        btnKirim.disabled = false;
+        btnKirim.textContent = '🛫 Kirim ke Telegram';
+      } else {
+        tampilkanToast('Gagal: ' + data.error);
+        btnKirim.disabled = false;
+        btnKirim.textContent = '🛫 Kirim ke Telegram';
+      }
+    })
+    .catch(function (err) {
+      tampilkanToast('Gagal jaringan: ' + err.message);
+      btnKirim.disabled = false;
+      btnKirim.textContent = '🛫 Kirim ke Telegram';
+    });
+});
+
+function bangunPayloadItem(it) {
+  if (it.isCustom) {
+    return { custom: true, namaCustom: it.namaCustom, kg: it.kg || null, kodeRoll: it.kodeRoll || null, ukuran: it.ukuran };
+  }
+  if (it.isKombinasi || it.kombinasi) {
+    return {
+      kategori: it.kategori, kodeItem: it.kodeItem,
+      kombinasi: { warna: it.kombinasi.warna, kg: it.kombinasi.kg.map(function (v) { return parseFloat(v) || 0; }), kodeRoll: it.kombinasi.kodeRoll },
+      ukuran: it.ukuran
+    };
+  }
+  return { kategori: it.kategori, kodeItem: it.kodeItem, warna: it.warna, kg: it.kg || null, kodeRoll: it.kodeRoll || null, ukuran: it.ukuran };
+}
+
+// ------------------------------------------------------------
+// HELPER UMUM
+// ------------------------------------------------------------
+function escapeHtml(t) { return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function escapeAttr(t) { return escapeHtml(t).replace(/"/g, '&quot;'); }
+function tampilkanToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(function () { el.classList.remove('show'); }, 2500);
+}
+
+// ------------------------------------------------------------
+// BOOTSTRAP
+// ------------------------------------------------------------
+renderQtyGrid();
+muatDataReferensi();
+</script>
 </body>
 </html>
