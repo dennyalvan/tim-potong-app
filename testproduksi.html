@@ -31,6 +31,12 @@
   <button onclick="tesData('stok-roll')">Tes /data/stok-roll</button>
   <div id="hasilData"></div>
 
+  <hr>
+  <h4>Tahap 3 - Submit Produksi (contoh)</h4>
+  <p>Contoh: kategori Dewasa, kode item "TS" (Pendek 24S), warna NAVY, kg 5, roll TES0001, size S=2 M=3</p>
+  <button onclick="tesSubmit()">Tes Submit Produksi (data contoh)</button>
+  <div id="hasilSubmit"></div>
+
   <script>
     const tg = window.Telegram ? window.Telegram.WebApp : null;
     if (tg) tg.ready();
@@ -66,6 +72,42 @@
         .then(function (res) { return res.json(); })
         .then(function (data) {
           hasilDiv.innerHTML = '<p class="ok">✅ Respons diterima</p><pre>' + JSON.stringify(data, null, 2) + '</pre>';
+        })
+        .catch(function (err) {
+          hasilDiv.innerHTML = '<p class="gagal">Error: ' + err.message + '</p>';
+        });
+    }
+    function tesSubmit() {
+      const hasilDiv = document.getElementById('hasilSubmit');
+      const workerBase = document.getElementById('workerUrl').value.trim().replace('/tes-validasi-initdata', '');
+      if (!tg || !tg.initData) {
+        hasilDiv.innerHTML = '<p class="gagal">Harus dibuka dari Telegram.</p>';
+        return;
+      }
+      const contoh = {
+        initData: tg.initData,
+        items: [
+          {
+            kategori: 'Dewasa',
+            kodeItem: 'TS',
+            warna: 'NAVY',
+            kg: 5,
+            kodeRoll: 'TES0001',
+            ukuran: { S: 2, M: 3 }
+          }
+        ]
+      };
+      hasilDiv.innerHTML = '<p>Mengirim...</p>';
+      fetch(workerBase + '/submit-produksi', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(contoh)
+      })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          hasilDiv.innerHTML =
+            '<p class="' + (data.ok ? 'ok' : 'gagal') + '">' + (data.ok ? '✅ SUKSES' : '❌ GAGAL') + '</p>' +
+            '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
         })
         .catch(function (err) {
           hasilDiv.innerHTML = '<p class="gagal">Error: ' + err.message + '</p>';
