@@ -42,6 +42,17 @@
   <button onclick="tesSubmit()">Kirim Submit Produksi</button>
   <div id="hasilSubmit"></div>
 
+  <hr>
+  <h4>Tahap 4b - Submit Kombinasi (2-3 warna)</h4>
+  <p>Kode Item (misal "RING" atau "LST"): <input type="text" id="kKodeItem" value="RING"></p>
+  <p>Kategori: <select id="kKategori"><option value="Dewasa">Dewasa</option><option value="Anak">Anak</option></select></p>
+  <p>Warna (pisah koma, 2 atau 3, misal "GREY,NAVY"): <input type="text" id="kWarna" placeholder="GREY,NAVY"></p>
+  <p>Kg per warna (pisah koma, urutan sama): <input type="text" id="kKg" placeholder="2,1.5"></p>
+  <p>Kode Roll per warna (pisah koma, boleh kosong per elemen): <input type="text" id="kRoll" placeholder="0962,0110"></p>
+  <p>Qty ukuran (JSON): <input type="text" id="kUkuran" value='{"S":1}'></p>
+  <button onclick="tesSubmitKombinasi()">Kirim Submit Kombinasi</button>
+  <div id="hasilKombinasi"></div>
+
   <script>
     const tg = window.Telegram ? window.Telegram.WebApp : null;
     if (tg) tg.ready();
@@ -100,6 +111,44 @@
         warna: document.getElementById('fWarna').value.trim(),
         kg: parseFloat(document.getElementById('fKg').value) || null,
         kodeRoll: document.getElementById('fKodeRoll').value.trim() || null,
+        ukuran: ukuran
+      };
+      const payload = { initData: tg.initData, items: [item] };
+      hasilDiv.innerHTML = '<p>Mengirim...</p>';
+      fetch(workerBase + '/submit-produksi', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          hasilDiv.innerHTML =
+            '<p class="' + (data.ok ? 'ok' : 'gagal') + '">' + (data.ok ? '✅ SUKSES' : '❌ GAGAL') + '</p>' +
+            '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+        })
+        .catch(function (err) {
+          hasilDiv.innerHTML = '<p class="gagal">Error: ' + err.message + '</p>';
+        });
+    }
+    function tesSubmitKombinasi() {
+      const hasilDiv = document.getElementById('hasilKombinasi');
+      const workerBase = document.getElementById('workerUrl').value.trim().replace('/tes-validasi-initdata', '');
+      if (!tg || !tg.initData) {
+        hasilDiv.innerHTML = '<p class="gagal">Harus dibuka dari Telegram.</p>';
+        return;
+      }
+      let ukuran;
+      try { ukuran = JSON.parse(document.getElementById('kUkuran').value); } catch (e) {
+        hasilDiv.innerHTML = '<p class="gagal">Format JSON ukuran salah.</p>';
+        return;
+      }
+      const warnaArr = document.getElementById('kWarna').value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+      const kgArr = document.getElementById('kKg').value.split(',').map(function (s) { return parseFloat(s.trim()); });
+      const rollArr = document.getElementById('kRoll').value.split(',').map(function (s) { return s.trim() || null; });
+      const item = {
+        kategori: document.getElementById('kKategori').value,
+        kodeItem: document.getElementById('kKodeItem').value.trim(),
+        kombinasi: { warna: warnaArr, kg: kgArr, kodeRoll: rollArr },
         ukuran: ukuran
       };
       const payload = { initData: tg.initData, items: [item] };
