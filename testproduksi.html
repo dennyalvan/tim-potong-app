@@ -36,6 +36,15 @@
   <button onclick="tesData('laporan-qc')">Tes /data/laporan-qc</button>
 
   <hr>
+  <h4>Dashboard Tahap 2 - Submit QC</h4>
+  <p>ID tim_potong: <input type="number" id="qcTimPotongId" placeholder="misal 130"></p>
+  <p>Mode: <select id="qcMode"><option value="ringkas">Ringkas</option><option value="rincian">Rincian</option></select></p>
+  <p><b>Kalau mode Ringkas</b> - Selesai: <input type="number" id="qcRingkasSelesai" value="0"> Reject: <input type="number" id="qcRingkasReject" value="0"></p>
+  <p><b>Kalau mode Rincian</b> - JSON array, misal [{"ukuran":"S","selesai":1,"reject":0}]: <input type="text" id="qcRincianJson" style="width:100%" value='[]'></p>
+  <button onclick="tesSubmitQC()">Kirim Submit QC</button>
+  <div id="hasilSubmitQC"></div>
+
+  <hr>
   <h4>Tahap 3-4 - Submit Produksi (isi manual)</h4>
   <p>Kategori: <select id="fKategori"><option value="Dewasa">Dewasa</option><option value="Anak">Anak</option></select></p>
   <p>Kode Item (prefix, misal "TS"): <input type="text" id="fKodeItem" value="TS"></p>
@@ -158,6 +167,42 @@
       const payload = { initData: tg.initData, items: [item] };
       hasilDiv.innerHTML = '<p>Mengirim...</p>';
       fetch(workerBase + '/submit-produksi', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          hasilDiv.innerHTML =
+            '<p class="' + (data.ok ? 'ok' : 'gagal') + '">' + (data.ok ? '✅ SUKSES' : '❌ GAGAL') + '</p>' +
+            '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+        })
+        .catch(function (err) {
+          hasilDiv.innerHTML = '<p class="gagal">Error: ' + err.message + '</p>';
+        });
+    }
+    function tesSubmitQC() {
+      const hasilDiv = document.getElementById('hasilSubmitQC');
+      const workerBase = document.getElementById('workerUrl').value.trim().replace('/tes-validasi-initdata', '');
+      if (!tg || !tg.initData) {
+        hasilDiv.innerHTML = '<p class="gagal">Harus dibuka dari Telegram.</p>';
+        return;
+      }
+      const mode = document.getElementById('qcMode').value;
+      const payload = { initData: tg.initData, timPotongId: parseInt(document.getElementById('qcTimPotongId').value, 10), mode: mode };
+      if (mode === 'ringkas') {
+        payload.ringkas = {
+          selesai: parseFloat(document.getElementById('qcRingkasSelesai').value) || 0,
+          reject: parseFloat(document.getElementById('qcRingkasReject').value) || 0
+        };
+      } else {
+        try { payload.rincian = JSON.parse(document.getElementById('qcRincianJson').value); } catch (e) {
+          hasilDiv.innerHTML = '<p class="gagal">Format JSON rincian salah.</p>';
+          return;
+        }
+      }
+      hasilDiv.innerHTML = '<p>Mengirim...</p>';
+      fetch(workerBase + '/submit-qc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
