@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tes Worker Produksi</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  body { font-family: sans-serif; padding: 16px; background: #f2f2f2; }
+  button { padding: 12px 20px; font-size: 16px; margin: 8px 0; width: 100%; }
+  pre { background: #fff; padding: 12px; border-radius: 8px; white-space: pre-wrap; word-break: break-all; font-size: 12px; }
+  .ok { color: green; font-weight: bold; }
+  .gagal { color: red; font-weight: bold; }
+</style>
+</head>
+<body>
+  <h3>Tes Worker Produksi (Tahap 1)</h3>
+  <p>Halaman ini SEMENTARA, cuma buat ngetes - bukan Mini App produksi yang sebenarnya.</p>
+
+  <!-- GANTI URL INI sesuai URL Worker yang sudah Denny deploy -->
+  <p>URL Worker: <input type="text" id="workerUrl" style="width:100%" value="https://tim-potong-api.GANTI-SESUAI-USER.workers.dev/tes-validasi-initdata"></p>
+
+  <button onclick="tesValidasi()">Tes Validasi initData</button>
+  <div id="hasil"></div>
+
+  <script>
+    const tg = window.Telegram ? window.Telegram.WebApp : null;
+    if (tg) tg.ready();
+
+    function tesValidasi() {
+      const hasilDiv = document.getElementById('hasil');
+      const workerUrl = document.getElementById('workerUrl').value.trim();
+      if (!tg || !tg.initData) {
+        hasilDiv.innerHTML = '<p class="gagal">Halaman ini HARUS dibuka dari Telegram (lewat Mini App), bukan browser biasa - initData kosong.</p>';
+        return;
+      }
+      hasilDiv.innerHTML = '<p>Mengirim...</p>';
+      fetch(workerUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: tg.initData })
+      })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          hasilDiv.innerHTML =
+            '<p class="' + (data.ok ? 'ok' : 'gagal') + '">' + (data.ok ? '✅ VALID' : '❌ GAGAL') + '</p>' +
+            '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+        })
+        .catch(function (err) {
+          hasilDiv.innerHTML = '<p class="gagal">Error jaringan: ' + err.message + '</p>';
+        });
+    }
+  </script>
+</body>
+</html>
