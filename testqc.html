@@ -1,10 +1,39 @@
 <!DOCTYPE html>
+<!--
+============================================================
+DASHBOARD ver.02
+============================================================
+Dashboard Stok Kain + QC - versi BARU, connect ke Cloudflare Worker (tim-potong-api) +
+Supabase, gantiin sistem lama (Apps Script + Google Sheets).
+
+PERUBAHAN ver.02 (dari ver.01, disesuaikan persis ke tampilan pembanding Apps Script lama):
+- AUTO-UPDATE tanpa refresh manual - pakai Supabase Realtime beneran (bukan polling), lewat
+  kunci PUBLIK (anon/publishable, aman di client) yang cuma bisa BACA tabel yang diizinkan RLS.
+  Ada indikator "Memuat..." pas lagi ambil data.
+- Tampilan dirapatkan/compact (padding & margin dikecilkan) biar lebih mirip versi lama.
+- Format tanggal jadi "Selasa, 21/07/26" (bukan ISO "2026-07-21").
+- Format kg jadi "24,95 kg" (koma Indonesia + spasi), bukan "24.95kg".
+- Checkbox di tiap baris jadi SHORTCUT FUNGSIONAL: tap = otomatis isi "Selesai = sisa saat
+  ini, Reject = 0" lalu langsung masuk ke Daftar Antrian - TETAP harus di-konfirmasi lewat
+  "Kirim Rekap" (belum langsung terkirim ke server saat itu juga).
+- Angka progress (mis. "92/108") - angka SELESAI-nya dibungkus lingkaran hitam CUMA kalau
+  progressnya udah lebih dari 0. Kalau masih 0, ditulis "-/108" polos tanpa lingkaran.
+- Badge ukuran (S 13, M 30, dst) dirapatkan, gak pakai kotak background lagi.
+
+2 tab: "Proses & QC" (daftar laporan belum SELESAI, expand per baris buat input QC mode
+Ringkas/Rincian, antrian multi-laporan, Arsip Selesai N hari terakhir) dan "Stok Kain"
+(ringkasan total + detail per warna, expand buat lihat per-roll).
+
+BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
+============================================================
+-->
 <html lang="id">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Dashboard Stok Kain + QC</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
   :root {
     --bg: #eef2fb;
@@ -30,6 +59,7 @@
   .header-right { text-align: right; }
   .btn-refresh { background: #fff; border: 1px solid var(--border); border-radius: 20px; padding: 8px 16px; font-weight: 700; font-size: 13px; cursor: pointer; color: #374151; }
   .last-update { font-size: 11px; color: var(--gray-text); margin-top: 4px; }
+  .loading-indicator { font-size: 11px; color: var(--gray-text); margin-top: 4px; }
 
   .tab-toggle { display: flex; gap: 10px; margin-bottom: 12px; }
   .tab-btn { flex: 1; padding: 12px; border-radius: 12px; border: none; background: #fff; font-weight: 700; font-size: 14px; cursor: pointer; color: #374151; display: flex; align-items: center; justify-content: center; gap: 6px; }
@@ -51,27 +81,29 @@
   .chip { flex-shrink: 0; padding: 8px 14px; border-radius: 20px; border: 1px solid var(--border); background: #fff; font-size: 13px; font-weight: 600; cursor: pointer; color: #374151; white-space: nowrap; }
   .chip.active { background: var(--indigo); color: #fff; border-color: var(--indigo); }
 
-  .laporan-card { background: #fff; border-radius: 14px; padding: 14px; margin-bottom: 10px; }
-  .laporan-top { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
-  .laporan-top .idx { color: var(--gray-label); font-size: 13px; font-weight: 700; padding-top: 2px; }
-  .laporan-top .chk { margin-top: 4px; }
-  .laporan-info { flex: 1; }
-  .laporan-info .nama { font-weight: 700; font-size: 14px; }
-  .badge-kat { display: inline-block; font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 5px; margin-left: 6px; background: #1c2340; color: #fff; }
+  .laporan-card { background: #fff; border-radius: 12px; padding: 10px 12px; margin-bottom: 6px; }
+  .laporan-top { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
+  .laporan-top .idx { color: var(--gray-label); font-size: 12px; font-weight: 700; padding-top: 2px; }
+  .chk-selesai { margin-top: 3px; width: 15px; height: 15px; flex-shrink: 0; cursor: pointer; }
+  .laporan-info { flex: 1; min-width: 0; }
+  .laporan-info .nama { font-weight: 700; font-size: 13px; }
+  .badge-kat { display: inline-block; font-size: 9px; font-weight: 800; padding: 1px 6px; border-radius: 5px; margin-left: 5px; background: #1c2340; color: #fff; vertical-align: 1px; }
   .badge-kat.anak { background: #0d9488; }
-  .laporan-meta { font-size: 12px; color: var(--gray-text); margin-top: 3px; }
+  .laporan-meta { font-size: 11px; color: var(--gray-text); margin-top: 2px; }
   .laporan-meta .roll { color: var(--orange-link); font-weight: 600; }
-  .progress-circle { text-align: right; }
-  .progress-circle .fraction { font-weight: 800; font-size: 15px; }
-  .progress-bar-mini { width: 70px; height: 4px; background: #e5e9f2; border-radius: 4px; margin-top: 4px; overflow: hidden; }
+  .progress-circle { text-align: right; flex-shrink: 0; }
+  .progress-circle .fraction-circle { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 22px; padding: 0 6px; background: var(--navy-dark); color: #fff; border-radius: 50px; font-weight: 800; font-size: 13px; }
+  .progress-circle .fraction-total { font-weight: 700; font-size: 13px; color: #1c1c1e; }
+  .progress-bar-mini { width: 60px; height: 4px; background: #e5e9f2; border-radius: 4px; margin-top: 4px; margin-left: auto; overflow: hidden; }
   .progress-bar-mini .fill { height: 100%; background: var(--green); }
 
-  .laporan-expand { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px; }
-  .ukuran-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
-  .ukuran-badge { background: #eef2fb; border-radius: 8px; padding: 4px 9px; font-size: 12px; font-weight: 700; color: #374151; }
-  .progress-bar-full { width: 100%; height: 8px; background: #e5e9f2; border-radius: 8px; overflow: hidden; margin-bottom: 8px; }
+  .laporan-expand { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px; }
+  .ukuran-badges { display: flex; gap: 4px 10px; flex-wrap: wrap; margin-bottom: 8px; font-size: 12px; }
+  .ukuran-badge { font-weight: 700; color: #374151; }
+  .ukuran-badge .n { color: var(--gray-text); font-weight: 600; margin-left: 2px; }
+  .progress-bar-full { width: 100%; height: 7px; background: #e5e9f2; border-radius: 8px; overflow: hidden; margin-bottom: 6px; }
   .progress-bar-full .fill { height: 100%; background: var(--green); }
-  .stats-line { display: flex; justify-content: space-between; font-size: 12px; color: var(--gray-text); font-weight: 600; margin-bottom: 12px; }
+  .stats-line { display: flex; justify-content: space-between; font-size: 12px; color: var(--gray-text); font-weight: 600; margin-bottom: 10px; }
   .stats-line .sel { color: var(--green); }
   .stats-line .rej { color: var(--danger); }
 
@@ -129,6 +161,7 @@
     </div>
     <div class="header-right">
       <button class="btn-refresh" id="btnRefresh">🔄 Refresh</button>
+      <p class="loading-indicator" id="loadingIndicator" style="display:none">Memuat...</p>
     </div>
   </div>
 
@@ -191,7 +224,27 @@
 // KONFIGURASI - GANTI sesuai URL Worker produksi
 // ============================================================
 const WORKER_URL = 'https://tim-potong-api.dennyalvan.workers.dev';
+// v.02: Supabase Realtime - buat auto-update tanpa refresh manual. Kunci di bawah ini kunci
+// PUBLIK (anon/publishable), AMAN dipasang di kode client-side - beda dari kunci "secret" yang
+// dipakai Worker. Kunci publik ini cuma bisa BACA (SELECT) tabel yang emang udah dikasih izin
+// lewat RLS policy (tim_potong, log_qc, stok_kain) - gak bisa dipakai buat nulis/ubah data.
+const SUPABASE_URL = 'https://upszwynqszlbnwlsutds.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_ryWCacc05wyW7KQK_kEVQQ_AGrJ8998';
 const DAFTAR_UKURAN_URUT = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL', '5XL', '6XL'];
+const HARI_ID = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+
+function formatTanggalPendek(tanggalStr) {
+  if (!tanggalStr) return '';
+  const d = new Date(tanggalStr + 'T00:00:00');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yy = String(d.getFullYear()).slice(-2);
+  return HARI_ID[d.getDay()] + ', ' + dd + '/' + mm + '/' + yy;
+}
+
+function formatKg(n) {
+  return Number(n || 0).toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 2 }) + ' kg';
+}
 const WARNA_KE_HEX = {}; // opsional, kalau mau dipetakan ke warna asli - default abu-abu
 
 const tg = window.Telegram ? window.Telegram.WebApp : null;
@@ -240,6 +293,7 @@ function updateJamRefresh() {
 // MUAT DAFTAR LAPORAN
 // ------------------------------------------------------------
 function muatDaftarLaporan() {
+  tampilkanLoading(true);
   fetch(WORKER_URL + '/data/laporan-qc')
     .then(function (r) { return r.json(); })
     .then(function (data) {
@@ -247,7 +301,12 @@ function muatDaftarLaporan() {
       updateJamRefresh();
       renderDaftarLaporan();
     })
-    .catch(function (e) { tampilkanToast('Gagal memuat laporan: ' + e.message); });
+    .catch(function (e) { tampilkanToast('Gagal memuat laporan: ' + e.message); })
+    .finally(function () { tampilkanLoading(false); });
+}
+
+function tampilkanLoading(tampil) {
+  document.getElementById('loadingIndicator').style.display = tampil ? 'block' : 'none';
 }
 
 function hariLaluTeks(tanggalStr) {
@@ -287,15 +346,22 @@ function renderLaporanCard(r, nomor) {
   const terbuka = !!laporanTerbuka[r.id];
   const badgeClass = String(r.kategoriBadge || '').toLowerCase() === 'anak' ? 'anak' : '';
 
+  // v.02: lingkaran cuma muncul kalau UDAH ADA progress (totalSelesai > 0) - biar mata
+  // langsung fokus ke angka yang lagi dikerjakan. Kalau masih 0, tampil "-/jumlah" polos
+  // tanpa lingkaran (sesuai contoh pembanding).
+  const fraksiHtml = r.totalSelesai > 0
+    ? '<span class="fraction-circle">' + r.totalSelesai + '</span><span class="fraction-total">/' + r.jumlah + '</span>'
+    : '<span class="fraction-total">-/' + r.jumlah + '</span>';
+
   let html = '<div class="laporan-card" data-id="' + r.id + '">' +
-    '<div class="laporan-top" data-toggle="' + r.id + '">' +
-    '<span class="idx">' + nomor + '</span>' +
-    '<div class="laporan-info">' +
+    '<div class="laporan-top">' +
+    '<input type="checkbox" class="chk-selesai" data-quickdone="' + r.id + '" title="Tandai selesai semua sisa">' +
+    '<div class="laporan-info" data-toggle="' + r.id + '">' +
     '<span class="nama">' + escapeHtml(r.jenisWarnaBaju) + '</span>' +
     (r.kategoriBadge ? '<span class="badge-kat ' + badgeClass + '">' + escapeHtml(r.kategoriBadge) + '</span>' : '') +
-    '<div class="laporan-meta">' + escapeHtml(r.tanggal) + ' · <span class="roll">Roll ' + (r.kodeRoll ? escapeHtml(r.kodeRoll) : '-') + '</span> · ' + (r.pemakaianKainKg || 0) + 'kg · ' + hariLaluTeks(r.tanggal) + '</div>' +
+    '<div class="laporan-meta">' + formatTanggalPendek(r.tanggal) + ' · <span class="roll">Roll ' + (r.kodeRoll ? escapeHtml(r.kodeRoll) : '-') + '</span> · ' + formatKg(r.pemakaianKainKg) + ' · ' + hariLaluTeks(r.tanggal) + '</div>' +
     '</div>' +
-    '<div class="progress-circle"><span class="fraction">' + r.totalSelesai + '/' + r.jumlah + '</span>' +
+    '<div class="progress-circle" data-toggle="' + r.id + '">' + fraksiHtml +
     '<div class="progress-bar-mini"><div class="fill" style="width:' + persen + '%"></div></div></div>' +
     '</div>';
 
@@ -312,7 +378,7 @@ function renderLaporanExpand(r) {
   const perUkuranSorted = r.perUkuran.slice().sort(function (a, b) { return DAFTAR_UKURAN_URUT.indexOf(a.ukuran) - DAFTAR_UKURAN_URUT.indexOf(b.ukuran); });
 
   let html = '<div class="laporan-expand">' +
-    '<div class="ukuran-badges">' + perUkuranSorted.map(function (u) { return '<span class="ukuran-badge">' + u.ukuran + ' ' + u.qty + '</span>'; }).join('') + '</div>' +
+    '<div class="ukuran-badges">' + perUkuranSorted.map(function (u) { return '<span class="ukuran-badge">' + u.ukuran + '<span class="n">' + u.qty + '</span></span>'; }).join('') + '</div>' +
     '<div class="progress-bar-full"><div class="fill" style="width:' + persen + '%"></div></div>' +
     '<div class="stats-line"><span class="sel">Sel ' + r.totalSelesai + '</span><span class="rej">Rej ' + r.totalReject + '</span><span>Sisa ' + r.sisa + '</span></div>' +
     '<div class="mode-toggle">' +
@@ -362,6 +428,27 @@ function pasangEventLaporanCard() {
     el.addEventListener('click', function (e) {
       e.stopPropagation();
       tambahKeAntrian(parseInt(el.dataset.tambah, 10));
+    });
+  });
+  // v.02: checkbox shortcut "tandai selesai semua sisa" - LANGSUNG masuk antrian (mode ringkas,
+  // Selesai = sisa saat ini, Reject 0), TAPI tetap harus lewat "Kirim Rekap" buat beneran
+  // terkirim - jadi tetap ada jeda konfirmasi (antrian ringkasan-nya berfungsi sebagai preview),
+  // bukan langsung submit ke server saat itu juga.
+  document.querySelectorAll('[data-quickdone]').forEach(function (el) {
+    el.addEventListener('click', function (e) {
+      e.stopPropagation();
+      const id = parseInt(el.dataset.quickdone, 10);
+      const r = daftarLaporanData.find(function (x) { return x.id === id; });
+      el.checked = false; // checkbox ini cuma "tombol sekali tap", bukan status permanen
+      if (!r || r.sisa <= 0) { tampilkanToast('Item ini sudah gak ada sisa.'); return; }
+      const sudahDiAntrian = antrianQC.some(function (a) { return a.timPotongId === id; });
+      if (sudahDiAntrian) { tampilkanToast('Item ini sudah ada di antrian.'); return; }
+      antrianQC.push({
+        timPotongId: id, mode: 'ringkas', ringkas: { selesai: r.sisa, reject: 0 },
+        preview: r.jenisWarnaBaju + ' - Selesaikan sisa ' + r.sisa + ' pcs'
+      });
+      renderAntrian();
+      tampilkanToast('✓ "' + r.jenisWarnaBaju + '" ditambahkan ke antrian (selesaikan semua sisa) - cek dulu di daftar antrian sebelum Kirim Rekap.');
     });
   });
 }
@@ -588,9 +675,35 @@ function tampilkanToast(msg) {
 }
 
 // ------------------------------------------------------------
+// REALTIME - auto-update tanpa refresh manual. Begitu ada perubahan di tim_potong/log_qc di
+// Supabase (dari Mini App Input Produksi, atau dari Dashboard ini sendiri sesi lain), data di
+// layar ini ke-refresh OTOMATIS. Pakai "debounce" biar kalau banyak perubahan numpuk
+// bersamaan, gak nembak ulang Worker berkali-kali beruntun - tunggu 800ms hening dulu.
+// ------------------------------------------------------------
+let timerDebounceRealtime = null;
+function jadwalkanMuatUlang() {
+  if (timerDebounceRealtime) clearTimeout(timerDebounceRealtime);
+  timerDebounceRealtime = setTimeout(function () {
+    muatDaftarLaporan();
+    if (document.getElementById('tabStok').style.display !== 'none') muatStokUtuh();
+  }, 800);
+}
+
+function setupRealtime() {
+  if (!window.supabase) { console.warn('Supabase JS client gagal dimuat - auto-update nonaktif, tetap bisa refresh manual.'); return; }
+  const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  client.channel('dashboard-live')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'tim_potong' }, jadwalkanMuatUlang)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'log_qc' }, jadwalkanMuatUlang)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'stok_kain' }, jadwalkanMuatUlang)
+    .subscribe();
+}
+
+// ------------------------------------------------------------
 // BOOTSTRAP
 // ------------------------------------------------------------
 muatDaftarLaporan();
+setupRealtime();
 </script>
 </body>
 </html>
