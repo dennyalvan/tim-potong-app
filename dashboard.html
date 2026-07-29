@@ -1,15 +1,21 @@
 <!--
-  HTML QC - ver.03
+  HTML QC - ver.04
   Dashboard web statis (3 tab: "✅ Proses & QC", "📦 Stok Kain", "📊 Rekap QC"), dibuka lewat
   tombol Telegram (command /stok). Hosting GitHub Pages, upload dengan nama dashboard.html
   (BUKAN nama file lokalnya). Backend: CODE TIM POTONG ver.09.js (WAJIB dideploy bareng - tab
   Rekap QC butuh endpoint ?action=rekapQC & format LOG QC baru yang cuma ada mulai versi itu).
 
+  PERUBAHAN ver.04 (dari ver.03):
+    - Tabel Rekap QC dirombak dari <table>+colgroup jadi CSS GRID (div-based) - ver.03 (table-
+      layout:fixed+colgroup) ternyata MASIH kepepet di webview Telegram (kemungkinan dukungan
+      colgroup/table-layout gak konsisten di situ). CSS Grid jauh lebih predictable lintas
+      browser/webview - grid-template-columns dipasang SAMA PERSIS di tiap baris (header &
+      data) via inline style dari JS, kolom dijamin gak pernah "direbut" kolom lain.
+
   PERUBAHAN ver.03 (dari ver.02):
     - Perbaikan styling tabel Rekap QC - sebelumnya table-layout AUTO bikin kolom Waktu (teks
       panjang) "ngerebut" lebar dari kolom ukuran (S/M/L/dst), jadinya kolom2 itu kepepet
-      sampai nyaris 0 lebar & keliatan numpuk. Sekarang pakai table-layout:fixed + lebar kolom
-      TETAP lewat <colgroup> yang di-generate dinamis di renderRekapQC().
+      sampai nyaris 0 lebar & keliatan numpuk. (SUDAH DIGANTI CSS Grid di ver.04 di atas.)
 
   PERUBAHAN ver.02 (dari ver.01):
     - Tab baru "📊 Rekap QC" - histori submit QC (1 baris = 1x submit, kolom ukuran + Reject +
@@ -144,17 +150,22 @@ h2.section-title{
 .empty-state, .error-state{ padding:20px; text-align:center; font-size:12px; color:var(--ink-muted); grid-column:1/-1; }
 .error-state{ color:var(--warn); }
 
-/* ===== REKAP QC: tabel histori submit (1 baris = 1x submit) ===== */
+/* ===== REKAP QC: histori submit (1 baris = 1x submit) - CSS GRID, bukan <table> ===== */
+/* v.04: sebelumnya pakai <table>+colgroup, ternyata masih kepepet di webview Telegram
+   (kemungkinan dukungan table-layout:fixed/colgroup gak konsisten). CSS Grid jauh lebih
+   predictable - tiap baris (header & data) grid-template-columns SAMA PERSIS (di-set inline
+   dari JS), jadi kolom dijamin selalu selebar yang ditentukan, gak pernah "direbut" kolom lain. */
 .rekap-wrap{ background:var(--surface); border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow); overflow-x:auto; }
-.rekap-table{ width:100%; border-collapse:collapse; font-size:12px; table-layout:fixed; }
-.rekap-table th{ text-align:left; padding:8px 6px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-muted); border-bottom:1.4px solid var(--line); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.rekap-table th.num{ text-align:right; }
-.rekap-table td{ padding:8px 6px; border-bottom:1px solid var(--line); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.rekap-table td.num{ text-align:right; font-variant-numeric:tabular-nums; }
-.rekap-table td.muted{ color:var(--ink-muted); }
-.rekap-table td.selesai{ font-weight:700; }
-.rekap-table td.reject{ color:var(--bad); font-weight:600; }
-.rekap-table tr:last-child td{ border-bottom:none; }
+.rekap-row{ display:grid; align-items:center; }
+.rekap-row > div{ padding:8px 6px; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rekap-head{ border-bottom:1.4px solid var(--line); }
+.rekap-head > div{ font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-muted); }
+.rekap-row:not(.rekap-head){ border-bottom:1px solid var(--line); }
+.rekap-row:last-child{ border-bottom:none; }
+.rekap-num{ text-align:right; font-variant-numeric:tabular-nums; }
+.rekap-muted{ color:var(--ink-muted); }
+.rekap-selesai{ font-weight:700; text-align:right; font-variant-numeric:tabular-nums; }
+.rekap-reject{ color:var(--bad); font-weight:600; text-align:right; font-variant-numeric:tabular-nums; }
 .rekap-foot{ display:flex; justify-content:flex-end; gap:18px; padding:9px 12px; font-size:12px; border-top:1px solid var(--line); background:var(--surface-2); }
 .rekap-foot b{ color:var(--ink); }
 
@@ -516,11 +527,9 @@ input[type="number"]{ -moz-appearance:textfield; appearance:textfield; }
     <h2 class="section-title">Rekap QC</h2>
     <p class="section-summary" id="rekapSummary">Memuat…</p>
     <div class="rekap-wrap">
-      <table class="rekap-table" id="rekapTable">
-        <colgroup id="rekapColgroup"></colgroup>
-        <thead><tr id="rekapHeadRow"></tr></thead>
-        <tbody id="rekap-list"><tr><td class="empty-state">Memuat…</td></tr></tbody>
-      </table>
+      <div id="rekapList">
+        <div class="rekap-row"><div class="empty-state">Memuat…</div></div>
+      </div>
       <div class="rekap-foot" id="rekapFoot"></div>
     </div>
     <p class="foot-note">1 baris = 1x submit QC, diurutkan sesuai waktu submit ke Telegram. Kalau 1 pekerjaan disubmit beberapa kali, tiap submit muncul sebagai baris terpisah - totalnya tetap sama dengan sheet TIM POTONG.</p>
@@ -789,7 +798,7 @@ function muatRekapQC(paksaRefresh){
     })
     .catch(function(err){
       document.getElementById("rekapSummary").textContent = "Gagal memuat";
-      document.getElementById("rekap-list").innerHTML = '<tr><td class="error-state">Gagal memuat: '+err.message+'</td></tr>';
+      document.getElementById("rekapList").innerHTML = '<div class="rekap-row" style="grid-template-columns:1fr"><div class="error-state">Gagal memuat: '+err.message+'</div></div>';
     });
 }
 
@@ -803,46 +812,45 @@ function renderRekapQC(){
     return items.some(function(it){ return (it.sizes[u]||0) > 0; });
   });
 
-  // v.03: table-layout:fixed + lebar kolom TETAP lewat <colgroup> - sebelumnya table-layout
-  // auto bikin kolom Waktu (teks panjang "Rabu, 29/07/26 14:23:05") "ngerebut" jaring lebar dari
-  // kolom ukuran yang cuma butuh sedikit ruang, jadinya kolom S/M/L/dst kepepet sampai nyaris 0
-  // lebar dan teks/angkanya numpuk keliatan kayak 1 kolom. Dengan lebar tetap per kolom, ini
-  // gak akan kejadian lagi - tabel tinggal discroll horizontal (.rekap-wrap sudah overflow-x)
-  // kalau layar sempit.
+  // v.04: CSS Grid, bukan <table> lagi (table-layout:fixed+colgroup ternyata masih kepepet di
+  // webview Telegram). grid-template-columns yang SAMA PERSIS dipasang di SETIAP baris (header
+  // & data) via inline style, jadi kolom dijamin selalu selebar ini, gak pernah direbut kolom
+  // lain, dan otomatis align sempurna antar baris.
   const LEBAR_WAKTU = 150, LEBAR_WARNA = 110, LEBAR_VARIAN = 120, LEBAR_UKURAN = 40, LEBAR_ANGKA = 68;
-  const colgroup = document.getElementById("rekapColgroup");
-  colgroup.innerHTML = '<col style="width:'+LEBAR_WAKTU+'px">' +
-    '<col style="width:'+LEBAR_WARNA+'px"><col style="width:'+LEBAR_VARIAN+'px">' +
-    ukuranDipakai.map(function(){ return '<col style="width:'+LEBAR_UKURAN+'px">'; }).join('') +
-    '<col style="width:'+LEBAR_ANGKA+'px"><col style="width:'+LEBAR_ANGKA+'px">';
-  const lebarTotal = LEBAR_WAKTU + LEBAR_WARNA + LEBAR_VARIAN + (ukuranDipakai.length * LEBAR_UKURAN) + (LEBAR_ANGKA * 2);
-  document.getElementById("rekapTable").style.minWidth = lebarTotal + "px";
+  const templateKolom = LEBAR_WAKTU+'px '+LEBAR_WARNA+'px '+LEBAR_VARIAN+'px ' +
+    ukuranDipakai.map(function(){ return LEBAR_UKURAN+'px'; }).join(' ') +
+    ' '+LEBAR_ANGKA+'px '+LEBAR_ANGKA+'px';
+  const lebarTotal = LEBAR_WAKTU + LEBAR_WARNA + LEBAR_VARIAN + (ukuranDipakai.length*LEBAR_UKURAN) + (LEBAR_ANGKA*2);
 
-  const headRow = document.getElementById("rekapHeadRow");
-  headRow.innerHTML = '<th>Waktu</th><th>Warna</th><th>Varian</th>' +
-    ukuranDipakai.map(function(u){ return '<th class="num">'+u+'</th>'; }).join('') +
-    '<th class="num">Selesai</th><th class="num">Reject</th>';
+  const list = document.getElementById("rekapList");
+  list.style.minWidth = lebarTotal + "px";
 
   const summary = document.getElementById("rekapSummary");
-  const totalKolom = 5 + ukuranDipakai.length;
+  const headHtml = '<div class="rekap-row rekap-head" style="grid-template-columns:'+templateKolom+'">' +
+    '<div>Waktu</div><div>Warna</div><div>Varian</div>' +
+    ukuranDipakai.map(function(u){ return '<div class="rekap-num">'+u+'</div>'; }).join('') +
+    '<div class="rekap-num">Selesai</div><div class="rekap-num">Reject</div></div>';
+
   if (!items.length) {
     summary.textContent = "Belum ada submit QC.";
-    document.getElementById("rekap-list").innerHTML = '<tr><td class="empty-state" colspan="'+totalKolom+'">Belum ada submit QC.</td></tr>';
+    list.innerHTML = headHtml + '<div class="rekap-row" style="grid-template-columns:1fr"><div class="empty-state">Belum ada submit QC.</div></div>';
     document.getElementById("rekapFoot").innerHTML = "";
     return;
   }
   summary.innerHTML = items.length + " submit";
 
-  document.getElementById("rekap-list").innerHTML = items.map(function(it){
-    return '<tr>' +
-      '<td class="muted">'+(it.waktu||'-')+'</td>' +
-      '<td>'+(it.warna||'-')+'</td>' +
-      '<td class="muted">'+(it.varian||'-')+'</td>' +
-      ukuranDipakai.map(function(u){ return '<td class="num">'+(it.sizes[u] ? it.sizes[u] : '<span class="muted">–</span>')+'</td>'; }).join('') +
-      '<td class="num selesai">'+it.selesai+'</td>' +
-      '<td class="num'+(it.reject>0?' reject':' muted')+'">'+it.reject+'</td>' +
-    '</tr>';
+  const barisHtml = items.map(function(it){
+    return '<div class="rekap-row" style="grid-template-columns:'+templateKolom+'">' +
+      '<div class="rekap-muted">'+(it.waktu||'-')+'</div>' +
+      '<div>'+(it.warna||'-')+'</div>' +
+      '<div class="rekap-muted">'+(it.varian||'-')+'</div>' +
+      ukuranDipakai.map(function(u){ return '<div class="rekap-num">'+(it.sizes[u] ? it.sizes[u] : '<span class="rekap-muted">–</span>')+'</div>'; }).join('') +
+      '<div class="rekap-selesai">'+it.selesai+'</div>' +
+      '<div class="'+(it.reject>0?'rekap-reject':'rekap-num rekap-muted')+'">'+it.reject+'</div>' +
+    '</div>';
   }).join('');
+
+  list.innerHTML = headHtml + barisHtml;
 
   const totalSel = items.reduce(function(s,it){ return s+it.selesai; },0);
   const totalRej = items.reduce(function(s,it){ return s+it.reject; },0);
