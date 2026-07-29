@@ -1,9 +1,15 @@
 <!--
-  HTML QC - ver.02
+  HTML QC - ver.03
   Dashboard web statis (3 tab: "✅ Proses & QC", "📦 Stok Kain", "📊 Rekap QC"), dibuka lewat
   tombol Telegram (command /stok). Hosting GitHub Pages, upload dengan nama dashboard.html
-  (BUKAN nama file lokalnya). Backend: CODE TIM POTONG ver.05.js (WAJIB dideploy bareng - tab
+  (BUKAN nama file lokalnya). Backend: CODE TIM POTONG ver.09.js (WAJIB dideploy bareng - tab
   Rekap QC butuh endpoint ?action=rekapQC & format LOG QC baru yang cuma ada mulai versi itu).
+
+  PERUBAHAN ver.03 (dari ver.02):
+    - Perbaikan styling tabel Rekap QC - sebelumnya table-layout AUTO bikin kolom Waktu (teks
+      panjang) "ngerebut" lebar dari kolom ukuran (S/M/L/dst), jadinya kolom2 itu kepepet
+      sampai nyaris 0 lebar & keliatan numpuk. Sekarang pakai table-layout:fixed + lebar kolom
+      TETAP lewat <colgroup> yang di-generate dinamis di renderRekapQC().
 
   PERUBAHAN ver.02 (dari ver.01):
     - Tab baru "📊 Rekap QC" - histori submit QC (1 baris = 1x submit, kolom ukuran + Reject +
@@ -140,10 +146,10 @@ h2.section-title{
 
 /* ===== REKAP QC: tabel histori submit (1 baris = 1x submit) ===== */
 .rekap-wrap{ background:var(--surface); border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow); overflow-x:auto; }
-.rekap-table{ width:100%; min-width:640px; border-collapse:collapse; font-size:12px; }
-.rekap-table th{ text-align:left; padding:8px 9px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-muted); border-bottom:1.4px solid var(--line); white-space:nowrap; }
+.rekap-table{ width:100%; border-collapse:collapse; font-size:12px; table-layout:fixed; }
+.rekap-table th{ text-align:left; padding:8px 6px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-muted); border-bottom:1.4px solid var(--line); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .rekap-table th.num{ text-align:right; }
-.rekap-table td{ padding:8px 9px; border-bottom:1px solid var(--line); white-space:nowrap; }
+.rekap-table td{ padding:8px 6px; border-bottom:1px solid var(--line); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .rekap-table td.num{ text-align:right; font-variant-numeric:tabular-nums; }
 .rekap-table td.muted{ color:var(--ink-muted); }
 .rekap-table td.selesai{ font-weight:700; }
@@ -510,7 +516,8 @@ input[type="number"]{ -moz-appearance:textfield; appearance:textfield; }
     <h2 class="section-title">Rekap QC</h2>
     <p class="section-summary" id="rekapSummary">Memuat…</p>
     <div class="rekap-wrap">
-      <table class="rekap-table">
+      <table class="rekap-table" id="rekapTable">
+        <colgroup id="rekapColgroup"></colgroup>
         <thead><tr id="rekapHeadRow"></tr></thead>
         <tbody id="rekap-list"><tr><td class="empty-state">Memuat…</td></tr></tbody>
       </table>
@@ -795,6 +802,22 @@ function renderRekapQC(){
   const ukuranDipakai = rekapDaftarUkuran.filter(function(u){
     return items.some(function(it){ return (it.sizes[u]||0) > 0; });
   });
+
+  // v.03: table-layout:fixed + lebar kolom TETAP lewat <colgroup> - sebelumnya table-layout
+  // auto bikin kolom Waktu (teks panjang "Rabu, 29/07/26 14:23:05") "ngerebut" jaring lebar dari
+  // kolom ukuran yang cuma butuh sedikit ruang, jadinya kolom S/M/L/dst kepepet sampai nyaris 0
+  // lebar dan teks/angkanya numpuk keliatan kayak 1 kolom. Dengan lebar tetap per kolom, ini
+  // gak akan kejadian lagi - tabel tinggal discroll horizontal (.rekap-wrap sudah overflow-x)
+  // kalau layar sempit.
+  const LEBAR_WAKTU = 150, LEBAR_WARNA = 110, LEBAR_VARIAN = 120, LEBAR_UKURAN = 40, LEBAR_ANGKA = 68;
+  const colgroup = document.getElementById("rekapColgroup");
+  colgroup.innerHTML = '<col style="width:'+LEBAR_WAKTU+'px">' +
+    '<col style="width:'+LEBAR_WARNA+'px"><col style="width:'+LEBAR_VARIAN+'px">' +
+    ukuranDipakai.map(function(){ return '<col style="width:'+LEBAR_UKURAN+'px">'; }).join('') +
+    '<col style="width:'+LEBAR_ANGKA+'px"><col style="width:'+LEBAR_ANGKA+'px">';
+  const lebarTotal = LEBAR_WAKTU + LEBAR_WARNA + LEBAR_VARIAN + (ukuranDipakai.length * LEBAR_UKURAN) + (LEBAR_ANGKA * 2);
+  document.getElementById("rekapTable").style.minWidth = lebarTotal + "px";
+
   const headRow = document.getElementById("rekapHeadRow");
   headRow.innerHTML = '<th>Waktu</th><th>Warna</th><th>Varian</th>' +
     ukuranDipakai.map(function(u){ return '<th class="num">'+u+'</th>'; }).join('') +
