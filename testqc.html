@@ -1,6 +1,16 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+DASHBOARD ver.09
+============================================================
+PERUBAHAN ver.09: cache instan (stale-while-revalidate) buat paint pertama di 3 tab (Proses &
+QC, Stok Kain, Rekap QC) - begitu dibuka, kalau ada data dari sesi sebelumnya di HP, LANGSUNG
+ditampilkan (bukan layar kosong nunggu network) TAPI label header jelas-jelas bilang "Terakhir
+dimuat X lalu - memuat ulang...", biar Denny/tim QC gak salah ambil keputusan dari angka basi.
+Begitu data asli selesai ditarik dari server, otomatis diganti + label balik normal. Dipicu
+CUMA di paint pertama (state masih kosong) - realtime/refresh manual sesudahnya tetap selalu
+langsung ke server seperti biasa, gak lewat cache lagi.
+
 DASHBOARD ver.08
 ============================================================
 PERUBAHAN ver.08: jaring pengaman Realtime - kalau koneksi WebSocket putus diam-diam (tab lama
@@ -420,6 +430,39 @@ document.getElementById('btnRefresh').addEventListener('click', function () {
   if (stokUtuhData) muatStokUtuh();
 });
 
+// v.09: cache instan (stale-while-revalidate) khusus buat PAINT PERTAMA - data yang tampil
+// dari cache SELALU ditandai jelas di label "Terakhir dimuat ... - memuat ulang..." (bukan
+// diam-diam dianggap fresh), dan begitu data asli selesai ditarik, langsung diganti + label
+// balik normal. BEDA dari testproduksi.html: di sini datanya emang harus selalu fresh buat
+// keputusan QC, jadi cache CUMA buat isi layar sebentar sambil nunggu, bukan pengganti fetch.
+function ambilCacheDashboard_(kunci) {
+  try {
+    const raw = localStorage.getItem('dashboard_cache_' + kunci);
+    if (!raw) return null;
+    return JSON.parse(raw); // { waktu, data }
+  } catch (e) {
+    return null;
+  }
+}
+function simpanCacheDashboard_(kunci, data) {
+  try {
+    localStorage.setItem('dashboard_cache_' + kunci, JSON.stringify({ waktu: Date.now(), data: data }));
+  } catch (e) {
+    // storage penuh/disabled - gak fatal, cuma gak ke-cache
+  }
+}
+function formatWaktuLalu_(waktuMs) {
+  const detik = Math.round((Date.now() - waktuMs) / 1000);
+  if (detik < 60) return 'baru saja';
+  const menit = Math.round(detik / 60);
+  if (menit < 60) return menit + ' menit lalu';
+  const jam = Math.round(menit / 60);
+  return jam + ' jam lalu';
+}
+function tampilkanLabelCache_(namaTab, waktuCache) {
+  document.getElementById('lastUpdate').textContent = 'Terakhir dimuat ' + formatWaktuLalu_(waktuCache) + ' (' + namaTab + ') - memuat ulang...';
+}
+
 function updateJamRefresh() {
   const now = new Date();
   document.getElementById('lastUpdate').textContent = 'Diperbarui ' + now.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) + ', ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
@@ -429,11 +472,20 @@ function updateJamRefresh() {
 // MUAT DAFTAR LAPORAN
 // ------------------------------------------------------------
 function muatDaftarLaporan() {
+  if (daftarLaporanData.length === 0) {
+    const cache = ambilCacheDashboard_('laporan_qc');
+    if (cache) {
+      daftarLaporanData = cache.data || [];
+      tampilkanLabelCache_('Proses & QC', cache.waktu);
+      renderDaftarLaporan();
+    }
+  }
   tampilkanLoading(true);
   fetch(WORKER_URL + '/data/laporan-qc')
     .then(function (r) { return r.json(); })
     .then(function (data) {
       daftarLaporanData = Array.isArray(data) ? data : [];
+      simpanCacheDashboard_('laporan_qc', daftarLaporanData);
       updateJamRefresh();
       renderDaftarLaporan();
     })
@@ -812,10 +864,22 @@ function muatArsip() {
 // TAB STOK KAIN
 // ------------------------------------------------------------
 function muatStokUtuh() {
+  if (!stokUtuhData) {
+    const cache = ambilCacheDashboard_('stok_utuh');
+    if (cache && cache.data) {
+      stokUtuhData = cache.data;
+      tampilkanLabelCache_('Stok Kain', cache.waktu);
+      document.getElementById('totalKgTersisa').innerHTML = formatAngka(stokUtuhData.totalKg) + ' <span class="unit">kg</span>';
+      document.getElementById('totalKgSub').textContent = 'di ' + stokUtuhData.totalRoll + ' roll · ' + stokUtuhData.totalWarna + ' warna';
+      renderWarnaGrid();
+    }
+  }
   fetch(WORKER_URL + '/data/stok-utuh')
     .then(function (r) { return r.json(); })
     .then(function (data) {
       stokUtuhData = data;
+      simpanCacheDashboard_('stok_utuh', data);
+      updateJamRefresh();
       document.getElementById('totalKgTersisa').innerHTML = formatAngka(data.totalKg) + ' <span class="unit">kg</span>';
       document.getElementById('totalKgSub').textContent = 'di ' + data.totalRoll + ' roll · ' + data.totalWarna + ' warna';
       renderWarnaGrid();
@@ -876,16 +940,32 @@ document.querySelectorAll('.chip[data-sortwarna]').forEach(function (el) {
 let rekapItemsRaw = [];
 
 function muatRekapQC() {
-  document.getElementById('rekapSummary').textContent = 'Memuat...';
+  let munculDariCache = false;
+  if (rekapItemsRaw.length === 0) {
+    const cache = ambilCacheDashboard_('rekap_qc');
+    if (cache && cache.data) {
+      rekapItemsRaw = cache.data;
+      tampilkanLabelCache_('Rekap QC', cache.waktu);
+      renderRekapQC();
+      munculDariCache = true;
+    }
+  }
+  if (!munculDariCache) document.getElementById('rekapSummary').textContent = 'Memuat...';
   fetch(WORKER_URL + '/data/rekap-qc?hari=14')
     .then(function (r) { return r.json(); })
     .then(function (data) {
       rekapItemsRaw = Array.isArray(data) ? data : [];
+      simpanCacheDashboard_('rekap_qc', rekapItemsRaw);
+      updateJamRefresh();
       renderRekapQC();
     })
     .catch(function (e) {
-      document.getElementById('rekapSummary').textContent = 'Gagal memuat';
-      document.getElementById('rekapList').innerHTML = '<div class="rekap-row" style="grid-template-columns:1fr"><div class="rekap-muted">Gagal memuat: ' + escapeHtml(e.message) + '</div></div>';
+      if (munculDariCache) {
+        tampilkanToast('Gagal refresh Rekap QC: ' + e.message);
+      } else {
+        document.getElementById('rekapSummary').textContent = 'Gagal memuat';
+        document.getElementById('rekapList').innerHTML = '<div class="rekap-row" style="grid-template-columns:1fr"><div class="rekap-muted">Gagal memuat: ' + escapeHtml(e.message) + '</div></div>';
+      }
     });
 }
 
