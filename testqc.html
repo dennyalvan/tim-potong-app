@@ -1,9 +1,19 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.05
+DASHBOARD ver.06
 ============================================================
 Dashboard Stok Kain + QC - connect ke Cloudflare Worker (tim-potong-api) + Supabase.
+
+PERUBAHAN ver.06 (3 penyesuaian ke tampilan card yang lagi diinput, sesuai versi Apps Script):
+  1. Tombol "Ringkas"/"Rincian" dibikin lebih kecil & compact (padding & font-size diturunkan),
+     tetap bold semua (aktif maupun tidak).
+  2. Angka Sel/Rej/Sisa di baris ringkasan card utama (sebelum di-expand) sekarang dibungkus
+     roundbox (pill) berwarna sesuai konteksnya - hijau muda buat Sel, merah muda buat Rej,
+     abu-abu buat Sisa.
+  3. Blok "DAFTAR ANTRIAN" (label + kotak kosong + tombol Kirim Rekap + preview gelap) di
+     paling atas sekarang disembunyikan SELURUHNYA kalau antrian masih kosong - baru muncul
+     begitu ada minimal 1 laporan ditambahkan. Menghemat tampilan pas dashboard awal loading.
 
 PERUBAHAN ver.05 (5 temuan dari perbandingan screenshot lagi):
   1. Preview "Daftar Antrian" dirombak: kartu putih per-item (nama, "Selesai +N · Reject +N",
@@ -93,6 +103,8 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
     --surface-2: #E4E7F5;
     --green: #3F7A5C;
     --danger: #A64236;
+    --green-bg: #E1EEE6;
+    --danger-bg: #F3E1DE;
   }
   * { box-sizing: border-box; }
   body { margin: 0; font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: #292B31; padding-bottom: 20px; }
@@ -168,12 +180,15 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
   .ukuran-badge .n { color: var(--gray-text); font-weight: 600; margin-left: 2px; }
   .progress-bar-full { width: 100%; height: 7px; background: #e5e9f2; border-radius: 8px; overflow: hidden; margin-bottom: 6px; }
   .progress-bar-full .fill { height: 100%; background: var(--green); }
-  .stats-line { display: flex; justify-content: space-between; font-size: 12px; color: var(--gray-text); font-weight: 600; margin-bottom: 10px; }
+  .stats-line { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--gray-text); font-weight: 600; margin-bottom: 10px; }
   .stats-line .sel { color: var(--green); }
   .stats-line .rej { color: var(--danger); }
+  .stats-line .num { display: inline-block; margin-left: 4px; padding: 1px 8px; border-radius: 999px; font-weight: 700; background: var(--surface-2); color: #374151; }
+  .stats-line .sel .num { background: var(--green-bg); color: var(--green); }
+  .stats-line .rej .num { background: var(--danger-bg); color: var(--danger); }
 
-  .mode-toggle { display: flex; gap: 8px; margin-bottom: 12px; }
-  .mode-btn { flex: 1; padding: 9px; border-radius: 10px; border: 1px solid var(--border); background: #fff; font-weight: 700; font-size: 13px; cursor: pointer; color: #374151; }
+  .mode-toggle { display: flex; gap: 6px; margin-bottom: 12px; }
+  .mode-btn { flex: 1; padding: 6px; border-radius: 8px; border: 1px solid var(--border); background: #fff; font-weight: 700; font-size: 11.5px; cursor: pointer; color: #374151; }
   .mode-btn.active { background: var(--indigo); color: #fff; border-color: var(--indigo); }
 
   .ringkas-fields { display: flex; gap: 10px; margin-bottom: 12px; }
@@ -258,14 +273,15 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
 
   <!-- ============ TAB: PROSES & QC ============ -->
   <div id="tabQC">
-    <div class="section-label">DAFTAR ANTRIAN</div>
-    <div id="antrianKosong" class="empty-box">Belum ada laporan di daftar antrian. Buka 1 laporan di bawah, isi form QC, lalu tekan "+ Tambah ke Daftar".</div>
-    <div id="antrianIsiWrap" style="display:none">
-      <p class="antrian-caption" id="antrianCaption"></p>
-      <div id="antrianKartuList"></div>
+    <div id="antrianSection" style="display:none">
+      <div class="section-label">DAFTAR ANTRIAN</div>
+      <div id="antrianIsiWrap">
+        <p class="antrian-caption" id="antrianCaption"></p>
+        <div id="antrianKartuList"></div>
+      </div>
+      <button class="btn-kirim-rekap" id="btnKirimRekap" disabled>🚀 Kirim Rekap (0)</button>
+      <div class="preview-rekap-box" id="antrianPreviewBox" style="display:none"></div>
     </div>
-    <button class="btn-kirim-rekap" id="btnKirimRekap" disabled>🚀 Kirim Rekap (0)</button>
-    <div class="preview-rekap-box" id="antrianPreviewBox" style="display:none"></div>
 
     <input type="text" class="search-box" id="searchLaporan" placeholder="Cari laporan/warna...">
     <div class="count-label" id="countLabel">0 dari 0 laporan</div>
@@ -385,7 +401,7 @@ document.getElementById('btnRefresh').addEventListener('click', function () {
 
 function updateJamRefresh() {
   const now = new Date();
-  document.getElementById('lastUpdate').textContent = '' + now.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) + ', ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  document.getElementById('lastUpdate').textContent = 'Diperbarui ' + now.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) + ', ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 }
 
 // ------------------------------------------------------------
@@ -495,7 +511,7 @@ function renderLaporanExpand(r) {
   }
 
   html += '<div class="progress-bar-full"><div class="fill" style="width:' + persen + '%"></div></div>' +
-    '<div class="stats-line"><span class="sel">Sel ' + selesaiTampil + '</span><span class="rej">Rej ' + rejectTampil + '</span><span>Sisa ' + sisaTampil + '</span></div>' +
+    '<div class="stats-line"><span class="sel">Sel<span class="num">' + selesaiTampil + '</span></span><span class="rej">Rej<span class="num">' + rejectTampil + '</span></span><span class="sisa">Sisa<span class="num">' + sisaTampil + '</span></span></div>' +
     '<div class="mode-toggle">' +
     '<button class="mode-btn ' + (mode === 'ringkas' ? 'active' : '') + '" data-modebtn="ringkas" data-id="' + r.id + '">Ringkas</button>' +
     '<button class="mode-btn ' + (mode === 'rincian' ? 'active' : '') + '" data-modebtn="rincian" data-id="' + r.id + '">Rincian</button>' +
@@ -627,24 +643,21 @@ function hapusDariAntrian(index) {
 }
 
 function renderAntrian() {
-  const kosong = document.getElementById('antrianKosong');
-  const isiWrap = document.getElementById('antrianIsiWrap');
+  const section = document.getElementById('antrianSection');
   const caption = document.getElementById('antrianCaption');
   const kartuList = document.getElementById('antrianKartuList');
   const btnKirim = document.getElementById('btnKirimRekap');
   const previewBox = document.getElementById('antrianPreviewBox');
 
   if (antrianQC.length === 0) {
-    kosong.style.display = 'block';
-    isiWrap.style.display = 'none';
+    section.style.display = 'none';
     previewBox.style.display = 'none';
     btnKirim.textContent = '🚀 Kirim Rekap (0)';
     btnKirim.disabled = true;
     return;
   }
 
-  kosong.style.display = 'none';
-  isiWrap.style.display = 'block';
+  section.style.display = 'block';
   caption.textContent = antrianQC.length + ' laporan menunggu dikirim';
 
   // Kartu putih per-item, ada tombol hapus (X)
