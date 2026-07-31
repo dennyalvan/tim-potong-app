@@ -298,6 +298,35 @@ const tg = window.Telegram ? window.Telegram.WebApp : null;
 if (tg) { tg.ready(); tg.expand(); }
 
 // ------------------------------------------------------------
+// AUTO-SCROLL - jaga elemen (dropdown/suggestion yg baru muncul) tetap terlihat di atas
+// keyboard virtual, di device apapun. Dipanggil tiap kali dropdown/daftar saran dirender;
+// juga di-listen ulang lewat visualViewport (kalau keyboard baru muncul/animasi SETELAH
+// render, misal delay animasi keyboard Android/iOS).
+// ------------------------------------------------------------
+let __elemJagaTerlihat = null;
+function __scrollKeVisible(el) {
+  if (!el || !el.isConnected) return;
+  const margin = 16;
+  const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  const rect = el.getBoundingClientRect();
+  if (rect.bottom > vh - margin) {
+    window.scrollBy({ top: Math.ceil(rect.bottom - vh + margin), behavior: 'smooth' });
+  } else if (rect.top < margin) {
+    window.scrollBy({ top: Math.ceil(rect.top - margin), behavior: 'smooth' });
+  }
+}
+function jagaTerlihat(el) {
+  if (!el) return;
+  __elemJagaTerlihat = el;
+  setTimeout(function () { __scrollKeVisible(el); }, 280);
+}
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', function () {
+    setTimeout(function () { __scrollKeVisible(__elemJagaTerlihat); }, 60);
+  });
+}
+
+// ------------------------------------------------------------
 // STATE
 // ------------------------------------------------------------
 let kategoriVarianData = [];   // dari /data/kategori-varian
@@ -420,6 +449,7 @@ function renderWarnaSuggestions(query) {
   box.innerHTML = cocok.slice(0, 8).map(function (w) {
     return '<div class="suggestion-item" data-pick-warna="' + escapeAttr(w) + '">' + escapeHtml(w) + '</div>';
   }).join('');
+  if (box.children.length) jagaTerlihat(box);
   box.querySelectorAll('[data-pick-warna]').forEach(function (el) {
     el.addEventListener('mousedown', function (e) {
       e.preventDefault(); // supaya kepilih SEBELUM event blur nutup daftar saran
@@ -431,6 +461,8 @@ function renderWarnaSuggestions(query) {
       if (inputRoll) inputRoll.value = '';
       box.innerHTML = '';
       renderRollSuggestions('');
+      const rollBox = document.getElementById('rollSuggestions');
+      if (rollBox && rollBox.children.length) jagaTerlihat(rollBox);
     });
   });
 }
@@ -446,6 +478,7 @@ function renderRollSuggestions(query) {
   box.innerHTML = cocok.slice(0, 8).map(function (r) {
     return '<div class="suggestion-item roll-suggestion" data-pick-roll="' + escapeAttr(r.kodeRoll) + '" data-kg="' + r.kg + '">Roll ' + escapeHtml(r.kodeRoll) + ' / ' + r.kg + 'kg</div>';
   }).join('');
+  if (box.children.length) jagaTerlihat(box);
   box.querySelectorAll('[data-pick-roll]').forEach(function (el) {
     el.addEventListener('mousedown', function (e) {
       e.preventDefault();
@@ -537,6 +570,8 @@ function renderDetailCard() {
 
   card.innerHTML = html;
   pasangEventDetailCard();
+  const ddl = card.querySelector('.dropdown-list');
+  if (ddl) jagaTerlihat(ddl);
 }
 
 function renderWarnaKombinasiSection() {
@@ -747,6 +782,7 @@ function renderCustomWarnaSuggestions(idx, query) {
   box.innerHTML = cocok.slice(0, 8).map(function (w) {
     return '<div class="suggestion-item" data-pick-cwarna="' + escapeAttr(w) + '" data-idx="' + idx + '">' + escapeHtml(w) + '</div>';
   }).join('');
+  if (box.children.length) jagaTerlihat(box);
   box.querySelectorAll('[data-pick-cwarna]').forEach(function (el) {
     el.addEventListener('mousedown', function (e) {
       e.preventDefault();
@@ -767,6 +803,7 @@ function renderCustomRollSuggestions(idx, query) {
   box.innerHTML = cocok.slice(0, 8).map(function (r) {
     return '<div class="suggestion-item roll-suggestion" data-pick-croll="' + escapeAttr(r.kodeRoll) + '" data-kg="' + r.kg + '" data-idx="' + idx + '">Roll ' + escapeHtml(r.kodeRoll) + ' / ' + r.kg + 'kg</div>';
   }).join('');
+  if (box.children.length) jagaTerlihat(box);
   box.querySelectorAll('[data-pick-croll]').forEach(function (el) {
     el.addEventListener('mousedown', function (e) {
       e.preventDefault();
@@ -787,6 +824,7 @@ function renderKombiRollSuggestions(idx, query) {
   box.innerHTML = cocok.slice(0, 8).map(function (r) {
     return '<div class="suggestion-item roll-suggestion" data-pick-kombi-roll="' + escapeAttr(r.kodeRoll) + '" data-kg="' + r.kg + '">Roll ' + escapeHtml(r.kodeRoll) + ' / ' + r.kg + 'kg</div>';
   }).join('');
+  if (box.children.length) jagaTerlihat(box);
   box.querySelectorAll('[data-pick-kombi-roll]').forEach(function (el) {
     el.addEventListener('mousedown', function (e) {
       e.preventDefault();
