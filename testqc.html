@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+DASHBOARD ver.08
+============================================================
+PERUBAHAN ver.08: jaring pengaman Realtime - kalau koneksi WebSocket putus diam-diam (tab lama
+di background), begitu Mini App ini balik fokus/keliatan lagi, data ditarik ulang paksa
+(visibilitychange + window focus listener), gak nunggu event Realtime yang mungkin udah gak
+nyambung. Sekalian dibenerin: tab Rekap QC sebelumnya gak ikut ke-refresh otomatis waktu ada
+perubahan Realtime (cuma Proses & QC dan Stok Kain) - sekarang ikut lewat helper muatTabAktif_().
+
 DASHBOARD ver.07
 ============================================================
 Dashboard Stok Kain + QC - connect ke Cloudflare Worker (tim-potong-api) + Supabase.
@@ -960,14 +968,29 @@ function tampilkanToast(msg) {
 // layar ini ke-refresh OTOMATIS. Pakai "debounce" biar kalau banyak perubahan numpuk
 // bersamaan, gak nembak ulang Worker berkali-kali beruntun - tunggu 800ms hening dulu.
 // ------------------------------------------------------------
+// v.08: helper terpusat - refresh tab yang LAGI KELIATAN aja (bukan semua tab sekaligus,
+// biar gak boros request buat tab yang gak lagi dilihat).
+function muatTabAktif_() {
+  muatDaftarLaporan();
+  if (document.getElementById('tabStok').style.display !== 'none') muatStokUtuh();
+  if (document.getElementById('tabRekap').style.display !== 'none') muatRekapQC();
+}
+
 let timerDebounceRealtime = null;
 function jadwalkanMuatUlang() {
   if (timerDebounceRealtime) clearTimeout(timerDebounceRealtime);
-  timerDebounceRealtime = setTimeout(function () {
-    muatDaftarLaporan();
-    if (document.getElementById('tabStok').style.display !== 'none') muatStokUtuh();
-  }, 800);
+  timerDebounceRealtime = setTimeout(muatTabAktif_, 800);
 }
+
+// v.08: JARING PENGAMAN - koneksi WebSocket Realtime bisa putus diam-diam kalau tab dibiarkan
+// lama di background (WebView Telegram/OS suka "menidurkan" tab background buat hemat baterai),
+// tanpa ada tanda apa pun ke user. Begitu tab ini balik keliatan/fokus lagi, TARIK ULANG data
+// sekali secara paksa (gak nunggu event Realtime yang mungkin udah gak nyambung lagi) - jadi
+// walau koneksi sempat putus, paling telat ke-update pas dibuka lagi, bukan nyangkut selamanya.
+document.addEventListener('visibilitychange', function () {
+  if (document.visibilityState === 'visible') muatTabAktif_();
+});
+window.addEventListener('focus', muatTabAktif_);
 
 function setupRealtime() {
   if (!window.supabase) { console.warn('Supabase JS client gagal dimuat - auto-update nonaktif, tetap bisa refresh manual.'); return; }
