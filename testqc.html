@@ -1,9 +1,26 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.03
+DASHBOARD ver.04
 ============================================================
 Dashboard Stok Kain + QC - connect ke Cloudflare Worker (tim-potong-api) + Supabase.
+
+PERUBAHAN ver.04: samain tampilan visual ke versi Apps Script asli (HTML QC ver.04.html),
+hasil cross-check CSS langsung (bukan tebak dari screenshot) - 8 temuan dikonfirmasi Denny:
+  1. Font "Inter" ditambahkan (Google Fonts) - sebelumnya cuma font sistem.
+  2-3. Palet warna disamakan ke nilai default tema asli (indigo #5D5294, hijau #3F7A5C redup,
+     merah #A64236 redup - bukan warna Tailwind terang).
+  4. Badge kategori: logika DIBALIK - DEWASA (default) = badge TERANG (bg abu muda, teks
+     ungu, border tipis), ANAK = badge GELAP (bg nyaris hitam, teks putih). Sebelumnya
+     kebalik (Anak hijau, Dewasa navy).
+  5. Nomor urut (1,2,3...) dikembalikan di kiri tiap baris (sebelumnya cuma checkbox).
+  6. Chevron (▶ berputar pas expand) ditambahkan di ujung kanan tiap baris.
+  7. Ikon tab "Stok Kain" dikoreksi dari 🧵 jadi 📦 (sesuai kode asli).
+  8. Struktur baris laporan diubah dari "kartu terpisah berjarak" jadi "list menyatu
+     dipisah garis tipis" (1 wadah putih membungkus semua baris) - sesuai versi asli.
+CATATAN: warna di atas pakai nilai DEFAULT tema Apps Script - kalau Denny sempat kustomisasi
+lewat "Atur Tampilan" dan hasilnya masih beda dikit, kasih tau detail warnanya biar dipas-in
+lagi (fitur "Atur Tampilan" itu sendiri BELUM dibangun di versi ini).
 
 PERUBAHAN ver.03: ADOPSI fitur dari thread Apps Script terpisah - tab BARU "📊 Rekap QC"
 (histori submit QC apa adanya, 1 baris = 1x submit, urut waktu terbaru dulu, 14 hari
@@ -38,25 +55,30 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Dashboard Stok Kain + QC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
   :root {
-    --bg: #eef2fb;
+    --bg: #F3F5FE;
     --card-bg: #ffffff;
-    --indigo: #4f5fd1;
-    --indigo-dark: #3d4bb8;
-    --navy-dark: #1c2340;
-    --blue-link: #2563eb;
-    --orange-link: #d97706;
+    --indigo: #5D5294;
+    --indigo-dark: #4a4178;
+    --accent: #796CBF;
+    --navy-dark: #292B31;
+    --blue-link: #5D5294;
+    --orange-link: #A5750F;
     --gray-label: #9aa3b2;
-    --gray-text: #6b7280;
-    --border: #e2e8f0;
-    --green: #16a34a;
-    --danger: #ef4444;
+    --gray-text: #6B6F82;
+    --border: #D7DAEC;
+    --surface-2: #E4E7F5;
+    --green: #3F7A5C;
+    --danger: #A64236;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: #1c1c1e; padding-bottom: 20px; }
+  body { margin: 0; font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: #292B31; padding-bottom: 20px; }
   #app { max-width: 520px; margin: 0 auto; padding: 16px; }
 
   .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
@@ -87,14 +109,18 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
   .chip { flex-shrink: 0; padding: 8px 14px; border-radius: 20px; border: 1px solid var(--border); background: #fff; font-size: 13px; font-weight: 600; cursor: pointer; color: #374151; white-space: nowrap; }
   .chip.active { background: var(--indigo); color: #fff; border-color: var(--indigo); }
 
-  .laporan-card { background: #fff; border-radius: 12px; padding: 10px 12px; margin-bottom: 6px; }
-  .laporan-top { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
-  .laporan-top .idx { color: var(--gray-label); font-size: 12px; font-weight: 700; padding-top: 2px; }
+  .laporan-wrap { background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+  .laporan-card { background: transparent; border-radius: 0; padding: 0; margin: 0; border-top: 1px solid var(--border); }
+  .laporan-card:first-child { border-top: none; }
+  .laporan-top { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; padding: 10px 12px; }
+  .laporan-top .idx { color: var(--gray-label); font-size: 11px; font-weight: 700; padding-top: 3px; width: 12px; flex-shrink: 0; }
   .chk-selesai { margin-top: 3px; width: 15px; height: 15px; flex-shrink: 0; cursor: pointer; }
+  .row-chevron { width: 12px; color: var(--gray-label); flex-shrink: 0; align-self: center; margin-left: 2px; transition: transform 0.15s ease; font-size: 11px; }
+  .row-chevron.open { transform: rotate(90deg); }
   .laporan-info { flex: 1; min-width: 0; }
   .laporan-info .nama { font-weight: 700; font-size: 13px; }
-  .badge-kat { display: inline-block; font-size: 9px; font-weight: 800; padding: 1px 6px; border-radius: 5px; margin-left: 5px; background: #1c2340; color: #fff; vertical-align: 1px; }
-  .badge-kat.anak { background: #0d9488; }
+  .badge-kat { display: inline-block; font-size: 9px; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-left: 5px; background: var(--surface-2); color: var(--indigo); border: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.03em; vertical-align: 1px; }
+  .badge-kat.anak { background: var(--navy-dark); color: #fff; border-color: var(--navy-dark); }
   .laporan-meta { font-size: 11px; color: var(--gray-text); margin-top: 2px; }
   .laporan-meta .roll { color: var(--orange-link); font-weight: 600; }
   .progress-circle { text-align: right; flex-shrink: 0; }
@@ -103,7 +129,7 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
   .progress-bar-mini { width: 60px; height: 4px; background: #e5e9f2; border-radius: 4px; margin-top: 4px; margin-left: auto; overflow: hidden; }
   .progress-bar-mini .fill { height: 100%; background: var(--green); }
 
-  .laporan-expand { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px; }
+  .laporan-expand { margin-top: 10px; border-top: 1px solid var(--border); padding: 10px 12px 12px; }
   .ukuran-badges { display: flex; gap: 4px 10px; flex-wrap: wrap; margin-bottom: 8px; font-size: 12px; }
   .ukuran-badge { font-weight: 700; color: #374151; }
   .ukuran-badge .n { color: var(--gray-text); font-weight: 600; margin-left: 2px; }
@@ -193,7 +219,7 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
 
   <div class="tab-toggle">
     <button class="tab-btn active" data-tab="qc">✅ Proses & QC</button>
-    <button class="tab-btn" data-tab="stok">🧵 Stok Kain</button>
+    <button class="tab-btn" data-tab="stok">📦 Stok Kain</button>
     <button class="tab-btn" data-tab="rekap">📊 Rekap QC</button>
   </div>
   <div class="link-orange">✏️ Atur Tampilan</div>
@@ -217,7 +243,7 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
       <div class="chip" data-sort="baru">Tanggal terbaru</div>
     </div>
 
-    <div id="daftarLaporan"></div>
+    <div class="laporan-wrap"><div id="daftarLaporan"></div></div>
 
     <div class="arsip-toggle" id="arsipToggle">
       <span>📁 Arsip Selesai (3 hari terakhir)<span class="sub" id="arsipSub">Ketuk buat lihat</span></span>
@@ -394,6 +420,7 @@ function renderLaporanCard(r, nomor) {
 
   let html = '<div class="laporan-card" data-id="' + r.id + '">' +
     '<div class="laporan-top">' +
+    '<span class="idx">' + nomor + '</span>' +
     '<input type="checkbox" class="chk-selesai" data-quickdone="' + r.id + '" title="Tandai selesai semua sisa">' +
     '<div class="laporan-info" data-toggle="' + r.id + '">' +
     '<span class="nama">' + escapeHtml(r.jenisWarnaBaju) + '</span>' +
@@ -402,6 +429,7 @@ function renderLaporanCard(r, nomor) {
     '</div>' +
     '<div class="progress-circle" data-toggle="' + r.id + '">' + fraksiHtml +
     '<div class="progress-bar-mini"><div class="fill" style="width:' + persen + '%"></div></div></div>' +
+    '<span class="row-chevron' + (terbuka ? ' open' : '') + '" data-toggle="' + r.id + '">▶</span>' +
     '</div>';
 
   if (terbuka) {
