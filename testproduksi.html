@@ -159,7 +159,7 @@
       <p class="subtitle">TIM POTONG</p>
     </div>
     <div class="header-right">
-      <span class="ver-badge">ver.01</span>
+      <span class="ver-badge">ver.02</span>
       <button class="link-btn refresh" id="btnRefresh">🔄 Refresh</button>
     </div>
   </div>
@@ -202,7 +202,7 @@
       <h1>INPUT PRODUKSI</h1>
       <p class="subtitle">TIM POTONG</p>
     </div>
-    <div class="header-right"><span class="ver-badge">ver.01</span></div>
+    <div class="header-right"><span class="ver-badge">ver.02</span></div>
   </div>
   <div class="preview-center">
     <div class="icon">✅</div>
@@ -451,10 +451,30 @@ function renderDetailCard() {
         '</div>';
     }
   } else {
-    // --- Item Custom: 1 kotak nama bebas + kg + roll (sederhana) ---
+    // --- Item Custom: nama bebas + warna 1 (opsional) + kg 1 + roll 1, bisa tambah warna ke-2
+    // buat produk kombinasi 2 warna bahan. Warna dipisah eksplisit (bukan ditebak dari nama
+    // custom yang bebas format) supaya potong stok akurat - pakai struktur `kombinasi` yang
+    // sama dengan mode Kombinasi biasa, cuma warnanya bebas ketik (autocomplete dari stok yang
+    // ada), bukan pilih dari daftar kombinasi tetap.
     html += '<div class="subrow"><input type="text" class="kg-input-full" style="text-align:left" id="inputNamaCustom" placeholder="Nama item lengkap, misal: SPECIAL ORDER BIRU MUDA" value="' + escapeAttr(itemBaru.namaCustom) + '"></div>';
-    html += '<div class="subrow"><input type="number" class="kg-input-full" id="inputKgCustom" placeholder="Kg kain terpakai (opsional)" value="' + (itemBaru.kg || '') + '"></div>';
-    html += '<div class="subrow"><input type="text" class="kg-input-full" style="text-align:left" id="inputRollCustom" placeholder="Kode roll (opsional)" value="' + escapeAttr(itemBaru.kodeRoll || '') + '"></div>';
+
+    if (!itemBaru.kombinasi) itemBaru.kombinasi = { warna: [''], kg: [''], kodeRoll: [null] };
+    itemBaru.kombinasi.warna.forEach(function (warna, i) {
+      html += '<div class="kombi-warna-section">' +
+        '<div class="sub-title">Warna ' + (i + 1) + (i === 0 ? ' <span style="font-weight:400;color:#9aa3b2;">(opsional)</span>' : ' <span style="font-weight:400;color:#9aa3b2;">(kombinasi)</span>') + '</div>' +
+        '<input type="text" class="autocomplete-input" data-cwidx="' + i + '" placeholder="Ketik warna, misal NAVY" autocomplete="off" value="' + escapeAttr(warna || '') + '" style="margin-bottom:8px;">' +
+        '<div class="suggestion-list" id="customWarnaSuggestions-' + i + '"></div>' +
+        '<div class="sub-fields" style="margin-top:8px;">' +
+        '<input type="number" class="kg-mini" data-ckgidx="' + i + '" placeholder="kg" value="' + (itemBaru.kombinasi.kg[i] || '') + '">' +
+        '<input type="text" class="autocomplete-input roll-mini-input-custom" data-crollidx="' + i + '" placeholder="Kode roll" autocomplete="off" value="' + escapeAttr(itemBaru.kombinasi.kodeRoll[i] || '') + '">' +
+        '</div>' +
+        '<div class="suggestion-list" id="customRollSuggestions-' + i + '"></div>' +
+        (i === 1 ? '<div class="ganti-kombinasi"><a id="hapusWarna2Custom">Hapus warna ke-2</a></div>' : '') +
+        '</div>';
+    });
+    if (itemBaru.kombinasi.warna.length < 2) {
+      html += '<div class="ganti-kombinasi"><a id="tambahWarna2Custom">+ Tambah warna ke-2 (kombinasi)</a></div>';
+    }
   }
 
   card.innerHTML = html;
@@ -618,10 +638,85 @@ function pasangEventDetailCard() {
 
   const inputNamaCustom = document.getElementById('inputNamaCustom');
   if (inputNamaCustom) inputNamaCustom.addEventListener('input', function () { itemBaru.namaCustom = inputNamaCustom.value; });
-  const inputKgCustom = document.getElementById('inputKgCustom');
-  if (inputKgCustom) inputKgCustom.addEventListener('input', function () { itemBaru.kg = inputKgCustom.value; });
-  const inputRollCustom = document.getElementById('inputRollCustom');
-  if (inputRollCustom) inputRollCustom.addEventListener('input', function () { itemBaru.kodeRoll = inputRollCustom.value; });
+
+  // v.16: warna/kg/roll item custom (1-2 slot, struktur sama kayak kombinasi biasa)
+  document.querySelectorAll('[data-cwidx]').forEach(function (el) {
+    const idx = parseInt(el.dataset.cwidx, 10);
+    el.addEventListener('input', function () {
+      itemBaru.kombinasi.warna[idx] = el.value.toUpperCase();
+      itemBaru.kombinasi.kodeRoll[idx] = null;
+      renderCustomWarnaSuggestions(idx, el.value);
+    });
+    el.addEventListener('focus', function () { renderCustomWarnaSuggestions(idx, el.value); });
+    el.addEventListener('blur', function () { setTimeout(function () { const b = document.getElementById('customWarnaSuggestions-' + idx); if (b) b.innerHTML = ''; }, 150); });
+  });
+  document.querySelectorAll('[data-ckgidx]').forEach(function (el) {
+    const idx = parseInt(el.dataset.ckgidx, 10);
+    el.addEventListener('input', function () { itemBaru.kombinasi.kg[idx] = el.value; });
+  });
+  document.querySelectorAll('[data-crollidx]').forEach(function (el) {
+    const idx = parseInt(el.dataset.crollidx, 10);
+    el.addEventListener('input', function () { itemBaru.kombinasi.kodeRoll[idx] = el.value; renderCustomRollSuggestions(idx, el.value); });
+    el.addEventListener('focus', function () { el.select(); renderCustomRollSuggestions(idx, el.value); });
+    el.addEventListener('blur', function () { setTimeout(function () { const b = document.getElementById('customRollSuggestions-' + idx); if (b) b.innerHTML = ''; }, 150); });
+  });
+  const tambahWarna2Custom = document.getElementById('tambahWarna2Custom');
+  if (tambahWarna2Custom) tambahWarna2Custom.addEventListener('click', function () {
+    itemBaru.kombinasi.warna.push('');
+    itemBaru.kombinasi.kg.push('');
+    itemBaru.kombinasi.kodeRoll.push(null);
+    renderDetailCard();
+  });
+  const hapusWarna2Custom = document.getElementById('hapusWarna2Custom');
+  if (hapusWarna2Custom) hapusWarna2Custom.addEventListener('click', function () {
+    itemBaru.kombinasi.warna.pop();
+    itemBaru.kombinasi.kg.pop();
+    itemBaru.kombinasi.kodeRoll.pop();
+    renderDetailCard();
+  });
+}
+
+// v.16: autocomplete warna utk item custom (per slot idx) - sumbernya sama kayak warna biasa
+// (nama warna yang sudah ada stoknya), beda dari kombinasi biasa yang milih dari daftar
+// kombinasi TETAP - di sini bebas ketik nama warna apa saja.
+function renderCustomWarnaSuggestions(idx, query) {
+  const box = document.getElementById('customWarnaSuggestions-' + idx);
+  if (!box) return;
+  const q = String(query || '').trim().toUpperCase();
+  if (!q) { box.innerHTML = ''; return; }
+  const semua = Object.keys(stokRollData).sort();
+  const cocok = semua.filter(function (w) { return w.indexOf(q) === 0; });
+  box.innerHTML = cocok.slice(0, 8).map(function (w) {
+    return '<div class="suggestion-item" data-pick-cwarna="' + escapeAttr(w) + '" data-idx="' + idx + '">' + escapeHtml(w) + '</div>';
+  }).join('');
+  box.querySelectorAll('[data-pick-cwarna]').forEach(function (el) {
+    el.addEventListener('mousedown', function (e) {
+      e.preventDefault();
+      const i = parseInt(el.dataset.idx, 10);
+      itemBaru.kombinasi.warna[i] = el.dataset.pickCwarna;
+      itemBaru.kombinasi.kodeRoll[i] = null;
+      renderDetailCard();
+    });
+  });
+}
+function renderCustomRollSuggestions(idx, query) {
+  const box = document.getElementById('customRollSuggestions-' + idx);
+  if (!box) return;
+  const q = String(query || '').trim().toUpperCase();
+  const warna = itemBaru.kombinasi.warna[idx];
+  const semua = daftarRollUntukWarna(warna);
+  const cocok = q ? semua.filter(function (r) { return String(r.kodeRoll).toUpperCase().indexOf(q) === 0; }) : semua;
+  box.innerHTML = cocok.slice(0, 8).map(function (r) {
+    return '<div class="suggestion-item roll-suggestion" data-pick-croll="' + escapeAttr(r.kodeRoll) + '" data-kg="' + r.kg + '" data-idx="' + idx + '">Roll ' + escapeHtml(r.kodeRoll) + ' / ' + r.kg + 'kg</div>';
+  }).join('');
+  box.querySelectorAll('[data-pick-croll]').forEach(function (el) {
+    el.addEventListener('mousedown', function (e) {
+      e.preventDefault();
+      const i = parseInt(el.dataset.idx, 10);
+      itemBaru.kombinasi.kodeRoll[i] = el.dataset.pickCroll;
+      renderDetailCard();
+    });
+  });
 }
 
 function renderKombiRollSuggestions(idx, query) {
@@ -681,7 +776,18 @@ function hitungTotalQty() {
 function itemBaruValid() {
   const totalQty = Object.keys(itemBaru.ukuran).reduce(function (s, k) { return s + itemBaru.ukuran[k]; }, 0);
   if (totalQty <= 0) return false;
-  if (itemBaru.isCustom) return !!itemBaru.namaCustom.trim();
+  if (itemBaru.isCustom) {
+    if (!itemBaru.namaCustom.trim()) return false;
+    if (itemBaru.kombinasi) {
+      for (let i = 0; i < itemBaru.kombinasi.warna.length; i++) {
+        // kg diisi tapi warna kosong = gak jelas mau motong stok warna apa
+        if (itemBaru.kombinasi.kg[i] && !itemBaru.kombinasi.warna[i]) return false;
+        // warna ke-2 (kombinasi) WAJIB ada kg-nya, beda dari warna 1 yang boleh kosong semua
+        if (i === 1 && itemBaru.kombinasi.warna[i] && !itemBaru.kombinasi.kg[i]) return false;
+      }
+    }
+    return true;
+  }
   if (itemBaru.isKombinasi || (itemBaru.varianLabel && isVarianRinger(itemBaru.varianLabel))) {
     if (!itemBaru.kombinasi) return false;
     return itemBaru.kombinasi.warna.every(function (w, i) { return w && itemBaru.kombinasi.kg[i]; });
@@ -741,7 +847,17 @@ function renderQueue() {
 }
 
 function deskripsiSingkatItem(it) {
-  if (it.isCustom) return it.namaCustom + (it.kg ? (' - ' + it.kg + 'kg') : '') + (it.kodeRoll ? (' (roll ' + it.kodeRoll + ')') : '');
+  if (it.isCustom) {
+    let s = it.namaCustom;
+    if (it.kombinasi && it.kombinasi.warna[0]) {
+      const bagian = it.kombinasi.warna.map(function (w, i) {
+        if (!w) return null;
+        return w + (it.kombinasi.kg[i] ? (' ' + it.kombinasi.kg[i] + 'kg') : '') + (it.kombinasi.kodeRoll[i] ? (' (roll ' + it.kombinasi.kodeRoll[i] + ')') : '');
+      }).filter(Boolean);
+      if (bagian.length) s += ' - ' + bagian.join(' + ');
+    }
+    return s;
+  }
   if (it.isKombinasi || it.kombinasi) {
     const awalan = bikinAwalanPreview(it.kategori, it.kodeItem);
     const nama = (awalan ? awalan + ' ' : '') + it.kombinasi.warna.slice(0, 2).join(' ');
@@ -851,7 +967,18 @@ document.getElementById('btnKirim').addEventListener('click', function () {
 
 function bangunPayloadItem(it) {
   if (it.isCustom) {
-    return { custom: true, namaCustom: it.namaCustom, kg: it.kg || null, kodeRoll: it.kodeRoll || null, ukuran: it.ukuran };
+    const payload = { custom: true, namaCustom: it.namaCustom, ukuran: it.ukuran };
+    if (it.kombinasi && it.kombinasi.warna[0]) {
+      payload.warna1 = it.kombinasi.warna[0];
+      payload.kg1 = it.kombinasi.kg[0] ? parseFloat(it.kombinasi.kg[0]) : null;
+      payload.kodeRoll1 = it.kombinasi.kodeRoll[0] || null;
+      if (it.kombinasi.warna[1]) {
+        payload.warna2 = it.kombinasi.warna[1];
+        payload.kg2 = it.kombinasi.kg[1] ? parseFloat(it.kombinasi.kg[1]) : null;
+        payload.kodeRoll2 = it.kombinasi.kodeRoll[1] || null;
+      }
+    }
+    return payload;
   }
   if (it.isKombinasi || it.kombinasi) {
     return {
