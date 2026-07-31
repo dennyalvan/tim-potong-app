@@ -1,9 +1,22 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.06
+DASHBOARD ver.07
 ============================================================
 Dashboard Stok Kain + QC - connect ke Cloudflare Worker (tim-potong-api) + Supabase.
+
+PERUBAHAN ver.07 (compact pass ke-2, cross-check langsung ke CSS asli HTML QC ver.04.html
+biar presisi, bukan tebak dari screenshot):
+  1. Spacing di bagian expand (badge ukuran, progress bar, baris Sel/Rej/Sisa, toggle
+     Ringkas/Rincian, tabel rincian) dirapatkan - margin-bottom & padding diturunkan di semua
+     elemen tsb, nilai disamakan sedekat mungkin ke qc-sizes/qc-progress/qc-progress-label/
+     qc-mode-switch/qc-tabel di versi Apps Script.
+  2. Tombol "Ringkas"/"Rincian": TIDAK lagi stretch penuh (flex:1 dihapus) - sekarang pill
+     kecil nempel konten kayak qc-mode-btn asli (padding 4px 12px, radius 999px), dan
+     font-weight dinaikkan ke 800 (dari 700) di kedua state biar keliatan bold jelas -
+     sebelumnya 700 tapi keliatan tipis di font Inter ukuran kecil.
+  3. Tabel rincian (UK/QTY/SEL/REJ/SISA): padding sel & lebar input kotak angka dikecilkan
+     mendekati qc-tabel asli (input 42px, radius 8px).
 
 PERUBAHAN ver.06 (3 penyesuaian ke tampilan card yang lagi diinput, sesuai versi Apps Script):
   1. Tombol "Ringkas"/"Rincian" dibikin lebih kecil & compact (padding & font-size diturunkan),
@@ -174,34 +187,34 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
   .progress-bar-mini { width: 60px; height: 4px; background: #e5e9f2; border-radius: 4px; margin-top: 4px; margin-left: auto; overflow: hidden; }
   .progress-bar-mini .fill { height: 100%; background: var(--green); }
 
-  .laporan-expand { margin-top: 10px; border-top: 1px solid var(--border); padding: 10px 12px 12px; }
-  .ukuran-badges { display: flex; gap: 4px 10px; flex-wrap: wrap; margin-bottom: 8px; font-size: 12px; }
+  .laporan-expand { margin-top: 8px; border-top: 1px solid var(--border); padding: 8px 12px 10px; }
+  .ukuran-badges { display: flex; gap: 3px 8px; flex-wrap: wrap; margin-bottom: 6px; font-size: 11.5px; }
   .ukuran-badge { font-weight: 700; color: #374151; }
   .ukuran-badge .n { color: var(--gray-text); font-weight: 600; margin-left: 2px; }
-  .progress-bar-full { width: 100%; height: 7px; background: #e5e9f2; border-radius: 8px; overflow: hidden; margin-bottom: 6px; }
+  .progress-bar-full { width: 100%; height: 5px; background: #e5e9f2; border-radius: 6px; overflow: hidden; margin-bottom: 5px; }
   .progress-bar-full .fill { height: 100%; background: var(--green); }
-  .stats-line { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--gray-text); font-weight: 600; margin-bottom: 10px; }
+  .stats-line { display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; color: var(--gray-text); font-weight: 600; margin-bottom: 6px; }
   .stats-line .sel { color: var(--green); }
   .stats-line .rej { color: var(--danger); }
-  .stats-line .num { display: inline-block; margin-left: 4px; padding: 1px 8px; border-radius: 999px; font-weight: 700; background: var(--surface-2); color: #374151; }
+  .stats-line .num { display: inline-block; margin-left: 3px; padding: 0px 7px; border-radius: 999px; font-weight: 700; background: var(--surface-2); color: #374151; }
   .stats-line .sel .num { background: var(--green-bg); color: var(--green); }
   .stats-line .rej .num { background: var(--danger-bg); color: var(--danger); }
 
-  .mode-toggle { display: flex; gap: 6px; margin-bottom: 12px; }
-  .mode-btn { flex: 1; padding: 6px; border-radius: 8px; border: 1px solid var(--border); background: #fff; font-weight: 700; font-size: 11.5px; cursor: pointer; color: #374151; }
-  .mode-btn.active { background: var(--indigo); color: #fff; border-color: var(--indigo); }
+  .mode-toggle { display: flex; gap: 5px; margin-bottom: 8px; }
+  .mode-btn { padding: 4px 12px; border-radius: 999px; border: 1px solid var(--border); background: #fff; font-weight: 800; font-size: 11px; cursor: pointer; color: #374151; }
+  .mode-btn.active { background: var(--indigo); color: #fff; border-color: var(--indigo); font-weight: 800; }
 
-  .ringkas-fields { display: flex; gap: 10px; margin-bottom: 12px; }
+  .ringkas-fields { display: flex; gap: 10px; margin-bottom: 10px; }
   .ringkas-fields .field { flex: 1; }
   .ringkas-fields label { font-size: 12px; font-weight: 700; display: block; margin-bottom: 5px; }
   .ringkas-fields input { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 10px; font-size: 15px; }
 
-  table.rincian-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 13px; }
-  table.rincian-table th { text-align: left; color: var(--gray-label); font-weight: 700; font-size: 11px; padding: 4px 2px; }
-  table.rincian-table td { padding: 6px 2px; border-top: 1px solid #f1f4f9; }
-  table.rincian-table input { width: 48px; padding: 6px; border: 1px solid var(--border); border-radius: 6px; text-align: center; }
+  table.rincian-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 12px; }
+  table.rincian-table th { text-align: left; color: var(--gray-label); font-weight: 700; font-size: 10.5px; padding: 3px 2px; }
+  table.rincian-table td { padding: 4px 2px; border-top: 1px solid #f1f4f9; }
+  table.rincian-table input { width: 42px; padding: 5px; border: 1px solid var(--border); border-radius: 8px; text-align: center; font-size: 12px; }
 
-  .btn-tambah-antrian { width: 100%; background: var(--indigo); color: #fff; border: none; border-radius: 10px; padding: 12px; font-weight: 700; font-size: 14px; cursor: pointer; }
+  .btn-tambah-antrian { width: 100%; background: var(--indigo); color: #fff; border: none; border-radius: 10px; padding: 10px; font-weight: 700; font-size: 13.5px; cursor: pointer; }
 
   .arsip-toggle { background: #fff; border-radius: 14px; padding: 14px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; margin-top: 14px; font-weight: 700; font-size: 13px; }
   .arsip-toggle .sub { display: block; font-weight: 400; color: var(--gray-text); font-size: 12px; margin-top: 2px; }
