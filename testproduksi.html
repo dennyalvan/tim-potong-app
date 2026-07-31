@@ -1,4 +1,28 @@
 <!DOCTYPE html>
+<!--
+============================================================
+HTML PRODUKSI (Supabase/testproduksi) - ver.03
+============================================================
+PERUBAHAN ver.03: styling disamakan persis ke referensi Apps Script (index.html /
+HTML PRODUKSI ver.02.html, versi live GitHub Pages) - nilai CSS diambil LANGSUNG dari file
+referensi (bukan tebak dari screenshot), badge versi "ver.02" DI DALAM app SENGAJA TIDAK
+diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI ver.02.html).
+  1. Kategori (tab Anak/Dewasa): gap 10px->8px, padding tombol 14px 10px->10px 8px, radius
+     14px->16px - samain ke .tab-row/.tab-card.
+  2. Kartu "Detail Item Baru" & "Qty per Size": radius 16px->18px, field-row (baris
+     Varian/Warna/dst) padding 14px 16px->9px 14px - samain ke .card/.row.
+  3. QTY PER SIZE: gap antar kolom 12px->6px, padding grid 16px->9px 14px, kotak input
+     dikecilkan (10px->6px 4px padding) + dikasih background abu muda (nyala putih pas fokus),
+     label ukuran dikecilkan & warna abu - samain ke .qty-grid/.qty-cell.
+  4. Dropdown Varian & saran autocomplete Warna/Kode Roll ("tampilan tabel"): sebelumnya cuma
+     zebra genap/ganjil + hover biru - sekarang siklus 6 warna biru pastel per baris (persis
+     SOFT_BLUE_COLORS/ROLL_OPT_COLORS di kode Apps Script), dibungkus panel roundbox
+     (radius 14px, border tipis) kayak .combo-dropdown, tiap baris dikasih garis pemisah tipis
+     0.5px kayak .combo-opt/.roll-opt.
+  5. Detail kecil ikutan disamakan: badge "wajib isi", ikon chevron, section-label, total-qty.
+============================================================
+-->
+
 <html lang="id">
 <head>
 <meta charset="UTF-8">
@@ -41,13 +65,13 @@
   .link-btn.refresh { color: var(--blue-link); }
   .link-btn.atur { color: var(--orange-link); }
 
-  .section-label { font-size: 12px; color: var(--gray-label); font-weight: 700; letter-spacing: 0.5px; margin: 14px 0 8px; }
+  .section-label { font-size: 12.5px; color: var(--gray-label); font-weight: 700; letter-spacing: 0.3px; margin: 14px 4px 6px; }
 
-  .kategori-toggle { display: flex; gap: 10px; }
+  .kategori-toggle { display: flex; gap: 8px; }
   .kat-btn {
-    flex: 1; padding: 14px 10px; border-radius: 14px; border: 2px solid var(--border);
+    flex: 1; padding: 10px 8px; border-radius: 16px; border: 2px solid var(--border);
     background: #fff; font-weight: 700; font-size: 14px; cursor: pointer;
-    display: flex; align-items: center; justify-content: center; gap: 8px; color: #374151;
+    display: flex; align-items: center; justify-content: center; gap: 7px; color: #374151;
   }
   .kat-btn .emoji { font-size: 18px; }
   .kat-btn.active {
@@ -62,24 +86,29 @@
   .cut-divider::before { left: 0; }
   .cut-divider::after { right: 0; }
 
-  .card { background: var(--card-bg); border-radius: 16px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+  .card { background: var(--card-bg); border-radius: 18px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 0 0 0.5px rgba(0,0,0,0.04); }
   .field-row {
-    display: flex; justify-content: space-between; align-items: center; padding: 14px 16px;
-    border-bottom: 1px solid var(--border); cursor: pointer; gap: 10px;
+    display: flex; justify-content: space-between; align-items: center; padding: 9px 14px; gap: 10px;
+    border-bottom: 0.5px solid var(--border); cursor: pointer;
   }
   .field-row:last-child { border-bottom: none; }
   .field-row .flabel { font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 6px; }
   .field-row .fvalue { color: #9aa3b2; font-size: 14px; text-align: right; }
   .field-row .fvalue.filled { color: #1c1c1e; font-weight: 600; }
-  .badge-wajib { background: #f3f4f6; color: #6b7280; font-size: 10px; padding: 2px 6px; border-radius: 5px; font-weight: 600; }
-  .chevron { color: #c7cedb; margin-left: 4px; }
+  .badge-wajib { background: #f3f4f6; color: #6b7280; font-size: 10.5px; padding: 2px 8px; border-radius: 6px; font-weight: 650; }
+  .chevron { color: #c7cedb; font-size: 11px; margin-left: 4px; }
 
-  .dropdown-list { max-height: 220px; overflow-y: auto; border-bottom: 1px solid var(--border); }
-  .dropdown-item { padding: 12px 16px; font-weight: 600; font-size: 14px; cursor: pointer; }
-  .dropdown-item:nth-child(even) { background: #f7f9fd; }
-  .dropdown-item:hover { background: #e8f0fe; }
+  .dropdown-list { max-height: 260px; overflow-y: auto; overflow-x: hidden; margin: 8px 14px 10px; border-radius: 14px; border: 1px solid var(--border); }
+  .dropdown-item { padding: 10px 14px; font-weight: 600; font-size: 14.5px; cursor: pointer; border-bottom: 0.5px solid rgba(0,0,0,.06); }
+  .dropdown-item:last-child { border-bottom: none; }
+  .dropdown-item:nth-child(6n+1) { background: #F1F7FD; }
+  .dropdown-item:nth-child(6n+2) { background: #EAF3FB; }
+  .dropdown-item:nth-child(6n+3) { background: #F5F9FE; }
+  .dropdown-item:nth-child(6n+4) { background: #E6F0FA; }
+  .dropdown-item:nth-child(6n+5) { background: #EFF6FC; }
+  .dropdown-item:nth-child(6n+0) { background: #E3EEF9; }
   .dropdown-item .accent { float: right; color: #9aa3b2; font-weight: 500; font-size: 13px; }
-  .dropdown-item.manual { color: var(--orange-link); }
+  .dropdown-item.manual { color: var(--orange-link); background: #fff; }
 
   .subrow { padding: 10px 16px; }
   .kg-input-full {
@@ -101,19 +130,26 @@
   .kombi-warna-section .roll-mini { flex: 1.3; padding: 10px; border: 1px solid var(--border); border-radius: 10px; color: #9aa3b2; text-align: center; cursor: pointer; font-size: 13px; }
 
   .autocomplete-input { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 10px; font-size: 15px; }
-  .suggestion-list { max-height: 180px; overflow-y: auto; }
-  .suggestion-item { padding: 10px 12px; font-size: 14px; font-weight: 600; cursor: pointer; border-bottom: 1px solid #f1f4f9; }
-  .suggestion-item:hover { background: #e8f0fe; }
+  .suggestion-list { max-height: 200px; overflow-y: auto; overflow-x: hidden; margin-top: 8px; border-radius: 12px; border: 1px solid var(--border); }
+  .suggestion-item { padding: 10px 14px; font-size: 14.5px; font-weight: 600; cursor: pointer; border-bottom: 0.5px solid rgba(0,0,0,.06); }
+  .suggestion-item:last-child { border-bottom: none; }
+  .suggestion-item:nth-child(6n+1) { background: #F1F7FD; }
+  .suggestion-item:nth-child(6n+2) { background: #EAF3FB; }
+  .suggestion-item:nth-child(6n+3) { background: #F5F9FE; }
+  .suggestion-item:nth-child(6n+4) { background: #E6F0FA; }
+  .suggestion-item:nth-child(6n+5) { background: #EFF6FC; }
+  .suggestion-item:nth-child(6n+0) { background: #E3EEF9; }
   .suggestion-item .kg-hint { float: right; color: #9aa3b2; font-weight: 500; font-size: 13px; }
   .suggestion-item.roll-suggestion { text-align: right; }
 
-  .qty-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 16px; }
+  .qty-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 9px 14px; }
   .qty-cell { text-align: center; }
-  .qty-cell label { display: block; font-weight: 700; font-size: 13px; margin-bottom: 6px; }
-  .qty-cell input { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 10px; text-align: center; font-size: 15px; }
-  .toggle-ukuran { padding: 0 16px 10px; }
-  .toggle-ukuran a { color: var(--blue-link); font-size: 13px; cursor: pointer; }
-  .total-qty { display: flex; justify-content: space-between; padding: 14px 16px; border-top: 1px solid var(--border); font-weight: 700; }
+  .qty-cell label { display: block; color: var(--gray-label); font-weight: 650; font-size: 11px; margin-bottom: 2px; }
+  .qty-cell input { width: 100%; padding: 6px 4px; border: 1px solid var(--border); border-radius: 10px; text-align: center; font-size: 15px; font-weight: 600; background: var(--bg); }
+  .qty-cell input:focus { border-color: var(--teal); background: #fff; }
+  .toggle-ukuran { padding: 2px 14px 8px; }
+  .toggle-ukuran a { color: var(--blue-link); font-size: 12.5px; cursor: pointer; }
+  .total-qty { display: flex; justify-content: space-between; align-items: center; padding: 8px 14px; border-top: 0.5px solid var(--border); font-weight: 700; }
 
   .queue-box { background: var(--navy); border-radius: 16px; padding: 14px 16px; color: #fff; }
   .queue-box .qtitle { display: flex; justify-content: space-between; align-items: center; font-size: 12px; letter-spacing: 0.5px; color: #b8c4d9; font-weight: 700; margin-bottom: 10px; }
