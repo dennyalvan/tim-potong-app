@@ -9,7 +9,7 @@ PERUBAHAN ver.05 (5 temuan dari perbandingan screenshot lagi):
   1. Preview "Daftar Antrian" dirombak: kartu putih per-item (nama, "Selesai +N · Reject +N",
      tombol hapus ✕) + kotak gelap terpisah "📋 REKAP UPDATE QC (N laporan)" di bawahnya,
      format sama persis kayak versi Apps Script.
-  2. "Diperbarui ..." dihilangkan jadi 1 baris sama "TIM POTONG · REKAP MAKLOON" cuman tanggal aja (hemat baris).
+  2. "Diperbarui ..." dipindah jadi 1 baris sama "TIM POTONG · REKAP MAKLOON" (hemat baris).
   3. "Atur Tampilan" jadi tombol roundbox (bg abu muda + border), bukan cuma teks link oranye.
   4. Kotak Selesai/Reject sekarang KOSONG dengan "0" cuma placeholder (bayangan) - kursor
      langsung siap ketik angka beneran, gak perlu hapus "0" dulu.
@@ -385,7 +385,7 @@ document.getElementById('btnRefresh').addEventListener('click', function () {
 
 function updateJamRefresh() {
   const now = new Date();
-  document.getElementById('lastUpdate').textContent = '+ now.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) + ', ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  document.getElementById('lastUpdate').textContent = 'Diperbarui ' + now.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) + ', ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 }
 
 // ------------------------------------------------------------
