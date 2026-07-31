@@ -385,7 +385,7 @@ document.getElementById('btnRefresh').addEventListener('click', function () {
 
 function updateJamRefresh() {
   const now = new Date();
-  document.getElementById('lastUpdate').textContent = 'Diperbarui ' + now.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) + ', ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  document.getElementById('lastUpdate').textContent = '' + now.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) + ', ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 }
 
 // ------------------------------------------------------------
