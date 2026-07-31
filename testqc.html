@@ -1,10 +1,16 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.02
+DASHBOARD ver.03
 ============================================================
-Dashboard Stok Kain + QC - versi BARU, connect ke Cloudflare Worker (tim-potong-api) +
-Supabase, gantiin sistem lama (Apps Script + Google Sheets).
+Dashboard Stok Kain + QC - connect ke Cloudflare Worker (tim-potong-api) + Supabase.
+
+PERUBAHAN ver.03: ADOPSI fitur dari thread Apps Script terpisah - tab BARU "📊 Rekap QC"
+(histori submit QC apa adanya, 1 baris = 1x submit, urut waktu terbaru dulu, 14 hari
+terakhir). PENTING: dirender pakai CSS Grid (div-based), BUKAN <table> - porting persis dari
+HTML QC ver.04.html (Apps Script), yang punya catatan eksplisit <table>+colgroup PERNAH
+kebukti rusak di webview Telegram (kolom collapse). Kolom Harga Jait/Total Bayar SENGAJA
+TIDAK ditampilkan di tab ini (itu info akunting, bukan buat tim potong/QC).
 
 PERUBAHAN ver.02 (dari ver.01, disesuaikan persis ke tampilan pembanding Apps Script lama):
 - AUTO-UPDATE tanpa refresh manual - pakai Supabase Realtime beneran (bukan polling), lewat
@@ -22,7 +28,7 @@ PERUBAHAN ver.02 (dari ver.01, disesuaikan persis ke tampilan pembanding Apps Sc
 
 2 tab: "Proses & QC" (daftar laporan belum SELESAI, expand per baris buat input QC mode
 Ringkas/Rincian, antrian multi-laporan, Arsip Selesai N hari terakhir) dan "Stok Kain"
-(ringkasan total + detail per warna, expand buat lihat per-roll).
+(ringkasan total + detail per warna, expand buat lihat per-roll). 1 tab baru "Rekap QC".
 
 BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
 ============================================================
@@ -62,7 +68,7 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
   .loading-indicator { font-size: 11px; color: var(--gray-text); margin-top: 4px; }
 
   .tab-toggle { display: flex; gap: 10px; margin-bottom: 12px; }
-  .tab-btn { flex: 1; padding: 12px; border-radius: 12px; border: none; background: #fff; font-weight: 700; font-size: 14px; cursor: pointer; color: #374151; display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .tab-btn { flex: 1; padding: 11px 6px; border-radius: 12px; border: none; background: #fff; font-weight: 700; font-size: 12.5px; cursor: pointer; color: #374151; display: flex; align-items: center; justify-content: center; gap: 4px; }
   .tab-btn.active { background: var(--indigo); color: #fff; }
 
   .link-orange { text-align: right; font-size: 13px; color: var(--orange-link); margin-bottom: 14px; cursor: pointer; }
@@ -146,6 +152,26 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
   .warna-detail { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px; }
   .warna-detail .roll-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; border-bottom: 1px dashed #f1f4f9; }
 
+  /* ============ REKAP QC - CSS GRID (BUKAN <table>) ============
+     Porting persis dari HTML QC ver.04.html (Apps Script) - <table>+colgroup TERBUKTI rusak
+     di webview Telegram (kolom ukuran suka "collapse"). Div-based CSS Grid, lebar kolom
+     dipasang SAMA PERSIS di setiap baris (header & data) lewat inline style, jadi kolom
+     dijamin selalu selebar itu & align sempurna antar baris. */
+  .rekap-summary { font-size: 12px; color: var(--gray-text); margin-bottom: 8px; }
+  .rekap-wrap { background: #fff; border-radius: 14px; overflow-x: auto; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+  .rekap-row { display: grid; align-items: center; }
+  .rekap-row > div { padding: 8px 6px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rekap-head { border-bottom: 1.4px solid var(--border); }
+  .rekap-head > div { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--gray-label); }
+  .rekap-row:not(.rekap-head) { border-bottom: 1px solid var(--border); }
+  .rekap-row:last-child { border-bottom: none; }
+  .rekap-num { text-align: right; font-variant-numeric: tabular-nums; }
+  .rekap-muted { color: var(--gray-text); }
+  .rekap-selesai { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; color: var(--green); }
+  .rekap-reject { color: var(--danger); font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+  .rekap-foot { display: flex; justify-content: flex-end; gap: 18px; padding: 9px 12px; font-size: 12px; border-top: 1px solid var(--border); background: #f7f9fd; }
+  .rekap-foot b { color: #1c1c1e; }
+
   .toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); background: #1c1c1e; color: #fff; padding: 10px 18px; border-radius: 10px; font-size: 13px; z-index: 999; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
   .toast.show { opacity: 1; }
 </style>
@@ -168,6 +194,7 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
   <div class="tab-toggle">
     <button class="tab-btn active" data-tab="qc">✅ Proses & QC</button>
     <button class="tab-btn" data-tab="stok">🧵 Stok Kain</button>
+    <button class="tab-btn" data-tab="rekap">📊 Rekap QC</button>
   </div>
   <div class="link-orange">✏️ Atur Tampilan</div>
 
@@ -214,6 +241,16 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
       <div class="chip" data-sortwarna="roll">Roll terbanyak</div>
     </div>
     <div class="warna-grid" id="warnaGrid"></div>
+  </div>
+
+  <!-- ============ TAB: REKAP QC ============ -->
+  <div id="tabRekap" style="display:none">
+    <div class="section-label">REKAP QC</div>
+    <p class="rekap-summary" id="rekapSummary">Memuat...</p>
+    <div class="rekap-wrap">
+      <div id="rekapList"></div>
+      <div class="rekap-foot" id="rekapFoot"></div>
+    </div>
   </div>
 </div>
 
@@ -273,8 +310,10 @@ document.querySelectorAll('.tab-btn').forEach(function (btn) {
     const tab = btn.dataset.tab;
     document.getElementById('tabQC').style.display = tab === 'qc' ? 'block' : 'none';
     document.getElementById('tabStok').style.display = tab === 'stok' ? 'block' : 'none';
-    document.getElementById('pageTitle').textContent = tab === 'qc' ? 'Dashboard Stok Kain' : 'Dashboard Stok Kain';
+    document.getElementById('tabRekap').style.display = tab === 'rekap' ? 'block' : 'none';
+    document.getElementById('pageTitle').textContent = 'Dashboard Stok Kain';
     if (tab === 'stok' && !stokUtuhData) muatStokUtuh();
+    if (tab === 'rekap') muatRekapQC();
   });
 });
 
@@ -660,6 +699,86 @@ document.querySelectorAll('.chip[data-sortwarna]').forEach(function (el) {
     renderWarnaGrid();
   });
 });
+
+// ------------------------------------------------------------
+// TAB REKAP QC - histori submit apa adanya (1 baris = 1x submit), CSS Grid (BUKAN <table> -
+// pernah kebukti rusak di webview Telegram, lihat catatan CSS di atas).
+// ------------------------------------------------------------
+let rekapItemsRaw = [];
+
+function muatRekapQC() {
+  document.getElementById('rekapSummary').textContent = 'Memuat...';
+  fetch(WORKER_URL + '/data/rekap-qc?hari=14')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      rekapItemsRaw = Array.isArray(data) ? data : [];
+      renderRekapQC();
+    })
+    .catch(function (e) {
+      document.getElementById('rekapSummary').textContent = 'Gagal memuat';
+      document.getElementById('rekapList').innerHTML = '<div class="rekap-row" style="grid-template-columns:1fr"><div class="rekap-muted">Gagal memuat: ' + escapeHtml(e.message) + '</div></div>';
+    });
+}
+
+function formatWaktuRekap(waktuIso) {
+  if (!waktuIso) return '-';
+  const d = new Date(waktuIso);
+  return d.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+}
+
+// Kolom ukuran cuma yang BENERAN dipakai di data yang lagi ditampilkan (biar gak banyak kolom
+// kosong). Kolom Reject SENGAJA cuma 1 (total angka), bukan dipecah per ukuran - detail
+// per-ukurannya tetap ada di database (notasi ringkas), cuma gak ditampilkan di sini biar
+// tabel gak penuh. Harga Jait/Total Bayar SENGAJA TIDAK ditampilkan (itu info akunting).
+function renderRekapQC() {
+  const items = rekapItemsRaw;
+  const semuaUkuranDipakai = {};
+  items.forEach(function (it) { it.perUkuran.forEach(function (u) { semuaUkuranDipakai[u.ukuran] = true; }); });
+  const ukuranDipakai = DAFTAR_UKURAN_URUT.filter(function (u) { return semuaUkuranDipakai[u]; });
+
+  const LEBAR_WAKTU = 92, LEBAR_WARNA = 110, LEBAR_VARIAN = 100, LEBAR_UKURAN = 34, LEBAR_ANGKA = 60;
+  const templateKolom = LEBAR_WAKTU + 'px ' + LEBAR_WARNA + 'px ' + LEBAR_VARIAN + 'px ' +
+    ukuranDipakai.map(function () { return LEBAR_UKURAN + 'px'; }).join(' ') +
+    ' ' + LEBAR_ANGKA + 'px ' + LEBAR_ANGKA + 'px';
+  const lebarTotal = LEBAR_WAKTU + LEBAR_WARNA + LEBAR_VARIAN + (ukuranDipakai.length * LEBAR_UKURAN) + (LEBAR_ANGKA * 2);
+
+  const list = document.getElementById('rekapList');
+  list.style.minWidth = lebarTotal + 'px';
+
+  const summary = document.getElementById('rekapSummary');
+  const headHtml = '<div class="rekap-row rekap-head" style="grid-template-columns:' + templateKolom + '">' +
+    '<div>Waktu</div><div>Warna</div><div>Varian</div>' +
+    ukuranDipakai.map(function (u) { return '<div class="rekap-num">' + u + '</div>'; }).join('') +
+    '<div class="rekap-num">Selesai</div><div class="rekap-num">Reject</div></div>';
+
+  if (items.length === 0) {
+    summary.textContent = 'Belum ada submit QC dalam 14 hari terakhir.';
+    list.innerHTML = headHtml + '<div class="rekap-row" style="grid-template-columns:1fr"><div class="rekap-muted">Belum ada submit QC.</div></div>';
+    document.getElementById('rekapFoot').innerHTML = '';
+    return;
+  }
+  summary.textContent = items.length + ' submit (14 hari terakhir)';
+
+  const barisHtml = items.map(function (it) {
+    const petaUkuran = {};
+    it.perUkuran.forEach(function (u) { petaUkuran[u.ukuran] = u.selesai; });
+    return '<div class="rekap-row" style="grid-template-columns:' + templateKolom + '">' +
+      '<div class="rekap-muted">' + formatWaktuRekap(it.waktu) + '</div>' +
+      '<div>' + escapeHtml(it.warna || '-') + '</div>' +
+      '<div class="rekap-muted">' + escapeHtml(it.varian || '-') + '</div>' +
+      ukuranDipakai.map(function (u) { return '<div class="rekap-num">' + (petaUkuran[u] ? petaUkuran[u] : '<span class="rekap-muted">–</span>') + '</div>'; }).join('') +
+      '<div class="rekap-selesai">' + it.total + '</div>' +
+      '<div class="' + (it.rejectTotal > 0 ? 'rekap-reject' : 'rekap-num rekap-muted') + '">' + it.rejectTotal + '</div>' +
+      '</div>';
+  }).join('');
+
+  list.innerHTML = headHtml + barisHtml;
+
+  const totalSel = items.reduce(function (s, it) { return s + it.total; }, 0);
+  const totalRej = items.reduce(function (s, it) { return s + it.rejectTotal; }, 0);
+  document.getElementById('rekapFoot').innerHTML =
+    '<span>Total selesai: <b>' + totalSel + '</b></span><span>Total reject: <b>' + totalRej + '</b></span>';
+}
 
 // ------------------------------------------------------------
 // HELPER
