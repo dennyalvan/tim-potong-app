@@ -1,9 +1,25 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.04
+DASHBOARD ver.05
 ============================================================
 Dashboard Stok Kain + QC - connect ke Cloudflare Worker (tim-potong-api) + Supabase.
+
+PERUBAHAN ver.05 (5 temuan dari perbandingan screenshot lagi):
+  1. Preview "Daftar Antrian" dirombak: kartu putih per-item (nama, "Selesai +N · Reject +N",
+     tombol hapus ✕) + kotak gelap terpisah "📋 REKAP UPDATE QC (N laporan)" di bawahnya,
+     format sama persis kayak versi Apps Script.
+  2. "Diperbarui ..." dipindah jadi 1 baris sama "TIM POTONG · REKAP MAKLOON" (hemat baris).
+  3. "Atur Tampilan" jadi tombol roundbox (bg abu muda + border), bukan cuma teks link oranye.
+  4. Kotak Selesai/Reject sekarang KOSONG dengan "0" cuma placeholder (bayangan) - kursor
+     langsung siap ketik angka beneran, gak perlu hapus "0" dulu.
+  5. Live preview: begitu ada laporan yang masuk antrian, baris itu LANGSUNG nampilin angka
+     hasil akhirnya (lingkaran + progress bar + Sel/Rej/Sisa keupdate seolah sudah terkirim),
+     ditandai ikon jam kecil, sekalian ada pill "🕓 N di antrian (+X sel/+Y rej)" pas
+     di-expand. Setelah "+ Tambah ke Daftar" ditekan, baris otomatis nutup balik
+     (fitur ini sebenarnya SUDAH ada dari ver.02, dipastikan lagi masih jalan benar).
+  Dicegah juga: 1 laporan cuma boleh 1 entri aktif di antrian dalam satu waktu (coba tambah
+  lagi sebelum yang lama dikirim/dihapus akan ditolak) - biar gak dobel-booking sisa qty.
 
 PERUBAHAN ver.04: samain tampilan visual ke versi Apps Script asli (HTML QC ver.04.html),
 hasil cross-check CSS langsung (bukan tebak dari screenshot) - 8 temuan dikonfirmasi Denny:
@@ -20,7 +36,8 @@ hasil cross-check CSS langsung (bukan tebak dari screenshot) - 8 temuan dikonfir
      dipisah garis tipis" (1 wadah putih membungkus semua baris) - sesuai versi asli.
 CATATAN: warna di atas pakai nilai DEFAULT tema Apps Script - kalau Denny sempat kustomisasi
 lewat "Atur Tampilan" dan hasilnya masih beda dikit, kasih tau detail warnanya biar dipas-in
-lagi (fitur "Atur Tampilan" itu sendiri BELUM dibangun di versi ini).
+lagi (fitur "Atur Tampilan" itu sendiri BELUM dibangun di versi ini - tombolnya ada tapi
+belum ada aksi apapun kalau ditekan).
 
 PERUBAHAN ver.03: ADOPSI fitur dari thread Apps Script terpisah - tab BARU "📊 Rekap QC"
 (histori submit QC apa adanya, 1 baris = 1x submit, urut waktu terbaru dulu, 14 hari
@@ -83,17 +100,17 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
 
   .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
   .header .brand { font-size: 12px; color: var(--blue-link); font-weight: 700; margin: 0 0 2px; }
+  .last-update-inline { font-size: 10.5px; color: var(--gray-text); font-weight: 600; text-transform: none; letter-spacing: 0; margin-left: 4px; }
   .header h1 { font-size: 20px; margin: 0; }
   .header-right { text-align: right; }
   .btn-refresh { background: #fff; border: 1px solid var(--border); border-radius: 20px; padding: 8px 16px; font-weight: 700; font-size: 13px; cursor: pointer; color: #374151; }
-  .last-update { font-size: 11px; color: var(--gray-text); margin-top: 4px; }
   .loading-indicator { font-size: 11px; color: var(--gray-text); margin-top: 4px; }
 
   .tab-toggle { display: flex; gap: 10px; margin-bottom: 12px; }
   .tab-btn { flex: 1; padding: 11px 6px; border-radius: 12px; border: none; background: #fff; font-weight: 700; font-size: 12.5px; cursor: pointer; color: #374151; display: flex; align-items: center; justify-content: center; gap: 4px; }
   .tab-btn.active { background: var(--indigo); color: #fff; }
 
-  .link-orange { text-align: right; font-size: 13px; color: var(--orange-link); margin-bottom: 14px; cursor: pointer; }
+  .btn-atur-tampilan { display: block; margin-left: auto; margin-bottom: 14px; background: var(--surface-2); color: var(--navy-dark); border: 1px solid var(--border); border-radius: 8px; font-size: 11px; font-weight: 700; padding: 6px 10px; cursor: pointer; white-space: nowrap; }
 
   .card { background: var(--card-bg); border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
   .section-label { font-size: 12px; color: var(--gray-label); font-weight: 700; letter-spacing: 0.5px; margin: 14px 0 8px; }
@@ -102,6 +119,22 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
   .btn-kirim-rekap { background: var(--indigo); color: #fff; border: none; border-radius: 12px; padding: 12px 20px; font-weight: 700; font-size: 14px; cursor: pointer; width: 100%; margin-bottom: 12px; }
   .btn-kirim-rekap:disabled { background: #b9c0e8; cursor: default; }
   .status-bar { background: var(--navy-dark); color: #fff; border-radius: 12px; padding: 14px 16px; font-size: 13px; margin-bottom: 14px; }
+
+  .antrian-caption { font-size: 12px; color: var(--gray-text); margin-bottom: 8px; }
+  .antrian-kartu { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .antrian-kartu .info { flex: 1; min-width: 0; }
+  .antrian-kartu .nama { font-weight: 700; font-size: 13px; }
+  .antrian-kartu .detail { font-size: 12px; color: var(--gray-text); margin-top: 2px; }
+  .antrian-kartu .btn-hapus { background: var(--surface-2); color: var(--danger); border: none; border-radius: 50%; width: 24px; height: 24px; flex-shrink: 0; cursor: pointer; font-weight: 700; font-size: 13px; }
+  .preview-rekap-box { background: var(--navy-dark); color: #fff; border-radius: 12px; padding: 14px 16px; font-size: 13px; margin-bottom: 14px; }
+  .preview-rekap-box .judul { font-weight: 700; margin-bottom: 10px; }
+  .preview-rekap-box .item { margin-bottom: 8px; }
+  .preview-rekap-box .item .inama { font-weight: 700; }
+  .preview-rekap-box .item .iangka { color: #c8cce0; font-size: 12px; margin-top: 1px; }
+  .preview-rekap-box .hint { font-size: 11px; font-style: italic; color: #9aa3c0; margin-top: 4px; }
+
+  .pending-badge { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; background: var(--indigo); color: #fff; border-radius: 50%; font-size: 9px; margin-left: 4px; vertical-align: middle; }
+  .pending-pill { display: inline-block; background: var(--surface-2); color: var(--indigo); font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px; margin-bottom: 8px; }
 
   .search-box { width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; font-size: 14px; margin-bottom: 8px; background: #fff; }
   .count-label { font-size: 12px; color: var(--gray-text); margin-bottom: 8px; }
@@ -207,9 +240,8 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
 <div id="app">
   <div class="header">
     <div>
-      <p class="brand">TIM POTONG · REKAP MAKLOON</p>
+      <p class="brand">TIM POTONG · REKAP MAKLOON <span class="last-update-inline" id="lastUpdate"></span></p>
       <h1 id="pageTitle">Dashboard Stok Kain</h1>
-      <p class="last-update" id="lastUpdate"></p>
     </div>
     <div class="header-right">
       <button class="btn-refresh" id="btnRefresh">🔄 Refresh</button>
@@ -222,16 +254,18 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
     <button class="tab-btn" data-tab="stok">📦 Stok Kain</button>
     <button class="tab-btn" data-tab="rekap">📊 Rekap QC</button>
   </div>
-  <div class="link-orange">✏️ Atur Tampilan</div>
+  <button class="btn-atur-tampilan" id="btnAturTampilan">✏️ Atur Tampilan</button>
 
   <!-- ============ TAB: PROSES & QC ============ -->
   <div id="tabQC">
     <div class="section-label">DAFTAR ANTRIAN</div>
     <div id="antrianKosong" class="empty-box">Belum ada laporan di daftar antrian. Buka 1 laporan di bawah, isi form QC, lalu tekan "+ Tambah ke Daftar".</div>
     <div id="antrianIsiWrap" style="display:none">
-      <div class="status-bar" id="antrianRingkasan"></div>
+      <p class="antrian-caption" id="antrianCaption"></p>
+      <div id="antrianKartuList"></div>
     </div>
     <button class="btn-kirim-rekap" id="btnKirimRekap" disabled>🚀 Kirim Rekap (0)</button>
+    <div class="preview-rekap-box" id="antrianPreviewBox" style="display:none"></div>
 
     <input type="text" class="search-box" id="searchLaporan" placeholder="Cari laporan/warna...">
     <div class="count-label" id="countLabel">0 dari 0 laporan</div>
@@ -407,16 +441,21 @@ function renderDaftarLaporan() {
 }
 
 function renderLaporanCard(r, nomor) {
-  const persen = r.jumlah > 0 ? Math.round((r.totalSelesai / r.jumlah) * 100) : 0;
+  const pending = hitungPendingUntukLaporan_(r.id);
+  const selesaiTampil = r.totalSelesai + pending.pendingSelesai;
+  const persen = r.jumlah > 0 ? Math.round((selesaiTampil / r.jumlah) * 100) : 0;
   const terbuka = !!laporanTerbuka[r.id];
   const badgeClass = String(r.kategoriBadge || '').toLowerCase() === 'anak' ? 'anak' : '';
+  const badgeJam = pending.jumlahEntri > 0 ? '<span class="pending-badge">🕓</span>' : '';
 
   // v.02: lingkaran cuma muncul kalau UDAH ADA progress (totalSelesai > 0) - biar mata
   // langsung fokus ke angka yang lagi dikerjakan. Kalau masih 0, tampil "-/jumlah" polos
-  // tanpa lingkaran (sesuai contoh pembanding).
-  const fraksiHtml = r.totalSelesai > 0
-    ? '<span class="fraction-circle">' + r.totalSelesai + '</span><span class="fraction-total">/' + r.jumlah + '</span>'
-    : '<span class="fraction-total">-/' + r.jumlah + '</span>';
+  // tanpa lingkaran (sesuai contoh pembanding). v.05: kalau ada entri "nunggu dikirim" di
+  // antrian, angka & progress bar-nya LANGSUNG kelihatan hasil akhirnya (live preview),
+  // ditandai ikon jam kecil - biar Denny gak perlu nunggu submit beneran buat lihat efeknya.
+  const fraksiHtml = selesaiTampil > 0
+    ? '<span class="fraction-circle">' + selesaiTampil + '</span><span class="fraction-total">/' + r.jumlah + '</span>' + badgeJam
+    : '<span class="fraction-total">-/' + r.jumlah + '</span>' + badgeJam;
 
   let html = '<div class="laporan-card" data-id="' + r.id + '">' +
     '<div class="laporan-top">' +
@@ -440,14 +479,23 @@ function renderLaporanCard(r, nomor) {
 }
 
 function renderLaporanExpand(r) {
-  const persen = r.jumlah > 0 ? Math.round((r.totalSelesai / r.jumlah) * 100) : 0;
+  const pending = hitungPendingUntukLaporan_(r.id);
+  const selesaiTampil = r.totalSelesai + pending.pendingSelesai;
+  const rejectTampil = r.totalReject + pending.pendingReject;
+  const sisaTampil = r.jumlah - selesaiTampil - rejectTampil;
+  const persen = r.jumlah > 0 ? Math.round((selesaiTampil / r.jumlah) * 100) : 0;
   const mode = modePerLaporan[r.id] || 'ringkas';
   const perUkuranSorted = r.perUkuran.slice().sort(function (a, b) { return DAFTAR_UKURAN_URUT.indexOf(a.ukuran) - DAFTAR_UKURAN_URUT.indexOf(b.ukuran); });
 
   let html = '<div class="laporan-expand">' +
-    '<div class="ukuran-badges">' + perUkuranSorted.map(function (u) { return '<span class="ukuran-badge">' + u.ukuran + '<span class="n">' + u.qty + '</span></span>'; }).join('') + '</div>' +
-    '<div class="progress-bar-full"><div class="fill" style="width:' + persen + '%"></div></div>' +
-    '<div class="stats-line"><span class="sel">Sel ' + r.totalSelesai + '</span><span class="rej">Rej ' + r.totalReject + '</span><span>Sisa ' + r.sisa + '</span></div>' +
+    '<div class="ukuran-badges">' + perUkuranSorted.map(function (u) { return '<span class="ukuran-badge">' + u.ukuran + '<span class="n">' + u.qty + '</span></span>'; }).join('') + '</div>';
+
+  if (pending.jumlahEntri > 0) {
+    html += '<div class="pending-pill">🕓 ' + pending.jumlahEntri + ' di antrian (+' + pending.pendingSelesai + ' sel / +' + pending.pendingReject + ' rej)</div>';
+  }
+
+  html += '<div class="progress-bar-full"><div class="fill" style="width:' + persen + '%"></div></div>' +
+    '<div class="stats-line"><span class="sel">Sel ' + selesaiTampil + '</span><span class="rej">Rej ' + rejectTampil + '</span><span>Sisa ' + sisaTampil + '</span></div>' +
     '<div class="mode-toggle">' +
     '<button class="mode-btn ' + (mode === 'ringkas' ? 'active' : '') + '" data-modebtn="ringkas" data-id="' + r.id + '">Ringkas</button>' +
     '<button class="mode-btn ' + (mode === 'rincian' ? 'active' : '') + '" data-modebtn="rincian" data-id="' + r.id + '">Rincian</button>' +
@@ -455,18 +503,18 @@ function renderLaporanExpand(r) {
 
   if (mode === 'ringkas') {
     html += '<div class="ringkas-fields">' +
-      '<div class="field"><label>Selesai</label><input type="number" min="0" id="ringkasSelesai-' + r.id + '" value="0"></div>' +
-      '<div class="field"><label>Reject</label><input type="number" min="0" id="ringkasReject-' + r.id + '" value="0"></div>' +
+      '<div class="field"><label>Selesai</label><input type="number" min="0" id="ringkasSelesai-' + r.id + '" placeholder="0"></div>' +
+      '<div class="field"><label>Reject</label><input type="number" min="0" id="ringkasReject-' + r.id + '" placeholder="0"></div>' +
       '</div>';
   } else {
     html += '<table class="rincian-table"><thead><tr><th>UK</th><th>QTY</th><th>SEL</th><th>REJ</th><th>SISA</th></tr></thead><tbody>';
     perUkuranSorted.forEach(function (u) {
       const selesai = u.sisa <= 0
         ? u.selesai
-        : '<input type="number" min="0" max="' + u.sisa + '" id="rincianSel-' + r.id + '-' + u.ukuran + '" value="0">';
+        : '<input type="number" min="0" max="' + u.sisa + '" id="rincianSel-' + r.id + '-' + u.ukuran + '" placeholder="0">';
       const reject = u.sisa <= 0
         ? u.reject
-        : '<input type="number" min="0" max="' + u.sisa + '" id="rincianRej-' + r.id + '-' + u.ukuran + '" value="0">';
+        : '<input type="number" min="0" max="' + u.sisa + '" id="rincianRej-' + r.id + '-' + u.ukuran + '" placeholder="0">';
       html += '<tr><td>' + u.ukuran + '</td><td>' + u.qty + '</td><td>' + selesai + '</td><td>' + reject + '</td><td>' + u.sisa + '</td></tr>';
     });
     html += '</tbody></table>';
@@ -521,6 +569,9 @@ function pasangEventLaporanCard() {
 }
 
 function tambahKeAntrian(id) {
+  const sudahAdaDiAntrian = antrianQC.some(function (a) { return a.timPotongId === id; });
+  if (sudahAdaDiAntrian) { tampilkanToast('Laporan ini sudah ada di antrian - hapus dulu kalau mau ubah angkanya.'); return; }
+
   const r = daftarLaporanData.find(function (x) { return x.id === id; });
   const mode = modePerLaporan[id] || 'ringkas';
   let entry = { timPotongId: id, mode: mode, preview: r.jenisWarnaBaju };
@@ -553,24 +604,80 @@ function tambahKeAntrian(id) {
   tampilkanToast('✓ Ditambahkan ke antrian');
 }
 
+// Hitung total Selesai/Reject yang lagi "nunggu dikirim" buat 1 laporan (dari antrianQC) -
+// dipakai buat preview live di baris laporan (lingkaran angka + pill "di antrian").
+function hitungPendingUntukLaporan_(id) {
+  const entri = antrianQC.filter(function (a) { return a.timPotongId === id; });
+  let pendingSelesai = 0, pendingReject = 0;
+  entri.forEach(function (a) {
+    if (a.mode === 'ringkas') {
+      pendingSelesai += a.ringkas.selesai;
+      pendingReject += a.ringkas.reject;
+    } else {
+      a.rincian.forEach(function (r2) { pendingSelesai += r2.selesai; pendingReject += r2.reject; });
+    }
+  });
+  return { jumlahEntri: entri.length, pendingSelesai: pendingSelesai, pendingReject: pendingReject };
+}
+
+function hapusDariAntrian(index) {
+  antrianQC.splice(index, 1);
+  renderDaftarLaporan();
+  renderAntrian();
+}
+
 function renderAntrian() {
   const kosong = document.getElementById('antrianKosong');
   const isiWrap = document.getElementById('antrianIsiWrap');
-  const ringkasan = document.getElementById('antrianRingkasan');
+  const caption = document.getElementById('antrianCaption');
+  const kartuList = document.getElementById('antrianKartuList');
   const btnKirim = document.getElementById('btnKirimRekap');
+  const previewBox = document.getElementById('antrianPreviewBox');
 
   if (antrianQC.length === 0) {
     kosong.style.display = 'block';
     isiWrap.style.display = 'none';
-  } else {
-    kosong.style.display = 'none';
-    isiWrap.style.display = 'block';
-    ringkasan.innerHTML = antrianQC.map(function (a, i) {
-      return (i + 1) + '. ' + escapeHtml(a.preview);
-    }).join('<br>');
+    previewBox.style.display = 'none';
+    btnKirim.textContent = '🚀 Kirim Rekap (0)';
+    btnKirim.disabled = true;
+    return;
   }
+
+  kosong.style.display = 'none';
+  isiWrap.style.display = 'block';
+  caption.textContent = antrianQC.length + ' laporan menunggu dikirim';
+
+  // Kartu putih per-item, ada tombol hapus (X)
+  kartuList.innerHTML = antrianQC.map(function (a, i) {
+    const angka = a.mode === 'ringkas' ? a.ringkas : null;
+    const detailTeks = angka
+      ? ('Selesai +' + angka.selesai + ' · Reject +' + angka.reject)
+      : a.rincian.map(function (r2) { return r2.ukuran + ' +' + r2.selesai + '/' + r2.reject; }).join(', ');
+    return '<div class="antrian-kartu">' +
+      '<div class="info"><div class="nama">' + escapeHtml(a.preview.split(' - ')[0]) + '</div>' +
+      '<div class="detail">' + escapeHtml(detailTeks) + '</div></div>' +
+      '<button class="btn-hapus" data-hapusantrian="' + i + '">✕</button>' +
+      '</div>';
+  }).join('');
+  kartuList.querySelectorAll('[data-hapusantrian]').forEach(function (el) {
+    el.addEventListener('click', function () { hapusDariAntrian(parseInt(el.dataset.hapusantrian, 10)); });
+  });
+
   btnKirim.textContent = '🚀 Kirim Rekap (' + antrianQC.length + ')';
-  btnKirim.disabled = antrianQC.length === 0;
+  btnKirim.disabled = false;
+
+  // Kotak preview gelap - format "REKAP UPDATE QC", sama kayak versi Apps Script
+  previewBox.style.display = 'block';
+  previewBox.innerHTML = '<div class="judul">📋 REKAP UPDATE QC (' + antrianQC.length + ' laporan)</div>' +
+    antrianQC.map(function (a) {
+      const angka = a.mode === 'ringkas' ? a.ringkas : null;
+      const angkaTeks = angka
+        ? ('Selesai: ' + angka.selesai + ' pcs · Reject: ' + angka.reject + ' pcs')
+        : a.rincian.map(function (r2) { return r2.ukuran + ': ' + r2.selesai + ' sel / ' + r2.reject + ' rej'; }).join(', ');
+      return '<div class="item"><div class="inama">' + escapeHtml(a.preview.split(' - ')[0]) + '</div>' +
+        '<div class="iangka">' + escapeHtml(angkaTeks) + '</div></div>';
+    }).join('') +
+    '<div class="hint">preview - klik "Kirim Rekap" utk kirim beneran</div>';
 }
 
 document.getElementById('btnKirimRekap').addEventListener('click', function () {
