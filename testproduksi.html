@@ -1,4 +1,35 @@
 <!DOCTYPE html>
+<!--
+============================================================
+testproduksi.html (HTML PRODUKSI - Supabase) - ver.04
+============================================================
+PERUBAHAN ver.04: 2 fitur diadopsi dari hasil eksperimen Claude Design Denny (porting fungsi
+inti-nya, BUKAN restyle visual yang menyertainya - lihat catatan di bawah):
+  1. Auto-scroll (jagaTerlihat/__scrollKeVisible) - dropdown/daftar saran yang baru muncul
+     (misal Kode Roll setelah pilih Warna) otomatis di-scroll ke atas keyboard virtual kalau
+     ketutup, di device apapun. Dengar listener visualViewport.resize buat kasus animasi
+     keyboard yang telat muncul.
+  2. Peringatan kalau Kg diisi >99 (cekKgLebih99) - gak ada kain 1 roll yang beratnya di atas
+     40kg, jadi kemungkinan besar salah ketik. Dipasang di SEMUA kotak Kg (mode biasa,
+     kombinasi/ringer, custom warna 1/2).
+CATATAN PENTING: versi Claude Design yang jadi sumber 2 fitur ini JUGA punya restyle visual
+besar-besaran (radius kartu, warna dropdown 6-siklus, dst, katanya nyamain ke "versi live
+GitHub Pages") DAN TIDAK PUNYA fitur cache referensi data (ver.03) yang baru ditambahkan di
+sini - kalau versi Claude Design itu yang ke-deploy duluan, fitur cache-nya ketimpa/hilang.
+Makanya cuma 2 fungsi intinya yang diporting ke sini (ver.03 + cache tetap dipertahankan),
+BUKAN pakai file Claude Design apa adanya - biar gak ada fitur yang kehilangan.
+
+PERUBAHAN ver.03: 4 data referensi (kategori varian, kombinasi warna, kamus warna, standar
+pemakaian) dicache di localStorage 30 menit - app langsung kepake instan dari cache tanpa
+nunggu network, data terbaru ditarik diam-diam di belakang buat sesi berikutnya. stok-roll
+SENGAJA tetap selalu fresh tiap buka.
+
+PERUBAHAN ver.02: varian ITEM CUSTOM sekarang terima Warna 1 (opsional) + Kg 1 + Kode Roll 1,
+bisa tambah Warna 2 (kombinasi 2 warna bahan) - reuse struktur `kombinasi` yang sama dengan
+mode Kombinasi biasa. Pasangan: CODE WORKER PRODUKSI ver.16 (warna1/warna2 eksplisit, ganti
+tebak dari nama custom yang bebas format).
+============================================================
+-->
 <html lang="id">
 <head>
 <meta charset="UTF-8">
@@ -147,6 +178,8 @@
   .peringatan-box { background: #fef3c7; border-radius: 10px; padding: 10px 12px; font-size: 12px; color: #92400e; margin-bottom: 14px; }
 
   .toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); background: #1c1c1e; color: #fff; padding: 10px 18px; border-radius: 10px; font-size: 13px; z-index: 999; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
+  .kg-suspicious { color: var(--danger) !important; font-weight: 800 !important; }
+  .kg-warning-text { font-size: 11.5px; color: var(--danger); margin-top: 4px; font-weight: 650; }
   .toast.show { opacity: 1; }
 </style>
 </head>
@@ -159,7 +192,7 @@
       <p class="subtitle">TIM POTONG</p>
     </div>
     <div class="header-right">
-      <span class="ver-badge">ver.03</span>
+      <span class="ver-badge">ver.04</span>
       <button class="link-btn refresh" id="btnRefresh">🔄 Refresh</button>
     </div>
   </div>
@@ -202,7 +235,7 @@
       <h1>INPUT PRODUKSI</h1>
       <p class="subtitle">TIM POTONG</p>
     </div>
-    <div class="header-right"><span class="ver-badge">ver.03</span></div>
+    <div class="header-right"><span class="ver-badge">ver.04</span></div>
   </div>
   <div class="preview-center">
     <div class="icon">✅</div>
@@ -239,6 +272,49 @@ const RING_WARNA_LIST = ['GREY NAVY', 'PUTIH TERACOTA', 'PUTIH HITAM', 'MUSTARD 
 
 const tg = window.Telegram ? window.Telegram.WebApp : null;
 if (tg) { tg.ready(); tg.expand(); }
+
+// ------------------------------------------------------------
+// AUTO-SCROLL - jaga elemen (dropdown/daftar saran yang baru muncul) tetap terlihat di atas
+// keyboard virtual, di device apapun. Dipanggil tiap kali dropdown/daftar saran dirender; juga
+// di-listen ulang lewat visualViewport (kalau keyboard baru muncul/animasi SETELAH render,
+// misal delay animasi keyboard Android/iOS beda-beda).
+// ------------------------------------------------------------
+let __elemJagaTerlihat = null;
+function __scrollKeVisible(el) {
+  if (!el || !el.isConnected) return;
+  const margin = 16;
+  const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  const rect = el.getBoundingClientRect();
+  if (rect.bottom > vh - margin) {
+    window.scrollBy({ top: Math.ceil(rect.bottom - vh + margin), behavior: 'smooth' });
+  } else if (rect.top < margin) {
+    window.scrollBy({ top: Math.ceil(rect.top - margin), behavior: 'smooth' });
+  }
+}
+function jagaTerlihat(el) {
+  if (!el) return;
+  __elemJagaTerlihat = el;
+  setTimeout(function () { __scrollKeVisible(el); }, 280);
+}
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', function () {
+    setTimeout(function () { __scrollKeVisible(__elemJagaTerlihat); }, 60);
+  });
+}
+
+// ------------------------------------------------------------
+// CEK KG > 99 - gak ada kain 1 roll yang beratnya di atas 40kg, jadi kalau ada yang ketik lebih
+// dari 99kg kemungkinan besar salah ketik (misal ganda-ketik, atau ketuker sama nomor lain).
+// ------------------------------------------------------------
+function cekKgLebih99(el, warnEl) {
+  const v = parseFloat(el.value);
+  const bermasalah = !isNaN(v) && v > 99;
+  el.classList.toggle('kg-suspicious', bermasalah);
+  if (warnEl) {
+    warnEl.style.display = bermasalah ? 'block' : 'none';
+    warnEl.textContent = bermasalah ? '⚠️ ' + v + 'kg? Gak ada kain 1 roll yang beratnya di atas 40kg - cek ulang angkanya.' : '';
+  }
+}
 
 // ------------------------------------------------------------
 // STATE
@@ -421,6 +497,7 @@ function renderWarnaSuggestions(query) {
       renderRollSuggestions('');
     });
   });
+  if (box.children.length) jagaTerlihat(box);
 }
 
 function renderRollSuggestions(query) {
@@ -445,6 +522,7 @@ function renderRollSuggestions(query) {
       box.innerHTML = '';
     });
   });
+  if (box.children.length) jagaTerlihat(box); // v.04: dropdown roll suka ketutup keyboard - auto-scroll biar kelihatan
 }
 
 // ------------------------------------------------------------
@@ -461,7 +539,7 @@ function renderDetailCard() {
     '<span class="fvalue' + (varianTampil ? ' filled' : '') + '">' + (varianTampil || '— pilih —') + ' <span class="chevron">▾</span></span>' +
     '</div>';
   if (openDropdown === 'varian') {
-    html += '<div class="dropdown-list">';
+    html += '<div class="dropdown-list" id="varianDropdownList">';
     daftarVarianUntukKategori().forEach(function (v) {
       html += '<div class="dropdown-item" data-varian="' + escapeAttr(v.label_varian) + '" data-kode="' + escapeAttr(v.prefix_tele || '') + '">' + escapeHtml(v.label_varian) + '</div>';
     });
@@ -485,6 +563,7 @@ function renderDetailCard() {
       // --- Kg Kain Terpakai (single, non kombinasi) ---
       html += '<div class="subrow">' +
         '<input type="number" class="kg-input-full" id="inputKg" placeholder="0" value="' + (itemBaru.kg || '') + '">' +
+        '<div class="kg-warning-text" id="kgWarningInfo" style="display:none;"></div>' +
         '</div>' +
         '<div class="checkbox-row"><input type="checkbox" id="chkEstimasi" ' + (itemBaru.estimasi ? 'checked' : '') + '> Kg tidak diketahui - pakai estimasi standar</div>';
 
@@ -513,6 +592,7 @@ function renderDetailCard() {
         '<input type="number" class="kg-mini" data-ckgidx="' + i + '" placeholder="kg" value="' + (itemBaru.kombinasi.kg[i] || '') + '">' +
         '<input type="text" class="autocomplete-input roll-mini-input-custom" data-crollidx="' + i + '" placeholder="Kode roll" autocomplete="off" value="' + escapeAttr(itemBaru.kombinasi.kodeRoll[i] || '') + '">' +
         '</div>' +
+        '<div class="kg-warning-text" id="ckgWarning-' + i + '" style="display:none;"></div>' +
         '<div class="suggestion-list" id="customRollSuggestions-' + i + '"></div>' +
         (i === 1 ? '<div class="ganti-kombinasi"><a id="hapusWarna2Custom">Hapus warna ke-2</a></div>' : '') +
         '</div>';
@@ -524,6 +604,8 @@ function renderDetailCard() {
 
   card.innerHTML = html;
   pasangEventDetailCard();
+  if (openDropdown === 'varian') { const dd = document.getElementById('varianDropdownList'); if (dd) jagaTerlihat(dd); }
+  if (openDropdown === 'kombinasiWarna') { const dd = document.getElementById('kombinasiWarnaDropdownList'); if (dd) jagaTerlihat(dd); }
 }
 
 function renderWarnaKombinasiSection() {
@@ -531,7 +613,7 @@ function renderWarnaKombinasiSection() {
   if (!itemBaru.kombinasi) {
     html += '<div class="field-row" id="rowKombinasiWarna"><span class="fvalue">Pilih kombinasi warna... <span class="chevron">▾</span></span></div>';
     if (openDropdown === 'kombinasiWarna') {
-      html += '<div class="dropdown-list">';
+      html += '<div class="dropdown-list" id="kombinasiWarnaDropdownList">';
       kombinasiWarnaData.forEach(function (k) {
         html += '<div class="dropdown-item" data-nama="' + escapeAttr(k.nama_warna) + '" data-ketiga="' + escapeAttr(k.warna_ketiga) + '">' +
           escapeHtml(k.nama_warna) + '<span class="accent">+ ' + escapeHtml(k.warna_ketiga) + '</span></div>';
@@ -553,6 +635,7 @@ function renderWarnaKombinasiSection() {
         '<input type="number" class="kg-mini" data-kidx="' + i + '" placeholder="kg" value="' + (itemBaru.kombinasi.kg[i] || '') + '">' +
         '<input type="text" class="autocomplete-input roll-mini-input" data-kidx="' + i + '" placeholder="Kode roll" autocomplete="off" value="' + escapeAttr(itemBaru.kombinasi.kodeRoll[i] || '') + '">' +
         '</div>' +
+        '<div class="kg-warning-text" id="kgWarning-' + i + '" style="display:none;"></div>' +
         '<div class="suggestion-list" id="kombiRollSuggestions-' + i + '"></div>' +
         '</div>';
     });
@@ -565,7 +648,7 @@ function renderWarnaRingerSection() {
   if (!itemBaru.kombinasi) {
     html += '<div class="field-row" id="rowKombinasiWarna"><span class="fvalue">Pilih kombinasi warna... <span class="chevron">▾</span></span></div>';
     if (openDropdown === 'kombinasiWarna') {
-      html += '<div class="dropdown-list">';
+      html += '<div class="dropdown-list" id="kombinasiWarnaDropdownList">';
       RING_WARNA_LIST.forEach(function (pasangan) {
         html += '<div class="dropdown-item" data-nama-ring="' + escapeAttr(pasangan) + '">' + escapeHtml(pasangan) + '</div>';
       });
@@ -586,13 +669,13 @@ function renderWarnaRingerSection() {
         '<input type="number" class="kg-mini" data-kidx="' + i + '" placeholder="kg" value="' + (itemBaru.kombinasi.kg[i] || '') + '">' +
         '<input type="text" class="autocomplete-input roll-mini-input" data-kidx="' + i + '" placeholder="Kode roll" autocomplete="off" value="' + escapeAttr(itemBaru.kombinasi.kodeRoll[i] || '') + '">' +
         '</div>' +
+        '<div class="kg-warning-text" id="kgWarning-' + i + '" style="display:none;"></div>' +
         '<div class="suggestion-list" id="kombiRollSuggestions-' + i + '"></div>' +
         '</div>';
     });
   }
   return html;
 }
-
 function pasangEventDetailCard() {
   const rowVarian = document.getElementById('rowVarian');
   if (rowVarian) rowVarian.addEventListener('click', function () { openDropdown = (openDropdown === 'varian') ? null : 'varian'; renderDetailCard(); });
@@ -630,7 +713,7 @@ function pasangEventDetailCard() {
   }
 
   const inputKg = document.getElementById('inputKg');
-  if (inputKg) inputKg.addEventListener('input', function () { itemBaru.kg = inputKg.value; });
+  if (inputKg) inputKg.addEventListener('input', function () { itemBaru.kg = inputKg.value; cekKgLebih99(inputKg, document.getElementById('kgWarningInfo')); });
   const chkEstimasi = document.getElementById('chkEstimasi');
   if (chkEstimasi) chkEstimasi.addEventListener('change', function () { itemBaru.estimasi = chkEstimasi.checked; });
 
@@ -669,7 +752,10 @@ function pasangEventDetailCard() {
   if (linkGanti) linkGanti.addEventListener('click', function () { itemBaru.kombinasi = null; renderDetailCard(); });
 
   document.querySelectorAll('.kg-mini').forEach(function (el) {
-    el.addEventListener('input', function () { itemBaru.kombinasi.kg[parseInt(el.dataset.kidx, 10)] = el.value; });
+    const idx = parseInt(el.dataset.kidx, 10);
+    const warn = document.getElementById('kgWarning-' + idx);
+    el.addEventListener('input', function () { itemBaru.kombinasi.kg[idx] = el.value; cekKgLebih99(el, warn); });
+    cekKgLebih99(el, warn);
   });
   document.querySelectorAll('.roll-mini-input').forEach(function (el) {
     const idx = parseInt(el.dataset.kidx, 10);
@@ -697,7 +783,9 @@ function pasangEventDetailCard() {
   });
   document.querySelectorAll('[data-ckgidx]').forEach(function (el) {
     const idx = parseInt(el.dataset.ckgidx, 10);
-    el.addEventListener('input', function () { itemBaru.kombinasi.kg[idx] = el.value; });
+    const warn = document.getElementById('ckgWarning-' + idx);
+    el.addEventListener('input', function () { itemBaru.kombinasi.kg[idx] = el.value; cekKgLebih99(el, warn); });
+    cekKgLebih99(el, warn);
   });
   document.querySelectorAll('[data-crollidx]').forEach(function (el) {
     const idx = parseInt(el.dataset.crollidx, 10);
@@ -743,6 +831,7 @@ function renderCustomWarnaSuggestions(idx, query) {
       renderDetailCard();
     });
   });
+  if (box.children.length) jagaTerlihat(box);
 }
 function renderCustomRollSuggestions(idx, query) {
   const box = document.getElementById('customRollSuggestions-' + idx);
@@ -762,6 +851,7 @@ function renderCustomRollSuggestions(idx, query) {
       renderDetailCard();
     });
   });
+  if (box.children.length) jagaTerlihat(box);
 }
 
 function renderKombiRollSuggestions(idx, query) {
@@ -783,6 +873,7 @@ function renderKombiRollSuggestions(idx, query) {
       box.innerHTML = '';
     });
   });
+  if (box.children.length) jagaTerlihat(box);
 }
 
 // ------------------------------------------------------------
