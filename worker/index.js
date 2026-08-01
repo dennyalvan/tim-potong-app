@@ -1,4 +1,17 @@
 // ============================================================
+// CODE WORKER PRODUKSI ver.21
+// ============================================================
+// PERUBAHAN ver.21: anti-duplikat (cekDanCatatDuplikat_) sekarang "longgar lagi" kalau data
+// ASLI dari kiriman yang kecatat sudah dihapus dari tim_potong - TAPI cuma kalau SEMUA baris
+// hasil kiriman itu sudah dihapus (Opsi B, dipilih Denny setelah diskusi plus-minus). Kalau
+// masih ada minimal 1 baris tersisa dari kiriman itu, tetap diblokir sebagai duplikat - biar
+// gak ada celah kirim ulang batch yang cuma sebagian barisnya dihapus. Kolom baru
+// `log_anti_duplikat.tim_potong_ids` (bigint[]) nyimpen ID baris tim_potong per kiriman,
+// ditempelkan SETELAH insert tim_potong sukses lewat tempelkanTimPotongIdsKeAntiDuplikat_().
+// Kasus kiriman yang gagal total (gak ada baris tim_potong kebentuk sama sekali) otomatis
+// dianggap "datanya gak ada" juga - efek samping yang disengaja, sekalian membenahi celah lama.
+//
+// ============================================================
 // CODE WORKER PRODUKSI ver.20
 // ============================================================
 // PERUBAHAN ver.20: revisi format pesan notifikasi produksi ke grup Telegram
@@ -344,31 +357,77 @@ function formatJarakWaktu_(ms) {
   return jam + ' jam';
 }
 
+// v.21: sekarang bisa "longgar lagi" kalau data ASLI dari kiriman yang kecatat itu sudah
+// dihapus - TAPI cuma kalau SEMUA baris tim_potong hasil kiriman itu sudah dihapus (Opsi B,
+// dipilih Denny). Kalau MASIH ADA minimal 1 baris tersisa dari kiriman itu, tetap dianggap
+// duplikat - biar gak ada celah kirim ulang batch yang cuma sebagian barisnya dihapus (lihat
+// diskusi lengkap di percakapan). `tim_potong_ids` bisa NULL (submit sebelumnya belum sempat
+// nyimpen ID-nya, misal masih diproses / gagal di tengah) - kalau NULL, TETAP dianggap
+// duplikat dulu (jaga-jaga race condition submit hampir bersamaan), bukan otomatis dianggap
+// "sudah kehapus".
 async function cekDanCatatDuplikat_(env, chatId, fingerprint, preview) {
   const batasWaktu = new Date(Date.now() - ANTIDUPLIKAT_WINDOW_MS_).toISOString();
-  const path = '/rest/v1/log_anti_duplikat?select=id,waktu&chat_id=eq.' + encodeURIComponent(chatId) +
+  const path = '/rest/v1/log_anti_duplikat?select=id,waktu,tim_potong_ids&chat_id=eq.' + encodeURIComponent(chatId) +
     '&fingerprint=eq.' + encodeURIComponent(fingerprint) + '&waktu=gte.' + encodeURIComponent(batasWaktu) +
     '&order=waktu.desc&limit=1';
   const existing = await ambilDariSupabase_(env, path);
 
   if (existing && existing.length > 0) {
-    const waktuLama = new Date(existing[0].waktu).getTime();
-    return { duplikat: true, jarakMs: Date.now() - waktuLama };
+    const rec = existing[0];
+    const ids = Array.isArray(rec.tim_potong_ids) ? rec.tim_potong_ids : null;
+    let masihDianggapDuplikat = true;
+    if (ids && ids.length > 0) {
+      const stillExist = await ambilDariSupabase_(env, '/rest/v1/tim_potong?select=id&id=in.(' + ids.join(',') + ')&limit=1');
+      masihDianggapDuplikat = !!(stillExist && stillExist.length > 0);
+    }
+    if (masihDianggapDuplikat) {
+      const waktuLama = new Date(rec.waktu).getTime();
+      return { duplikat: true, jarakMs: Date.now() - waktuLama };
+    }
+    // semua baris terkait kiriman lama itu sudah dihapus - lolos, lanjut catat ulang di bawah
+    // (seperti kiriman baru, bukan reuse baris lama - biar riwayat "waktu" tetap akurat).
   }
 
   // Bukan duplikat - catat kiriman ini biar submit BERIKUTNYA yang sama persis bisa kedeteksi.
-  await fetch(env.SUPABASE_URL + '/rest/v1/log_anti_duplikat', {
+  // v.21: 'return=representation' (bukan 'minimal' lagi) - butuh ID baris ini balik, dipakai
+  // buat nempelin tim_potong_ids SETELAH insert tim_potong sukses (lihat handleSubmitProduksi_).
+  const resInsert = await fetch(env.SUPABASE_URL + '/rest/v1/log_anti_duplikat', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       apikey: env.SUPABASE_SECRET_KEY,
       Authorization: 'Bearer ' + env.SUPABASE_SECRET_KEY,
-      Prefer: 'return=minimal'
+      Prefer: 'return=representation'
     },
     body: JSON.stringify([{ chat_id: chatId, fingerprint: fingerprint, preview: preview }])
   });
+  let recordId = null;
+  try {
+    const inserted = await resInsert.json();
+    if (Array.isArray(inserted) && inserted[0]) recordId = inserted[0].id;
+  } catch (e) { /* gagal ambil ID gak fatal - cuma berarti tim_potong_ids gak sempat ketempel */ }
 
-  return { duplikat: false };
+  return { duplikat: false, recordId: recordId };
+}
+
+// v.21: dipanggil handleSubmitProduksi_ SETELAH insert tim_potong sukses - nempelin daftar ID
+// baris yang baru kebentuk ke record log_anti_duplikat yang tadi dicatat cekDanCatatDuplikat_,
+// biar nanti bisa dicek "masih ada apa udah kehapus semua" (lihat cekDanCatatDuplikat_ di atas).
+async function tempelkanTimPotongIdsKeAntiDuplikat_(env, recordId, timPotongIds) {
+  if (!recordId || !Array.isArray(timPotongIds) || timPotongIds.length === 0) return;
+  try {
+    await fetch(env.SUPABASE_URL + '/rest/v1/log_anti_duplikat?id=eq.' + recordId, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: env.SUPABASE_SECRET_KEY,
+        Authorization: 'Bearer ' + env.SUPABASE_SECRET_KEY,
+        Prefer: 'return=minimal'
+      },
+      body: JSON.stringify({ tim_potong_ids: timPotongIds })
+    });
+  } catch (e) { /* gagal nempel gak fatal - efeknya paling cuma anti-duplikat kurang presisi
+    utk kiriman ini doang, gak ganggu data produksi yang udah kesimpen */ }
 }
 
 // ============================================================
@@ -1307,6 +1366,13 @@ async function handleSubmitProduksi_(body, env) {
       return jsonResponse({ ok: false, error: 'HTTP ' + res.status + ': ' + (await res.text()).substring(0, 300) }, 500);
     }
     const hasil = await res.json();
+
+    // v.21: begitu tim_potong sukses ke-insert, tempelkan ID barisnya ke record anti-duplikat
+    // yang tadi dicatat cekDanCatatDuplikat_ - dipakai buat cek "masih ada apa udah kehapus
+    // semua" kalau nanti ada kiriman identik lagi. Gak nge-block proses (dijalankan tapi gak
+    // ditunggu blocking respons ke user - kalau gagal, gak fatal, cuma anti-duplikat kiriman
+    // ini doang yang kurang presisi).
+    await tempelkanTimPotongIdsKeAntiDuplikat_(env, cekDuplikat.recordId, hasil.map(function (r) { return r.id; }));
 
     // v.05 (Tahap 4) - potong stok kain buat tiap item yang punya kg. Item TETAP masuk ke
     // tim_potong walau stoknya gak ketemu cocok - cuma dikasih peringatan di response, gak
