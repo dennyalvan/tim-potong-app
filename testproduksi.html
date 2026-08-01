@@ -1,6 +1,18 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+HTML PRODUKSI (Supabase/testproduksi) - ver.06
+============================================================
+PERUBAHAN ver.06 (koreksi ver.05): "- / kg" yang dimaksud bukan pesan generik "belum ada roll
+tercatat" - itu buat baris stok yang KODE ROLL-nya kosong di database (kode_roll: null, kg-nya
+tetap ada/valid). Sebelumnya ini kebablasan tampil "Roll null / Xkg" (nilai null mentah ikut
+ke-render). Sekarang kode roll kosong ditampilkan "-" (bukan "null"), kg tetap ditampilkan apa
+adanya, dan tetap bisa dipilih (kodeRoll disimpan null, bukan string "null"). Diterapkan di
+semua mode (biasa, kombinasi, ringer, custom warna 1/2). Pesan "belum ada roll tercatat" tetap
+dipertahankan buat kasus yang beda: warna dipilih tapi memang NOL baris stok sama sekali.
+============================================================
+
+============================================================
 HTML PRODUKSI (Supabase/testproduksi) - ver.05
 ============================================================
 PERUBAHAN ver.05: autosuggest Warna sekarang muncul buat SEMUA warna yang dikenal sistem
@@ -567,7 +579,7 @@ function renderRollSuggestions(query) {
   const cocok = q ? semua.filter(function (r) { return String(r.kodeRoll).toUpperCase().indexOf(q) === 0; }) : semua;
   if (cocok.length) {
     box.innerHTML = cocok.slice(0, 8).map(function (r) {
-      return '<div class="suggestion-item roll-suggestion" data-pick-roll="' + escapeAttr(r.kodeRoll) + '" data-kg="' + r.kg + '">Roll ' + escapeHtml(r.kodeRoll) + ' / ' + r.kg + 'kg</div>';
+      return '<div class="suggestion-item roll-suggestion" data-pick-roll="' + escapeAttr(r.kodeRoll || '') + '" data-kg="' + r.kg + '">Roll ' + escapeHtml(r.kodeRoll || '-') + ' / ' + r.kg + 'kg</div>';
     }).join('');
   } else if (!q && itemBaru.warna) {
     // v.06: warna udah kepilih tapi gak ada roll tersisa buat warna itu - kasih tau jelas
@@ -580,11 +592,11 @@ function renderRollSuggestions(query) {
   box.querySelectorAll('[data-pick-roll]').forEach(function (el) {
     el.addEventListener('mousedown', function (e) {
       e.preventDefault();
-      itemBaru.kodeRoll = el.dataset.pickRoll;
+      itemBaru.kodeRoll = el.dataset.pickRoll || null;
       const inputRoll = document.getElementById('inputKodeRoll');
       // v.03: tampilin format lengkap "Roll <kode> / <kg>kg" di kotaknya sendiri (bukan cuma
       // kodenya doang) - biar tim potong gampang nyontek angka kg-nya tanpa buka daftar lagi.
-      if (inputRoll) inputRoll.value = 'Roll ' + itemBaru.kodeRoll + ' / ' + el.dataset.kg + 'kg';
+      if (inputRoll) inputRoll.value = 'Roll ' + (itemBaru.kodeRoll || '-') + ' / ' + el.dataset.kg + 'kg';
       box.innerHTML = '';
     });
   });
@@ -913,7 +925,7 @@ function renderCustomRollSuggestions(idx, query) {
   const cocok = q ? semua.filter(function (r) { return String(r.kodeRoll).toUpperCase().indexOf(q) === 0; }) : semua;
   if (cocok.length) {
     box.innerHTML = cocok.slice(0, 8).map(function (r) {
-      return '<div class="suggestion-item roll-suggestion" data-pick-croll="' + escapeAttr(r.kodeRoll) + '" data-kg="' + r.kg + '" data-idx="' + idx + '">Roll ' + escapeHtml(r.kodeRoll) + ' / ' + r.kg + 'kg</div>';
+      return '<div class="suggestion-item roll-suggestion" data-pick-croll="' + escapeAttr(r.kodeRoll || '') + '" data-kg="' + r.kg + '" data-idx="' + idx + '">Roll ' + escapeHtml(r.kodeRoll || '-') + ' / ' + r.kg + 'kg</div>';
     }).join('');
   } else if (!q && warna) {
     box.innerHTML = '<div class="suggestion-item roll-suggestion" style="color:var(--gray-label);cursor:default;">- / kg (belum ada roll tercatat buat warna ini)</div>';
@@ -925,7 +937,7 @@ function renderCustomRollSuggestions(idx, query) {
     el.addEventListener('mousedown', function (e) {
       e.preventDefault();
       const i = parseInt(el.dataset.idx, 10);
-      itemBaru.kombinasi.kodeRoll[i] = el.dataset.pickCroll;
+      itemBaru.kombinasi.kodeRoll[i] = el.dataset.pickCroll || null;
       renderDetailCard();
     });
   });
@@ -940,7 +952,7 @@ function renderKombiRollSuggestions(idx, query) {
   const cocok = q ? semua.filter(function (r) { return String(r.kodeRoll).toUpperCase().indexOf(q) === 0; }) : semua;
   if (cocok.length) {
     box.innerHTML = cocok.slice(0, 8).map(function (r) {
-      return '<div class="suggestion-item roll-suggestion" data-pick-kombi-roll="' + escapeAttr(r.kodeRoll) + '" data-kg="' + r.kg + '">Roll ' + escapeHtml(r.kodeRoll) + ' / ' + r.kg + 'kg</div>';
+      return '<div class="suggestion-item roll-suggestion" data-pick-kombi-roll="' + escapeAttr(r.kodeRoll || '') + '" data-kg="' + r.kg + '">Roll ' + escapeHtml(r.kodeRoll || '-') + ' / ' + r.kg + 'kg</div>';
     }).join('');
   } else if (!q && warna) {
     box.innerHTML = '<div class="suggestion-item roll-suggestion" style="color:var(--gray-label);cursor:default;">- / kg (belum ada roll tercatat buat warna ini)</div>';
@@ -951,9 +963,9 @@ function renderKombiRollSuggestions(idx, query) {
   box.querySelectorAll('[data-pick-kombi-roll]').forEach(function (el) {
     el.addEventListener('mousedown', function (e) {
       e.preventDefault();
-      itemBaru.kombinasi.kodeRoll[idx] = el.dataset.pickKombiRoll;
+      itemBaru.kombinasi.kodeRoll[idx] = el.dataset.pickKombiRoll || null;
       const inputEl = document.querySelector('.roll-mini-input[data-kidx="' + idx + '"]');
-      if (inputEl) inputEl.value = 'Roll ' + itemBaru.kombinasi.kodeRoll[idx] + ' / ' + el.dataset.kg + 'kg';
+      if (inputEl) inputEl.value = 'Roll ' + (itemBaru.kombinasi.kodeRoll[idx] || '-') + ' / ' + el.dataset.kg + 'kg';
       box.innerHTML = '';
     });
   });
