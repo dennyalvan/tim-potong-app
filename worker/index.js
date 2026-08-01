@@ -1,4 +1,15 @@
 // ============================================================
+// CODE WORKER PRODUKSI ver.20
+// ============================================================
+// PERUBAHAN ver.20: revisi format pesan notifikasi produksi ke grup Telegram
+// (kirimNotifikasiProduksi_) - (1) judul berubah dari "Input Produksi" jadi "Hasil Cutting",
+// (2) bold SEKARANG cuma di baris judul tiap item (nama+roll+kg), BUKAN di seluruh pesan lagi
+// (tanggal, header "Hasil Cutting", dan baris ukuran sekarang teks biasa), (3) format ukuran
+// ditulis rapat tanpa spasi antara huruf ukuran & angka qty (mis. "S18" bukan "S 18"), dipisah
+// ", " antar ukuran, dan di baris yang sama ditambahkan total qty di akhir (mis.
+// "S18, M36, L43, XL36, XXL36 = 169"). Lihat komentar di kirimNotifikasiProduksi_ untuk detail.
+//
+// ============================================================
 // CODE WORKER PRODUKSI ver.19
 // ============================================================
 // PERUBAHAN ver.19: perbaikan kecil - TELEGRAM_BOT_USERNAME sekarang di-strip otomatis kalau
@@ -381,6 +392,16 @@ function htmlEscape_(teks) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// v.20: format direvisi (lihat contoh Denny) -
+//   Rabu, 2/08/26
+//   ✅ Hasil Cutting
+//
+//   <b>1. RFL MERAH (Roll 0132) - 24.85kg</b>
+//   S18, M36, L43, XL36, XXL36 = 169
+// Bedanya dari sebelumnya: (a) bold cuma di baris judul item (nomor+nama+roll+kg), tanggal /
+// header / baris ukuran sekarang teks BIASA - makanya <b> dipindah ke tiap judul item, BUKAN
+// dibungkus di seluruh `teks` lagi kayak versi lama. (b) ukuran ditulis rapat "S18" (bukan
+// "S 18") dipisah ", ", lalu ditutup " = <total qty>" di baris yang sama.
 async function kirimNotifikasiProduksi_(env, rowsTersimpan, peringatanStok) {
   const botToken = env.TELEGRAM_BOT_TOKEN;
   const chatId = env.TELEGRAM_GROUP_CHAT_ID;
@@ -388,13 +409,15 @@ async function kirimNotifikasiProduksi_(env, rowsTersimpan, peringatanStok) {
 
   const barisTeks = rowsTersimpan.map(function (r, i) {
     const ukuranObj = kolomKeUkuran_(r);
-    const ukuranTeks = Object.keys(ukuranObj).map(function (u) { return u + ' ' + ukuranObj[u]; }).join(', ');
+    const totalQty = Object.keys(ukuranObj).reduce(function (sum, u) { return sum + ukuranObj[u]; }, 0);
+    const ukuranTeks = Object.keys(ukuranObj).map(function (u) { return u + ukuranObj[u]; }).join(', ') + ' = ' + totalQty;
     const rollTeks = r.kode_roll ? (' (Roll ' + r.kode_roll + ')') : '';
     const kgTeks = r.pemakaian_kain_kg ? (' - ' + r.pemakaian_kain_kg + 'kg') : '';
-    return (i + 1) + '. ' + htmlEscape_(r.jenis_warna_baju) + rollTeks + kgTeks + '\n' + htmlEscape_(ukuranTeks);
+    const judulItem = '<b>' + (i + 1) + '. ' + htmlEscape_(r.jenis_warna_baju) + rollTeks + kgTeks + '</b>';
+    return judulItem + '\n' + htmlEscape_(ukuranTeks);
   }).join('\n\n');
 
-  let teks = formatTanggalIndoJakarta_(new Date()) + '\n✅ Input Produksi\n\n' + barisTeks;
+  let teks = formatTanggalIndoJakarta_(new Date()) + '\n✅ Hasil Cutting\n\n' + barisTeks;
   if (peringatanStok && peringatanStok.length > 0) {
     teks += '\n\n⚠️ ' + htmlEscape_(peringatanStok.join(' | '));
   }
@@ -403,7 +426,7 @@ async function kirimNotifikasiProduksi_(env, rowsTersimpan, peringatanStok) {
     await fetch('https://api.telegram.org/bot' + botToken + '/sendMessage', {
       method: 'post',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text: '<b>' + teks + '</b>', parse_mode: 'HTML' })
+      body: JSON.stringify({ chat_id: chatId, text: teks, parse_mode: 'HTML' })
     });
   } catch (e) {
     // gagal kirim notifikasi TIDAK dianggap fatal - data produksi sudah tersimpan duluan
