@@ -1,35 +1,40 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-testproduksi.html (HTML PRODUKSI - Supabase) - ver.04
+HTML PRODUKSI (Supabase/testproduksi) - ver.04
 ============================================================
-PERUBAHAN ver.04: 2 fitur diadopsi dari hasil eksperimen Claude Design Denny (porting fungsi
-inti-nya, BUKAN restyle visual yang menyertainya - lihat catatan di bawah):
-  1. Auto-scroll (jagaTerlihat/__scrollKeVisible) - dropdown/daftar saran yang baru muncul
-     (misal Kode Roll setelah pilih Warna) otomatis di-scroll ke atas keyboard virtual kalau
-     ketutup, di device apapun. Dengar listener visualViewport.resize buat kasus animasi
-     keyboard yang telat muncul.
-  2. Peringatan kalau Kg diisi >99 (cekKgLebih99) - gak ada kain 1 roll yang beratnya di atas
-     40kg, jadi kemungkinan besar salah ketik. Dipasang di SEMUA kotak Kg (mode biasa,
-     kombinasi/ringer, custom warna 1/2).
-CATATAN PENTING: versi Claude Design yang jadi sumber 2 fitur ini JUGA punya restyle visual
-besar-besaran (radius kartu, warna dropdown 6-siklus, dst, katanya nyamain ke "versi live
-GitHub Pages") DAN TIDAK PUNYA fitur cache referensi data (ver.03) yang baru ditambahkan di
-sini - kalau versi Claude Design itu yang ke-deploy duluan, fitur cache-nya ketimpa/hilang.
-Makanya cuma 2 fungsi intinya yang diporting ke sini (ver.03 + cache tetap dipertahankan),
-BUKAN pakai file Claude Design apa adanya - biar gak ada fitur yang kehilangan.
+PERUBAHAN ver.04 (dari Claude, di atas hasil Claude Design): fitur cache referensi data
+ditambahkan ke muatDataReferensi() - 4 data yang jarang berubah (kategori varian, kombinasi
+warna, kamus warna, standar pemakaian) dicache di localStorage 30 menit, app langsung kepake
+instan dari cache tanpa nunggu network (Supabase-nya di region Mumbai, jauh dari Indonesia -
+tiap round-trip kerasa). stok-roll SENGAJA TETAP selalu fresh tiap buka. TIDAK ADA perubahan
+visual/styling apapun di layer ini - basis file & tampilannya tetap PERSIS punya Claude Design
+di bawah (auto-scroll, peringatan kg>99, restyle kartu/dropdown semua tetap seperti apa adanya).
+============================================================
 
-PERUBAHAN ver.03: 4 data referensi (kategori varian, kombinasi warna, kamus warna, standar
-pemakaian) dicache di localStorage 30 menit - app langsung kepake instan dari cache tanpa
-nunggu network, data terbaru ditarik diam-diam di belakang buat sesi berikutnya. stok-roll
-SENGAJA tetap selalu fresh tiap buka.
-
-PERUBAHAN ver.02: varian ITEM CUSTOM sekarang terima Warna 1 (opsional) + Kg 1 + Kode Roll 1,
-bisa tambah Warna 2 (kombinasi 2 warna bahan) - reuse struktur `kombinasi` yang sama dengan
-mode Kombinasi biasa. Pasangan: CODE WORKER PRODUKSI ver.16 (warna1/warna2 eksplisit, ganti
-tebak dari nama custom yang bebas format).
+============================================================
+HTML PRODUKSI (Supabase/testproduksi) - ver.03
+============================================================
+PERUBAHAN ver.03: styling disamakan persis ke referensi Apps Script (index.html /
+HTML PRODUKSI ver.02.html, versi live GitHub Pages) - nilai CSS diambil LANGSUNG dari file
+referensi (bukan tebak dari screenshot), badge versi "ver.02" DI DALAM app SENGAJA TIDAK
+diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI ver.02.html).
+  1. Kategori (tab Anak/Dewasa): gap 10px->8px, padding tombol 14px 10px->10px 8px, radius
+     14px->16px - samain ke .tab-row/.tab-card.
+  2. Kartu "Detail Item Baru" & "Qty per Size": radius 16px->18px, field-row (baris
+     Varian/Warna/dst) padding 14px 16px->9px 14px - samain ke .card/.row.
+  3. QTY PER SIZE: gap antar kolom 12px->6px, padding grid 16px->9px 14px, kotak input
+     dikecilkan (10px->6px 4px padding) + dikasih background abu muda (nyala putih pas fokus),
+     label ukuran dikecilkan & warna abu - samain ke .qty-grid/.qty-cell.
+  4. Dropdown Varian & saran autocomplete Warna/Kode Roll ("tampilan tabel"): sebelumnya cuma
+     zebra genap/ganjil + hover biru - sekarang siklus 6 warna biru pastel per baris (persis
+     SOFT_BLUE_COLORS/ROLL_OPT_COLORS di kode Apps Script), dibungkus panel roundbox
+     (radius 14px, border tipis) kayak .combo-dropdown, tiap baris dikasih garis pemisah tipis
+     0.5px kayak .combo-opt/.roll-opt.
+  5. Detail kecil ikutan disamakan: badge "wajib isi", ikon chevron, section-label, total-qty.
 ============================================================
 -->
+
 <html lang="id">
 <head>
 <meta charset="UTF-8">
@@ -72,45 +77,70 @@ tebak dari nama custom yang bebas format).
   .link-btn.refresh { color: var(--blue-link); }
   .link-btn.atur { color: var(--orange-link); }
 
-  .section-label { font-size: 12px; color: var(--gray-label); font-weight: 700; letter-spacing: 0.5px; margin: 14px 0 8px; }
+  .section-label { font-size: 12.5px; color: var(--gray-label); font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; margin: 14px 4px 6px; }
 
-  .kategori-toggle { display: flex; gap: 10px; }
+  .kategori-toggle { display: flex; gap: 8px; }
   .kat-btn {
-    flex: 1; padding: 14px 10px; border-radius: 14px; border: 2px solid var(--border);
+    flex: 1; padding: 10px 8px; border-radius: 16px; border: none;
     background: #fff; font-weight: 700; font-size: 14px; cursor: pointer;
-    display: flex; align-items: center; justify-content: center; gap: 8px; color: #374151;
+    display: flex; align-items: center; justify-content: center; gap: 7px; color: #374151;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 0 0 0.5px rgba(0,0,0,0.04);
+    transition: all .25s cubic-bezier(.2,.9,.3,1.2);
   }
   .kat-btn .emoji { font-size: 18px; }
   .kat-btn.active {
-    background: linear-gradient(135deg, #2dd4bf, #0d9488);
-    color: #fff; border-color: transparent;
+    background: linear-gradient(160deg, #2dd4bf, #0d9488);
+    color: #fff; transform: translateY(-3px) scale(1.015);
+    box-shadow: 0 10px 22px -6px rgba(13,148,136,.4);
   }
 
-  .cut-divider { text-align: center; color: #c7cedb; font-size: 15px; margin: 16px 0; position: relative; }
-  .cut-divider::before, .cut-divider::after {
-    content: ""; position: absolute; top: 50%; width: 42%; border-top: 2px dashed #d3dae8;
+  .cut-divider { position: relative; height: 2px; margin: 16px 4px 2px; background-image: repeating-linear-gradient(90deg, #d3dae8 0 7px, transparent 7px 15px); }
+  .cut-divider .scissor-chip {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    background: var(--bg); width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; font-size: 13px;
+    border: 1.5px dashed #d3dae8;
   }
-  .cut-divider::before { left: 0; }
-  .cut-divider::after { right: 0; }
 
-  .card { background: var(--card-bg); border-radius: 16px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+  .card { background: var(--card-bg); border-radius: 18px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 0 0 0.5px rgba(0,0,0,0.04); }
   .field-row {
-    display: flex; justify-content: space-between; align-items: center; padding: 14px 16px;
-    border-bottom: 1px solid var(--border); cursor: pointer; gap: 10px;
+    display: flex; justify-content: space-between; align-items: center; padding: 9px 14px; gap: 10px;
+    border-bottom: 0.5px solid var(--border); cursor: pointer;
   }
   .field-row:last-child { border-bottom: none; }
   .field-row .flabel { font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 6px; }
   .field-row .fvalue { color: #9aa3b2; font-size: 14px; text-align: right; }
   .field-row .fvalue.filled { color: #1c1c1e; font-weight: 600; }
-  .badge-wajib { background: #f3f4f6; color: #6b7280; font-size: 10px; padding: 2px 6px; border-radius: 5px; font-weight: 600; }
-  .chevron { color: #c7cedb; margin-left: 4px; }
+  .badge-wajib { background: #f3f4f6; color: #6b7280; font-size: 10.5px; padding: 2px 8px; border-radius: 6px; font-weight: 650; }
+  .chevron { color: #c7cedb; font-size: 11px; margin-left: 4px; }
+  .field-row.wrap { flex-direction: column; align-items: stretch; cursor: default; gap: 6px; }
+  .field-row.wrap .frow-line { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; }
+  .field-row input[type="text"], .field-row input[type="number"] {
+    border: none; outline: none; background: transparent; flex: 1; min-width: 0;
+    text-align: right; font-size: 15px; font-weight: 600; color: #1c1c1e; font-family: inherit; padding: 0;
+  }
+  .field-row input::placeholder { color: #9aa3b2; font-weight: 500; }
+  .field-row.wrap .suggestion-list { margin-top: 2px; }
+  .chk-sub { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--gray-text); font-weight: 600; }
+  .chk-sub input[type="checkbox"] { width: auto; flex: none; margin: 0; }
+  .combo-picker-btn {
+    background: rgba(20,184,166,0.08); border: 1.5px dashed var(--teal);
+    border-radius: 12px; padding: 11px 13px; font-size: 15px; font-weight: 600; color: var(--teal-dark);
+    cursor: pointer; display: flex; justify-content: space-between; align-items: center; margin: 10px 16px;
+  }
+  .combo-picker-btn .chev { font-size: 13px; opacity: .7; }
 
-  .dropdown-list { max-height: 220px; overflow-y: auto; border-bottom: 1px solid var(--border); }
-  .dropdown-item { padding: 12px 16px; font-weight: 600; font-size: 14px; cursor: pointer; }
-  .dropdown-item:nth-child(even) { background: #f7f9fd; }
-  .dropdown-item:hover { background: #e8f0fe; }
+  .dropdown-list { max-height: 260px; overflow-y: auto; overflow-x: hidden; margin: 8px 14px 10px; border-radius: 14px; border: 1px solid var(--border); }
+  .dropdown-item { padding: 10px 14px; font-weight: 600; font-size: 14.5px; cursor: pointer; border-bottom: 0.5px solid rgba(0,0,0,.06); }
+  .dropdown-item:last-child { border-bottom: none; }
+  .dropdown-item:nth-child(6n+1) { background: #F1F7FD; }
+  .dropdown-item:nth-child(6n+2) { background: #EAF3FB; }
+  .dropdown-item:nth-child(6n+3) { background: #F5F9FE; }
+  .dropdown-item:nth-child(6n+4) { background: #E6F0FA; }
+  .dropdown-item:nth-child(6n+5) { background: #EFF6FC; }
+  .dropdown-item:nth-child(6n+0) { background: #E3EEF9; }
   .dropdown-item .accent { float: right; color: #9aa3b2; font-weight: 500; font-size: 13px; }
-  .dropdown-item.manual { color: var(--orange-link); }
+  .dropdown-item.manual { color: var(--orange-link); background: #fff; }
 
   .subrow { padding: 10px 16px; }
   .kg-input-full {
@@ -120,31 +150,39 @@ tebak dari nama custom yang bebas format).
   .checkbox-row { display: flex; align-items: center; gap: 8px; padding: 0 16px 14px; font-size: 13px; color: var(--gray-text); }
 
   .kombi-chips { display: flex; gap: 8px; padding: 10px 16px; flex-wrap: wrap; }
-  .kombi-chip { background: #eef2fb; border-radius: 10px; padding: 8px 12px; font-weight: 700; font-size: 13px; position: relative; }
-  .kombi-chip .num { position: absolute; top: -6px; left: -6px; background: var(--navy); color: #fff; width: 18px; height: 18px; border-radius: 50%; font-size: 10px; display: flex; align-items: center; justify-content: center; }
-  .ganti-kombinasi { padding: 0 16px 10px; }
-  .ganti-kombinasi a { color: var(--blue-link); font-size: 13px; cursor: pointer; }
+  .kombi-chip { flex: 1; min-width: 80px; background: var(--bg); border: 1.5px solid var(--border); border-radius: 12px; padding: 10px 8px; font-weight: 700; font-size: 12.5px; text-align: center; position: relative; letter-spacing: 0.2px; }
+  .kombi-chip .num { position: absolute; top: -8px; left: 8px; background: var(--navy); color: #fff; width: 18px; height: 18px; border-radius: 50%; font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+  .ganti-kombinasi { padding: 0 16px 10px; margin-top: 2px; }
+  .ganti-kombinasi a { color: var(--blue-link); font-size: 12.5px; font-weight: 600; cursor: pointer; }
 
   .kombi-warna-section { padding: 10px 16px 14px; border-bottom: 1px solid var(--border); }
-  .kombi-warna-section .sub-title { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+  .kombi-warna-section .sub-title { font-size: 11.5px; font-weight: 650; color: var(--gray-label); margin: 10px 0 4px; }
   .kombi-warna-section .sub-fields { display: flex; gap: 8px; }
-  .kombi-warna-section input.kg-mini { flex: 1; padding: 10px; border: 1px solid var(--border); border-radius: 10px; text-align: right; }
-  .kombi-warna-section .roll-mini { flex: 1.3; padding: 10px; border: 1px solid var(--border); border-radius: 10px; color: #9aa3b2; text-align: center; cursor: pointer; font-size: 13px; }
+  .kombi-warna-section input.kg-mini { flex: 1; padding: 9px 8px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; background: var(--bg); }
+  .kombi-warna-section input.roll-mini-input, .kombi-warna-section input.roll-mini-input-custom { padding: 9px 8px; border-radius: 8px; font-size: 14px; background: var(--bg); }
 
   .autocomplete-input { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 10px; font-size: 15px; }
-  .suggestion-list { max-height: 180px; overflow-y: auto; }
-  .suggestion-item { padding: 10px 12px; font-size: 14px; font-weight: 600; cursor: pointer; border-bottom: 1px solid #f1f4f9; }
-  .suggestion-item:hover { background: #e8f0fe; }
+  .suggestion-list { max-height: 260px; overflow-y: auto; overflow-x: hidden; margin-top: 8px; border-radius: 14px; border: 1px solid var(--border); }
+  .suggestion-item { padding: 10px 14px; font-size: 14.5px; font-weight: 600; cursor: pointer; border-bottom: 0.5px solid rgba(0,0,0,.06); }
+  .suggestion-item:last-child { border-bottom: none; }
+  .suggestion-item:nth-child(6n+1) { background: #F1F7FD; }
+  .suggestion-item:nth-child(6n+2) { background: #EAF3FB; }
+  .suggestion-item:nth-child(6n+3) { background: #F5F9FE; }
+  .suggestion-item:nth-child(6n+4) { background: #E6F0FA; }
+  .suggestion-item:nth-child(6n+5) { background: #EFF6FC; }
+  .suggestion-item:nth-child(6n+0) { background: #E3EEF9; }
   .suggestion-item .kg-hint { float: right; color: #9aa3b2; font-weight: 500; font-size: 13px; }
   .suggestion-item.roll-suggestion { text-align: right; }
 
-  .qty-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 16px; }
+  .qty-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 9px 14px; }
   .qty-cell { text-align: center; }
-  .qty-cell label { display: block; font-weight: 700; font-size: 13px; margin-bottom: 6px; }
-  .qty-cell input { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 10px; text-align: center; font-size: 15px; }
-  .toggle-ukuran { padding: 0 16px 10px; }
-  .toggle-ukuran a { color: var(--blue-link); font-size: 13px; cursor: pointer; }
-  .total-qty { display: flex; justify-content: space-between; padding: 14px 16px; border-top: 1px solid var(--border); font-weight: 700; }
+  .qty-cell label { display: block; color: var(--gray-label); font-weight: 650; font-size: 11px; margin-bottom: 2px; }
+  .qty-cell input { width: 100%; padding: 6px 4px; border: 1px solid var(--border); border-radius: 10px; text-align: center; font-size: 15px; font-weight: 600; background: var(--bg); }
+  .qty-cell input:focus { border-color: var(--teal); background: #fff; }
+  .toggle-ukuran { padding: 2px 14px 8px; }
+  .toggle-ukuran a { color: var(--blue-link); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+  .total-qty { display: flex; justify-content: space-between; align-items: center; padding: 8px 14px; border-top: 0.5px solid var(--border); font-size: 13px; color: var(--gray-text); font-weight: 500; }
+  .total-qty #totalQtyItem { color: #1c1c1e; font-size: 16px; font-weight: 700; }
 
   .queue-box { background: var(--navy); border-radius: 16px; padding: 14px 16px; color: #fff; }
   .queue-box .qtitle { display: flex; justify-content: space-between; align-items: center; font-size: 12px; letter-spacing: 0.5px; color: #b8c4d9; font-weight: 700; margin-bottom: 10px; }
@@ -177,9 +215,9 @@ tebak dari nama custom yang bebas format).
   .preview-actions { display: flex; gap: 10px; }
   .peringatan-box { background: #fef3c7; border-radius: 10px; padding: 10px 12px; font-size: 12px; color: #92400e; margin-bottom: 14px; }
 
-  .toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); background: #1c1c1e; color: #fff; padding: 10px 18px; border-radius: 10px; font-size: 13px; z-index: 999; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
   .kg-suspicious { color: var(--danger) !important; font-weight: 800 !important; }
   .kg-warning-text { font-size: 11.5px; color: var(--danger); margin-top: 4px; font-weight: 650; }
+  .toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); background: #1c1c1e; color: #fff; padding: 10px 18px; border-radius: 10px; font-size: 13px; z-index: 999; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
   .toast.show { opacity: 1; }
 </style>
 </head>
@@ -192,7 +230,7 @@ tebak dari nama custom yang bebas format).
       <p class="subtitle">TIM POTONG</p>
     </div>
     <div class="header-right">
-      <span class="ver-badge">ver.04</span>
+      <span class="ver-badge">ver.02</span>
       <button class="link-btn refresh" id="btnRefresh">🔄 Refresh</button>
     </div>
   </div>
@@ -203,14 +241,14 @@ tebak dari nama custom yang bebas format).
     <button class="kat-btn" data-kat="Dewasa"><span class="emoji">🧑</span> DEWASA</button>
   </div>
 
-  <div class="cut-divider">✂️</div>
+  <div class="cut-divider"><div class="scissor-chip">✂️</div></div>
 
   <div class="section-label">DETAIL ITEM BARU</div>
   <div class="card" id="cardDetail">
     <!-- diisi lewat JS: renderDetailCard() -->
   </div>
 
-  <div class="cut-divider">✂️</div>
+  <div class="cut-divider"><div class="scissor-chip">✂️</div></div>
 
   <div class="section-label">QTY PER SIZE</div>
   <div class="card">
@@ -221,7 +259,7 @@ tebak dari nama custom yang bebas format).
   </div>
 
   <div id="queueWrap" style="display:none">
-    <div class="cut-divider">✂️</div>
+    <div class="cut-divider"><div class="scissor-chip">✂️</div></div>
     <div class="queue-box">
       <div class="qtitle"><span>DAFTAR ITEM (SIAP DIKIRIM)</span><span class="qbadge" id="queueBadge">0</span></div>
       <div id="queueList"></div>
@@ -235,7 +273,7 @@ tebak dari nama custom yang bebas format).
       <h1>INPUT PRODUKSI</h1>
       <p class="subtitle">TIM POTONG</p>
     </div>
-    <div class="header-right"><span class="ver-badge">ver.04</span></div>
+    <div class="header-right"><span class="ver-badge">ver.02</span></div>
   </div>
   <div class="preview-center">
     <div class="icon">✅</div>
@@ -274,10 +312,10 @@ const tg = window.Telegram ? window.Telegram.WebApp : null;
 if (tg) { tg.ready(); tg.expand(); }
 
 // ------------------------------------------------------------
-// AUTO-SCROLL - jaga elemen (dropdown/daftar saran yang baru muncul) tetap terlihat di atas
-// keyboard virtual, di device apapun. Dipanggil tiap kali dropdown/daftar saran dirender; juga
-// di-listen ulang lewat visualViewport (kalau keyboard baru muncul/animasi SETELAH render,
-// misal delay animasi keyboard Android/iOS beda-beda).
+// AUTO-SCROLL - jaga elemen (dropdown/suggestion yg baru muncul) tetap terlihat di atas
+// keyboard virtual, di device apapun. Dipanggil tiap kali dropdown/daftar saran dirender;
+// juga di-listen ulang lewat visualViewport (kalau keyboard baru muncul/animasi SETELAH
+// render, misal delay animasi keyboard Android/iOS).
 // ------------------------------------------------------------
 let __elemJagaTerlihat = null;
 function __scrollKeVisible(el) {
@@ -296,16 +334,6 @@ function jagaTerlihat(el) {
   __elemJagaTerlihat = el;
   setTimeout(function () { __scrollKeVisible(el); }, 280);
 }
-if (window.visualViewport) {
-  window.visualViewport.addEventListener('resize', function () {
-    setTimeout(function () { __scrollKeVisible(__elemJagaTerlihat); }, 60);
-  });
-}
-
-// ------------------------------------------------------------
-// CEK KG > 99 - gak ada kain 1 roll yang beratnya di atas 40kg, jadi kalau ada yang ketik lebih
-// dari 99kg kemungkinan besar salah ketik (misal ganda-ketik, atau ketuker sama nomor lain).
-// ------------------------------------------------------------
 function cekKgLebih99(el, warnEl) {
   const v = parseFloat(el.value);
   const bermasalah = !isNaN(v) && v > 99;
@@ -314,6 +342,11 @@ function cekKgLebih99(el, warnEl) {
     warnEl.style.display = bermasalah ? 'block' : 'none';
     warnEl.textContent = bermasalah ? '⚠️ ' + v + 'kg? Gak ada kain 1 roll yang beratnya di atas 40kg - cek ulang angkanya.' : '';
   }
+}
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', function () {
+    setTimeout(function () { __scrollKeVisible(__elemJagaTerlihat); }, 60);
+  });
 }
 
 // ------------------------------------------------------------
@@ -352,12 +385,12 @@ function kosongkanItemBaru() {
 // ------------------------------------------------------------
 // AMBIL DATA REFERENSI
 // ------------------------------------------------------------
-// v.03: 4 data referensi (kategori varian, kombinasi warna, kamus warna, standar pemakaian)
+// v.05: 4 data referensi (kategori varian, kombinasi warna, kamus warna, standar pemakaian)
 // JARANG berubah - dicache di HP (localStorage, 30 menit) biar app langsung kepake TANPA nunggu
 // network sama sekali, sambil data terbaru ditarik diam-diam di belakang buat sesi BERIKUTNYA.
 // stok-roll SENGAJA TETAP selalu fresh tiap buka (jangan sampai salah cocok stok gara-gara data
-// lama) - itu-satunya yang bikin app nunggu network beneran. Alasan lengkapnya: Supabase-nya di
-// region Mumbai, jauh dari Indonesia - tiap round-trip kerasa, jadi yang bisa dihindari dihindari.
+// lama) - itu-satunya yang bikin app nunggu network beneran. Alasan: Supabase-nya di region
+// Mumbai, jauh dari Indonesia - tiap round-trip kerasa, jadi yang bisa dihindari dihindari.
 const CACHE_REFDATA_KEY_ = 'produksi_refdata_cache_v1';
 const CACHE_REFDATA_MAX_AGE_MS_ = 30 * 60 * 1000;
 
@@ -369,7 +402,7 @@ function ambilCacheRefData_() {
     if (!parsed || !parsed.waktu || (Date.now() - parsed.waktu) > CACHE_REFDATA_MAX_AGE_MS_) return null;
     return parsed.data;
   } catch (e) {
-    return null; // localStorage gak ada/disabled (mis. mode incognito) - gak fatal, cuma gak kepakai
+    return null;
   }
 }
 function simpanCacheRefData_(data) {
@@ -400,7 +433,7 @@ function muatDataReferensi() {
   ]).then(function (hasil) {
     kategoriVarianData = hasil[0] || [];
     kombinasiWarnaData = hasil[1] || [];
-    stokRollData = hasil[2] || {}; // v.03: SENGAJA gak ikut dicache - harus selalu data terbaru
+    stokRollData = hasil[2] || {}; // SENGAJA gak ikut dicache - harus selalu data terbaru
     warnaKanonikMap = hasil[3] || {};
     standarPemakaianData = hasil[4] || [];
     simpanCacheRefData_({
@@ -413,7 +446,6 @@ function muatDataReferensi() {
     renderQtyGrid();
   }).catch(function (err) {
     if (!cache) tampilkanToast('Gagal memuat data referensi: ' + err.message);
-    // kalau ada cache, gagalnya fetch background gak perlu ganggu user - app tetap kepake dari cache
   });
 }
 
@@ -484,6 +516,7 @@ function renderWarnaSuggestions(query) {
   box.innerHTML = cocok.slice(0, 8).map(function (w) {
     return '<div class="suggestion-item" data-pick-warna="' + escapeAttr(w) + '">' + escapeHtml(w) + '</div>';
   }).join('');
+  if (box.children.length) jagaTerlihat(box);
   box.querySelectorAll('[data-pick-warna]').forEach(function (el) {
     el.addEventListener('mousedown', function (e) {
       e.preventDefault(); // supaya kepilih SEBELUM event blur nutup daftar saran
@@ -495,9 +528,10 @@ function renderWarnaSuggestions(query) {
       if (inputRoll) inputRoll.value = '';
       box.innerHTML = '';
       renderRollSuggestions('');
+      const rollBox = document.getElementById('rollSuggestions');
+      if (rollBox && rollBox.children.length) jagaTerlihat(rollBox);
     });
   });
-  if (box.children.length) jagaTerlihat(box);
 }
 
 function renderRollSuggestions(query) {
@@ -511,6 +545,7 @@ function renderRollSuggestions(query) {
   box.innerHTML = cocok.slice(0, 8).map(function (r) {
     return '<div class="suggestion-item roll-suggestion" data-pick-roll="' + escapeAttr(r.kodeRoll) + '" data-kg="' + r.kg + '">Roll ' + escapeHtml(r.kodeRoll) + ' / ' + r.kg + 'kg</div>';
   }).join('');
+  if (box.children.length) jagaTerlihat(box);
   box.querySelectorAll('[data-pick-roll]').forEach(function (el) {
     el.addEventListener('mousedown', function (e) {
       e.preventDefault();
@@ -522,7 +557,6 @@ function renderRollSuggestions(query) {
       box.innerHTML = '';
     });
   });
-  if (box.children.length) jagaTerlihat(box); // v.04: dropdown roll suka ketutup keyboard - auto-scroll biar kelihatan
 }
 
 // ------------------------------------------------------------
@@ -539,7 +573,7 @@ function renderDetailCard() {
     '<span class="fvalue' + (varianTampil ? ' filled' : '') + '">' + (varianTampil || '— pilih —') + ' <span class="chevron">▾</span></span>' +
     '</div>';
   if (openDropdown === 'varian') {
-    html += '<div class="dropdown-list" id="varianDropdownList">';
+    html += '<div class="dropdown-list">';
     daftarVarianUntukKategori().forEach(function (v) {
       html += '<div class="dropdown-item" data-varian="' + escapeAttr(v.label_varian) + '" data-kode="' + escapeAttr(v.prefix_tele || '') + '">' + escapeHtml(v.label_varian) + '</div>';
     });
@@ -554,23 +588,24 @@ function renderDetailCard() {
     } else if (itemBaru.varianLabel && isVarianRinger(itemBaru.varianLabel)) {
       html += renderWarnaRingerSection();
     } else {
-      html += '<div class="subrow" style="padding-bottom:6px">' +
-        '<label style="font-weight:700;font-size:14px;display:block;margin-bottom:6px;">Warna</label>' +
-        '<input type="text" class="autocomplete-input" id="inputWarna" placeholder="Ketik warna, misal NAVY" autocomplete="off" value="' + escapeAttr(itemBaru.warna || '') + '">' +
+      html += '<div class="field-row wrap" id="rowWarna">' +
+        '<div class="frow-line"><span class="flabel">Warna</span>' +
+        '<input type="text" id="inputWarna" placeholder="— pilih warna —" autocomplete="off" value="' + escapeAttr(itemBaru.warna || '') + '"></div>' +
         '<div class="suggestion-list" id="warnaSuggestions"></div>' +
         '</div>';
 
       // --- Kg Kain Terpakai (single, non kombinasi) ---
-      html += '<div class="subrow">' +
-        '<input type="number" class="kg-input-full" id="inputKg" placeholder="0" value="' + (itemBaru.kg || '') + '">' +
+      html += '<div class="field-row wrap" id="rowKg">' +
+        '<div class="frow-line"><span class="flabel">Kg Kain Terpakai</span>' +
+        '<input type="number" id="inputKg" placeholder="0" value="' + (itemBaru.kg || '') + '"></div>' +
         '<div class="kg-warning-text" id="kgWarningInfo" style="display:none;"></div>' +
-        '</div>' +
-        '<div class="checkbox-row"><input type="checkbox" id="chkEstimasi" ' + (itemBaru.estimasi ? 'checked' : '') + '> Kg tidak diketahui - pakai estimasi standar</div>';
+        '<label class="chk-sub"><input type="checkbox" id="chkEstimasi" ' + (itemBaru.estimasi ? 'checked' : '') + '> Kg tidak diketahui - pakai estimasi standar</label>' +
+        '</div>';
 
       // --- Kode Roll ---
-      html += '<div class="subrow" style="padding-bottom:6px">' +
-        '<label style="font-weight:700;font-size:14px;display:block;margin-bottom:6px;">Kode Roll <span class="badge-wajib">wajib isi</span></label>' +
-        '<input type="text" class="autocomplete-input" id="inputKodeRoll" placeholder="Ketik atau pilih kode roll" autocomplete="off" value="' + escapeAttr(itemBaru.kodeRoll || '') + '">' +
+      html += '<div class="field-row wrap" id="rowKodeRoll">' +
+        '<div class="frow-line"><span class="flabel">Kode Roll <span class="badge-wajib">wajib isi</span></span>' +
+        '<input type="text" id="inputKodeRoll" placeholder="Ketik / pilih kode roll" autocomplete="off" value="' + escapeAttr(itemBaru.kodeRoll || '') + '"></div>' +
         '<div class="suggestion-list" id="rollSuggestions"></div>' +
         '</div>';
     }
@@ -604,16 +639,16 @@ function renderDetailCard() {
 
   card.innerHTML = html;
   pasangEventDetailCard();
-  if (openDropdown === 'varian') { const dd = document.getElementById('varianDropdownList'); if (dd) jagaTerlihat(dd); }
-  if (openDropdown === 'kombinasiWarna') { const dd = document.getElementById('kombinasiWarnaDropdownList'); if (dd) jagaTerlihat(dd); }
+  const ddl = card.querySelector('.dropdown-list');
+  if (ddl) jagaTerlihat(ddl);
 }
 
 function renderWarnaKombinasiSection() {
   let html = '<div class="subrow" style="padding-bottom:0"><span class="flabel">Warna</span> <span class="badge-wajib">Kombinasi 3 Warna</span></div>';
   if (!itemBaru.kombinasi) {
-    html += '<div class="field-row" id="rowKombinasiWarna"><span class="fvalue">Pilih kombinasi warna... <span class="chevron">▾</span></span></div>';
+    html += '<div class="combo-picker-btn" id="rowKombinasiWarna"><span>Pilih kombinasi warna...</span><span class="chev">▾</span></div>';
     if (openDropdown === 'kombinasiWarna') {
-      html += '<div class="dropdown-list" id="kombinasiWarnaDropdownList">';
+      html += '<div class="dropdown-list">';
       kombinasiWarnaData.forEach(function (k) {
         html += '<div class="dropdown-item" data-nama="' + escapeAttr(k.nama_warna) + '" data-ketiga="' + escapeAttr(k.warna_ketiga) + '">' +
           escapeHtml(k.nama_warna) + '<span class="accent">+ ' + escapeHtml(k.warna_ketiga) + '</span></div>';
@@ -646,9 +681,9 @@ function renderWarnaKombinasiSection() {
 function renderWarnaRingerSection() {
   let html = '<div class="subrow" style="padding-bottom:0"><span class="flabel">Warna</span> <span class="badge-wajib">Ringer - 8 kombinasi tetap</span></div>';
   if (!itemBaru.kombinasi) {
-    html += '<div class="field-row" id="rowKombinasiWarna"><span class="fvalue">Pilih kombinasi warna... <span class="chevron">▾</span></span></div>';
+    html += '<div class="combo-picker-btn" id="rowKombinasiWarna"><span>Pilih kombinasi warna...</span><span class="chev">▾</span></div>';
     if (openDropdown === 'kombinasiWarna') {
-      html += '<div class="dropdown-list" id="kombinasiWarnaDropdownList">';
+      html += '<div class="dropdown-list">';
       RING_WARNA_LIST.forEach(function (pasangan) {
         html += '<div class="dropdown-item" data-nama-ring="' + escapeAttr(pasangan) + '">' + escapeHtml(pasangan) + '</div>';
       });
@@ -676,6 +711,7 @@ function renderWarnaRingerSection() {
   }
   return html;
 }
+
 function pasangEventDetailCard() {
   const rowVarian = document.getElementById('rowVarian');
   if (rowVarian) rowVarian.addEventListener('click', function () { openDropdown = (openDropdown === 'varian') ? null : 'varian'; renderDetailCard(); });
@@ -713,7 +749,11 @@ function pasangEventDetailCard() {
   }
 
   const inputKg = document.getElementById('inputKg');
-  if (inputKg) inputKg.addEventListener('input', function () { itemBaru.kg = inputKg.value; cekKgLebih99(inputKg, document.getElementById('kgWarningInfo')); });
+  if (inputKg) {
+    const cekKg = function () { cekKgLebih99(inputKg, document.getElementById('kgWarningInfo')); };
+    inputKg.addEventListener('input', function () { itemBaru.kg = inputKg.value; cekKg(); });
+    cekKg();
+  }
   const chkEstimasi = document.getElementById('chkEstimasi');
   if (chkEstimasi) chkEstimasi.addEventListener('change', function () { itemBaru.estimasi = chkEstimasi.checked; });
 
@@ -822,6 +862,7 @@ function renderCustomWarnaSuggestions(idx, query) {
   box.innerHTML = cocok.slice(0, 8).map(function (w) {
     return '<div class="suggestion-item" data-pick-cwarna="' + escapeAttr(w) + '" data-idx="' + idx + '">' + escapeHtml(w) + '</div>';
   }).join('');
+  if (box.children.length) jagaTerlihat(box);
   box.querySelectorAll('[data-pick-cwarna]').forEach(function (el) {
     el.addEventListener('mousedown', function (e) {
       e.preventDefault();
@@ -831,7 +872,6 @@ function renderCustomWarnaSuggestions(idx, query) {
       renderDetailCard();
     });
   });
-  if (box.children.length) jagaTerlihat(box);
 }
 function renderCustomRollSuggestions(idx, query) {
   const box = document.getElementById('customRollSuggestions-' + idx);
@@ -843,6 +883,7 @@ function renderCustomRollSuggestions(idx, query) {
   box.innerHTML = cocok.slice(0, 8).map(function (r) {
     return '<div class="suggestion-item roll-suggestion" data-pick-croll="' + escapeAttr(r.kodeRoll) + '" data-kg="' + r.kg + '" data-idx="' + idx + '">Roll ' + escapeHtml(r.kodeRoll) + ' / ' + r.kg + 'kg</div>';
   }).join('');
+  if (box.children.length) jagaTerlihat(box);
   box.querySelectorAll('[data-pick-croll]').forEach(function (el) {
     el.addEventListener('mousedown', function (e) {
       e.preventDefault();
@@ -851,7 +892,6 @@ function renderCustomRollSuggestions(idx, query) {
       renderDetailCard();
     });
   });
-  if (box.children.length) jagaTerlihat(box);
 }
 
 function renderKombiRollSuggestions(idx, query) {
@@ -864,6 +904,7 @@ function renderKombiRollSuggestions(idx, query) {
   box.innerHTML = cocok.slice(0, 8).map(function (r) {
     return '<div class="suggestion-item roll-suggestion" data-pick-kombi-roll="' + escapeAttr(r.kodeRoll) + '" data-kg="' + r.kg + '">Roll ' + escapeHtml(r.kodeRoll) + ' / ' + r.kg + 'kg</div>';
   }).join('');
+  if (box.children.length) jagaTerlihat(box);
   box.querySelectorAll('[data-pick-kombi-roll]').forEach(function (el) {
     el.addEventListener('mousedown', function (e) {
       e.preventDefault();
@@ -873,7 +914,6 @@ function renderKombiRollSuggestions(idx, query) {
       box.innerHTML = '';
     });
   });
-  if (box.children.length) jagaTerlihat(box);
 }
 
 // ------------------------------------------------------------
