@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+DASHBOARD ver.10
+============================================================
+PERUBAHAN ver.10: perbaikan kecil di tab Stok Kain - kode roll kosong/null sekarang tampil "-"
+(bukan literal "null"), konsisten sama perbaikan serupa di testproduksi.html. Perbaikan
+UTAMA-nya sendiri ada di Worker (CODE WORKER PRODUKSI ver.17) - sebelumnya baris stok yang
+kode_roll-nya kosong gak pernah nyampe sama sekali ke endpoint /data/stok-utuh yang dipakai
+tab ini, jadi sebagian stok yang beneran ada bisa jadi gak kelihatan di sini juga.
+
 DASHBOARD ver.09
 ============================================================
 PERUBAHAN ver.09: cache instan (stale-while-revalidate) buat paint pertama di 3 tab (Proses &
@@ -905,7 +913,7 @@ function renderWarnaGrid() {
       '<div style="display:flex;justify-content:space-between;margin-top:4px"><span class="roll-count">' + w.jumlahRoll + ' roll</span><span class="kg">' + formatAngka(w.totalKg) + ' kg</span></div>';
     if (terbuka) {
       html += '<div class="warna-detail">' + w.rolls.map(function (r) {
-        return '<div class="roll-row"><span>Roll ' + escapeHtml(r.kodeRoll) + '</span><span>' + formatAngka(r.kg) + ' kg</span></div>';
+        return '<div class="roll-row"><span>Roll ' + (r.kodeRoll ? escapeHtml(r.kodeRoll) : '-') + '</span><span>' + formatAngka(r.kg) + ' kg</span></div>';
       }).join('') + '</div>';
     }
     html += '</div>';
