@@ -1,4 +1,16 @@
 // ============================================================
+// CODE WORKER PRODUKSI ver.22
+// ============================================================
+// PERUBAHAN ver.22: perbaikan kecil di cekDanCatatDuplikat_ (ver.21) - array `tim_potong_ids`
+// KOSONG `[]` (konfirmasi kiriman gagal total, gak ada baris kebentuk) sekarang dianggap "gak
+// ada yang perlu dilindungi" (lolos, bukan duplikat) - sebelumnya ke-treat SAMA kayak NULL
+// (tetap ngeblock). Ketauan dari kasus nyata: 1 catatan `log_anti_duplikat` dari SEBELUM kolom
+// `tim_potong_ids` ditambahkan (jadi NULL permanen) bikin submit MERAH/roll 0132 tetap
+// diblokir "DUPLIKAT" walau baris tim_potong-nya udah beneran dihapus - itu KASUS NULL, sudah
+// benar treatment-nya (tetap blocking, itu race-condition guard yang disengaja), tapi
+// sekalian ditemukan bug array-kosong yang beda kasus, ditambal juga di sini.
+//
+// ============================================================
 // CODE WORKER PRODUKSI ver.21
 // ============================================================
 // PERUBAHAN ver.21: anti-duplikat (cekDanCatatDuplikat_) sekarang "longgar lagi" kalau data
@@ -362,9 +374,13 @@ function formatJarakWaktu_(ms) {
 // dipilih Denny). Kalau MASIH ADA minimal 1 baris tersisa dari kiriman itu, tetap dianggap
 // duplikat - biar gak ada celah kirim ulang batch yang cuma sebagian barisnya dihapus (lihat
 // diskusi lengkap di percakapan). `tim_potong_ids` bisa NULL (submit sebelumnya belum sempat
-// nyimpen ID-nya, misal masih diproses / gagal di tengah) - kalau NULL, TETAP dianggap
-// duplikat dulu (jaga-jaga race condition submit hampir bersamaan), bukan otomatis dianggap
-// "sudah kehapus".
+// nyimpen ID-nya, misal masih diproses / gagal di tengah, ATAU catatan lama dari SEBELUM kolom
+// ini ada - lihat catatan v.22) - kalau NULL, TETAP dianggap duplikat dulu (jaga-jaga race
+// condition submit hampir bersamaan), bukan otomatis dianggap "sudah kehapus".
+// v.22: BEDAKAN null (belum sempat/gak jelas) dari array KOSONG `[]` (KONFIRMASI submit itu
+// gagal total, gak ada 1 baris pun kebentuk) - array kosong sekarang otomatis dianggap "gak
+// ada yang perlu dilindungi", boleh lolos. Sebelumnya array kosong ke-treat SAMA kayak null
+// (tetap ngeblock terus - bug kecil, ketauan pas nyari kenapa catatan v.21 lama masih nyangkut).
 async function cekDanCatatDuplikat_(env, chatId, fingerprint, preview) {
   const batasWaktu = new Date(Date.now() - ANTIDUPLIKAT_WINDOW_MS_).toISOString();
   const path = '/rest/v1/log_anti_duplikat?select=id,waktu,tim_potong_ids&chat_id=eq.' + encodeURIComponent(chatId) +
@@ -376,9 +392,13 @@ async function cekDanCatatDuplikat_(env, chatId, fingerprint, preview) {
     const rec = existing[0];
     const ids = Array.isArray(rec.tim_potong_ids) ? rec.tim_potong_ids : null;
     let masihDianggapDuplikat = true;
-    if (ids && ids.length > 0) {
-      const stillExist = await ambilDariSupabase_(env, '/rest/v1/tim_potong?select=id&id=in.(' + ids.join(',') + ')&limit=1');
-      masihDianggapDuplikat = !!(stillExist && stillExist.length > 0);
+    if (Array.isArray(ids)) {
+      if (ids.length === 0) {
+        masihDianggapDuplikat = false; // konfirmasi: kiriman itu emang gak pernah kebentuk baris tim_potong
+      } else {
+        const stillExist = await ambilDariSupabase_(env, '/rest/v1/tim_potong?select=id&id=in.(' + ids.join(',') + ')&limit=1');
+        masihDianggapDuplikat = !!(stillExist && stillExist.length > 0);
+      }
     }
     if (masihDianggapDuplikat) {
       const waktuLama = new Date(rec.waktu).getTime();
