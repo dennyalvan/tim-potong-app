@@ -1,6 +1,18 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+HTML PRODUKSI (Supabase/testproduksi) - ver.07
+============================================================
+PERUBAHAN ver.07 (revert sebagian ver.05/06): sumber saran Warna dibalikin murni ke
+stokRollData (warna yang beneran ada stok kg_sisa > 0) - TIDAK lagi digabung sama semua nama
+kanonik di Kamus Sinonim Warna. Gabungan itu (ver.05) ternyata salah diagnosis dan bikin bug
+baru: entri kanonik generik tanpa stok nyata (misal "VIOLET") ikut nongol bersaingan sama entri
+stok asli yang lebih spesifik ("VIOLET 30S" - jenis kain beda, bukan sinonim), dan yang kepilih
+malah yang salah. Fitur "- / kg" buat kode roll kosong (ver.06) TETAP dipertahankan, itu masih
+valid & masih perlu.
+============================================================
+
+============================================================
 HTML PRODUKSI (Supabase/testproduksi) - ver.06
 ============================================================
 PERUBAHAN ver.06 (koreksi ver.05): "- / kg" yang dimaksud bukan pesan generik "belum ada roll
@@ -529,11 +541,15 @@ function daftarRollUntukWarna(warna) {
 // isinya cuma warna yang KEBETULAN masih ada rollnya). Gabung sama semua nama kanonik yang
 // dikenal sistem (dari KAMUS SINONIM WARNA) - biar tim potong tetap kelihatan saran nama warna
 // meski rollnya kosong, baru nanti kotak Kode Roll yang kasih tau "- / kg" kalau gak ada.
+// v.07 (revert v.06): SEBELUMNYA sempat digabung sama semua nama kanonik di KAMUS SINONIM
+// WARNA - ternyata itu salah diagnosis (dikira warna kosong-stok gak muncul saran, padahal itu
+// murni cache lama yang belum ke-refresh). Gabungan itu malah bikin bug baru: entri kanonik
+// "generik" tanpa stok beneran (misal "VIOLET" doang) ikut nongol bersaingan sama entri stok
+// asli yang lebih spesifik ("VIOLET 30S" - itu jenis kain beda, BUKAN sinonim). Balik ke
+// stokRollData polos - itu udah otomatis mencakup SEMUA warna yang beneran ada stoknya
+// (termasuk yang kode roll-nya kosong/null, asal kg_sisa masih > 0).
 function daftarSemuaWarnaDikenal_() {
-  const set = {};
-  Object.keys(stokRollData).forEach(function (w) { set[w] = true; });
-  Object.keys(warnaKanonikMap).forEach(function (s) { set[warnaKanonikMap[s]] = true; });
-  return Object.keys(set).sort();
+  return Object.keys(stokRollData).sort();
 }
 
 // ------------------------------------------------------------
