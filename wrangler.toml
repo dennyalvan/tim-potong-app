@@ -1,0 +1,8 @@
+name = "tim-potong-api"
+main = "worker/index.js"
+compatibility_date = "2024-09-23"
+
+# Secrets (TELEGRAM_BOT_TOKEN, ALLOWED_USER_ID, SUPABASE_URL, SUPABASE_SECRET_KEY,
+# TELEGRAM_GROUP_CHAT_ID, TELEGRAM_QC_CHAT_ID) SUDAH diset langsung di dashboard Cloudflare
+# (Settings -> Variables and Secrets) dan TETAP TERSIMPAN meski di-deploy ulang lewat wrangler -
+# jadi TIDAK perlu didaftarkan di sini atau di workflow.
