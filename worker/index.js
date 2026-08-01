@@ -1,4 +1,12 @@
 // ============================================================
+// CODE WORKER PRODUKSI ver.19
+// ============================================================
+// PERUBAHAN ver.19: perbaikan kecil - TELEGRAM_BOT_USERNAME sekarang di-strip otomatis kalau
+// ada karakter "@" nyempil di depan (ditemukan Denny: link tombol Dashboard kebentuk salah
+// "https://t.me/@rekap_makloon_bot/stok" - ada @ dobel karena secret Cloudflare-nya sempat
+// keisi dengan format yang ada @-nya). Sekarang aman diisi dengan atau tanpa @ di depan.
+//
+// ============================================================
 // CODE WORKER PRODUKSI ver.18
 // ============================================================
 // PERUBAHAN ver.18: Worker ini SEKARANG jadi webhook UTAMA Telegram (endpoint baru
@@ -1533,7 +1541,7 @@ async function simpanPasanganTerakhir_(env, jenis, chatId, userMsgId, botMsgId) 
 
 async function kirimTombolMiniApp_(env, chatId) {
   const botToken = env.TELEGRAM_BOT_TOKEN;
-  const botUsername = env.TELEGRAM_BOT_USERNAME;
+  const botUsername = String(env.TELEGRAM_BOT_USERNAME || '').replace(/^@/, '');
   const shortName = env.MINIAPP_SHORT_NAME;
   if (!botUsername || !shortName) return null;
   const link = 'https://t.me/' + botUsername + '/' + shortName;
@@ -1555,7 +1563,7 @@ async function kirimTombolMiniApp_(env, chatId) {
 
 async function kirimTombolDashboard_(env, chatId) {
   const botToken = env.TELEGRAM_BOT_TOKEN;
-  const botUsername = env.TELEGRAM_BOT_USERNAME;
+  const botUsername = String(env.TELEGRAM_BOT_USERNAME || '').replace(/^@/, '');
   const dashShortName = env.DASHBOARD_MINIAPP_SHORT_NAME;
   const dashboardUrl = env.DASHBOARD_URL;
   const link = (botUsername && dashShortName) ? ('https://t.me/' + botUsername + '/' + dashShortName) : dashboardUrl;
