@@ -1,4 +1,21 @@
 // ============================================================
+// CODE WORKER PRODUKSI ver.18
+// ============================================================
+// PERUBAHAN ver.18: Worker ini SEKARANG jadi webhook UTAMA Telegram (endpoint baru
+// /telegram-webhook) - alasan: Denny ngerasa command /produksi & /stok jeda 2-3 detik, akar
+// masalahnya ketemu di Apps Script (logDebug buka-Spreadsheet tiap pesan masuk + 3x panggilan
+// Telegram API berurutan buat command itu doang). Command /produksi & /stok SEKARANG dibalas
+// LANGSUNG dari sini (1x panggilan Telegram API, gak nyentuh Sheets sama sekali) - target di
+// bawah 1 detik. Update LAIN (laporan teks, foto nota, callback tombol nota) diteruskan mentah
+// ke Apps Script lewat proxyKeAppsScript_ - logic aslinya TIDAK disentuh sama sekali.
+// State pasangan pesan terakhir (buat hapus instan) pindah dari PropertiesService Apps Script
+// ke Cloudflare KV (binding TIM_POTONG_KV, lihat wrangler.toml). Fitur "jaring pengaman
+// pembersihan harian jam 1 pagi" Apps Script SENGAJA belum diporting (murni backup, bukan
+// mekanisme utama - lihat komentar di handleTelegramWebhook_).
+// SETELAH deploy ini, webhook Telegram HARUS diarahkan ke Worker (bukan Apps Script lagi) -
+// lihat instruksi setWebhook di percakapan.
+//
+// ============================================================
 // CODE WORKER PRODUKSI ver.17
 // ============================================================
 // PERUBAHAN ver.17: BUG NYATA ditemukan Denny lewat testing empiris (kode roll diisi "-"/"0"
@@ -134,6 +151,14 @@ export default {
 
     if (url.pathname === '/' && request.method === 'GET') {
       return jsonResponse({ ok: true, pesan: 'Worker Produksi TIM POTONG jalan normal.' });
+    }
+
+    // v.18: WEBHOOK UTAMA Telegram - jalur cepat khusus /produksi & /stok (balas tombol
+    // LANGSUNG dari sini, gak nyentuh Sheets/Apps Script sama sekali), semua update LAIN
+    // (laporan teks, foto nota, callback tombol nota) diteruskan mentah-mentah ke Apps Script
+    // yang tetap pegang logic aslinya. Lihat handleTelegramWebhook_ di bawah.
+    if (url.pathname === '/telegram-webhook' && request.method === 'POST') {
+      return await handleTelegramWebhook_(request, env);
     }
 
     // Endpoint SEMENTARA buat testing Tahap 1 - bakal dihapus/diganti nanti di Tahap 3+
@@ -1398,5 +1423,155 @@ async function handleStokRollPerWarna_(env) {
     return jsonResponse(grup);
   } catch (e) {
     return jsonResponse({ ok: false, error: e.message }, 500);
+  }
+}
+
+// ============================================================
+// v.18: WEBHOOK TELEGRAM UTAMA - jalur cepat /produksi & /stok
+// ============================================================
+// Kenapa ada 2 jalur: Telegram cuma izinkan 1 webhook URL per bot, jadi Worker ini yang jadi
+// penerima UTAMA sekarang (gantiin Apps Script). Command /produksi & /stok DIBALAS LANGSUNG di
+// sini (cuma butuh 1x panggilan Telegram API, gak ada logDebug/buka-Spreadsheet kayak Apps
+// Script versi lama) - inilah yang bikin responnya bisa di bawah 1 detik, bukan 2-3 detik lagi.
+// SEMUA update lain (laporan teks manual, foto nota supplier, callback tombol konfirmasi nota)
+// diteruskan MENTAH-MENTAH ke Apps Script (proxyKeAppsScript_) - logic aslinya di sana TIDAK
+// disentuh/diubah sama sekali, tetap jalan persis seperti sebelumnya.
+//
+// STATE pasangan pesan terakhir (buat hapus instan begitu ada command baru) SEKARANG di
+// Cloudflare KV (binding `TIM_POTONG_KV`), gantiin PropertiesService Apps Script - alasannya
+// simpel: begitu command ini ditangani di sini, Apps Script gak pernah lihat command ini lagi,
+// jadi state-nya harus pindah tempat juga.
+//
+// CATATAN: fitur "jaring pengaman pembersihan harian jam 1 pagi" (versi Apps Script lama) TIDAK
+// ikut diporting ke sini - itu murni backup kalau hapus instan gagal (bot kehilangan izin admin
+// sementara, dll), bukan mekanisme utama. Kalau nanti ternyata beneran dibutuhkan, bisa
+// ditambahkan pakai Cron Trigger Cloudflare - untuk sekarang sengaja diprioritaskan yang inti
+// dulu (kecepatan respons).
+// ============================================================
+
+async function handleTelegramWebhook_(request, env) {
+  const rawBodyText = await request.text();
+  let update;
+  try {
+    update = JSON.parse(rawBodyText);
+  } catch (e) {
+    return jsonResponse({ ok: true }); // body aneh, jangan sampai Telegram terus-terusan retry
+  }
+
+  // Tombol konfirmasi/batal nota (baca nota AI) - logic-nya (CacheService, dst) cuma ada di Apps
+  // Script, gak diporting - teruskan apa adanya.
+  if (update.callback_query) {
+    return await proxyKeAppsScript_(rawBodyText, env);
+  }
+
+  const message = update.message;
+  if (message && message.text) {
+    const teksTrim = message.text.trim().toLowerCase().split('@')[0];
+    if (teksTrim === '/produksi' || teksTrim === '/isiproduksi') {
+      return await tanganiCommandCepat_(env, message, 'produksi');
+    }
+    if (teksTrim === '/stok' || teksTrim === '/dashboard') {
+      return await tanganiCommandCepat_(env, message, 'stok');
+    }
+  }
+
+  // Bukan command cepat (laporan teks, foto nota, dst) - Apps Script yang proses seperti biasa.
+  return await proxyKeAppsScript_(rawBodyText, env);
+}
+
+async function proxyKeAppsScript_(rawBodyText, env) {
+  try {
+    const res = await fetch(env.APPS_SCRIPT_WEBHOOK_URL, {
+      method: 'post',
+      headers: { 'Content-Type': 'application/json' },
+      body: rawBodyText
+    });
+    return new Response(await res.text(), { status: 200 });
+  } catch (e) {
+    return jsonResponse({ ok: false, error: 'Gagal terusin ke Apps Script: ' + e.message }, 500);
+  }
+}
+
+async function tanganiCommandCepat_(env, message, jenis) {
+  const chatId = message.chat.id;
+  await hapusPasanganSebelumnya_(env, jenis, chatId);
+  const botMsgId = (jenis === 'produksi')
+    ? await kirimTombolMiniApp_(env, chatId)
+    : await kirimTombolDashboard_(env, chatId);
+  await simpanPasanganTerakhir_(env, jenis, chatId, message.message_id, botMsgId);
+  return jsonResponse({ ok: true });
+}
+
+function kvKeyPasangan_(jenis, chatId) {
+  return 'pasangan_' + jenis + '_' + chatId;
+}
+
+async function hapusPasanganSebelumnya_(env, jenis, chatId) {
+  try {
+    const raw = await env.TIM_POTONG_KV.get(kvKeyPasangan_(jenis, chatId));
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    const botToken = env.TELEGRAM_BOT_TOKEN;
+    const daftarHapus = [data.userMsgId, data.botMsgId].filter(Boolean);
+    await Promise.all(daftarHapus.map(function (msgId) {
+      return fetch('https://api.telegram.org/bot' + botToken + '/deleteMessage', {
+        method: 'post',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, message_id: msgId })
+      }).catch(function () { });
+    }));
+  } catch (e) {
+    // gagal hapus (pesan sudah lama/bot bukan admin) - gak fatal, tombol baru tetap dikirim
+  }
+}
+
+async function simpanPasanganTerakhir_(env, jenis, chatId, userMsgId, botMsgId) {
+  try {
+    await env.TIM_POTONG_KV.put(kvKeyPasangan_(jenis, chatId), JSON.stringify({ userMsgId: userMsgId, botMsgId: botMsgId }));
+  } catch (e) { }
+}
+
+async function kirimTombolMiniApp_(env, chatId) {
+  const botToken = env.TELEGRAM_BOT_TOKEN;
+  const botUsername = env.TELEGRAM_BOT_USERNAME;
+  const shortName = env.MINIAPP_SHORT_NAME;
+  if (!botUsername || !shortName) return null;
+  const link = 'https://t.me/' + botUsername + '/' + shortName;
+  const payload = {
+    chat_id: chatId,
+    text: '📝 Tap tombol di bawah buat isi data produksi:',
+    reply_markup: { inline_keyboard: [[{ text: '📝 Isi Produksi', url: link }]] }
+  };
+  try {
+    const res = await fetch('https://api.telegram.org/bot' + botToken + '/sendMessage', {
+      method: 'post', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    return (data.ok && data.result) ? data.result.message_id : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function kirimTombolDashboard_(env, chatId) {
+  const botToken = env.TELEGRAM_BOT_TOKEN;
+  const botUsername = env.TELEGRAM_BOT_USERNAME;
+  const dashShortName = env.DASHBOARD_MINIAPP_SHORT_NAME;
+  const dashboardUrl = env.DASHBOARD_URL;
+  const link = (botUsername && dashShortName) ? ('https://t.me/' + botUsername + '/' + dashShortName) : dashboardUrl;
+  if (!link) return null;
+  const payload = {
+    chat_id: chatId,
+    text: '📊 Tap tombol di bawah buat lihat ringkasan stok kain:',
+    reply_markup: { inline_keyboard: [[{ text: '📊 Lihat Dashboard', url: link }]] }
+  };
+  try {
+    const res = await fetch('https://api.telegram.org/bot' + botToken + '/sendMessage', {
+      method: 'post', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    return (data.ok && data.result) ? data.result.message_id : null;
+  } catch (e) {
+    return null;
   }
 }

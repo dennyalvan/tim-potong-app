@@ -2,9 +2,23 @@ name = "tim-potong-api"
 main = "worker/index.js"
 compatibility_date = "2024-09-23"
 
+# v.18: KV buat nyimpen pasangan pesan /produksi & /stok terakhir (gantiin PropertiesService
+# Apps Script) - dipakai buat hapus instan begitu ada command baru.
+[[kv_namespaces]]
+binding = "TIM_POTONG_KV"
+id = "13ab95d5188a46c9a6657854240fa3b8"
+
 # Secrets (TELEGRAM_BOT_TOKEN, ALLOWED_USER_ID, SUPABASE_URL, SUPABASE_SECRET_KEY,
 # TELEGRAM_GROUP_CHAT_ID, TELEGRAM_QC_CHAT_ID) SUDAH diset langsung di dashboard Cloudflare
 # (Settings -> Variables and Secrets) dan TETAP TERSIMPAN meski di-deploy ulang lewat wrangler -
 # jadi TIDAK perlu didaftarkan di sini atau di workflow.
+#
+# v.18: SECRET BARU yang WAJIB ditambah manual di dashboard Cloudflare sebelum webhook cepat
+# ini bisa jalan (nilai sama persis kayak Script Properties yang sudah ada di Apps Script):
+#   TELEGRAM_BOT_USERNAME         = rekap_makloon_bot (tanpa @)
+#   MINIAPP_SHORT_NAME             = short name Mini App Input Produksi (cek /myapps BotFather)
+#   DASHBOARD_MINIAPP_SHORT_NAME   = short name Mini App Dashboard (cek /myapps BotFather)
+#   DASHBOARD_URL                  = fallback kalau short name di atas belum ada
+#   APPS_SCRIPT_WEBHOOK_URL        = URL Web App Apps Script yang SEKARANG jadi webhook Telegram
+#                                     (yang mau digantikan Worker ini sebagai penerima utama)
 
-# trigger deploy pertama kali
