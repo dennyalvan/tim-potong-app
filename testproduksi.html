@@ -1,6 +1,17 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+HTML PRODUKSI (Supabase/testproduksi) - ver.05
+============================================================
+PERUBAHAN ver.05: autosuggest Warna sekarang muncul buat SEMUA warna yang dikenal sistem
+(gabungan stokRollData + semua nama kanonik di KAMUS SINONIM WARNA), bukan cuma warna yang
+KEBETULAN masih ada rollnya. Sebelumnya kalau warna lagi kosong stok / belum pernah dibeli
+dengan ejaan itu, gak muncul saran sama sekali - sekarang tetap muncul, dan begitu dipilih tapi
+gak ada roll yang cocok, kotak Kode Roll kasih tau jelas "- / kg (belum ada roll tercatat)"
+alih-alih diam kosong. Diterapkan di semua mode (biasa, kombinasi, ringer, custom warna 1/2).
+============================================================
+
+============================================================
 HTML PRODUKSI (Supabase/testproduksi) - ver.04
 ============================================================
 PERUBAHAN ver.04 (dari Claude, di atas hasil Claude Design): fitur cache referensi data
@@ -501,6 +512,18 @@ function daftarRollUntukWarna(warna) {
   return stokRollData[kanonik] || [];
 }
 
+// v.06: daftar warna buat autosuggest HARUS tetap muncul walau stoknya lagi kosong (kg_sisa=0
+// atau memang belum pernah dibeli dengan ejaan itu) - gak boleh cuma dari stokRollData (yang
+// isinya cuma warna yang KEBETULAN masih ada rollnya). Gabung sama semua nama kanonik yang
+// dikenal sistem (dari KAMUS SINONIM WARNA) - biar tim potong tetap kelihatan saran nama warna
+// meski rollnya kosong, baru nanti kotak Kode Roll yang kasih tau "- / kg" kalau gak ada.
+function daftarSemuaWarnaDikenal_() {
+  const set = {};
+  Object.keys(stokRollData).forEach(function (w) { set[w] = true; });
+  Object.keys(warnaKanonikMap).forEach(function (s) { set[warnaKanonikMap[s]] = true; });
+  return Object.keys(set).sort();
+}
+
 // ------------------------------------------------------------
 // AUTOCOMPLETE - filter di memori (data sudah ke-load duluan), jadi instan tanpa
 // nembak server tiap ketik. Cuma update <div> saran-nya doang (bukan render ulang
@@ -511,7 +534,7 @@ function renderWarnaSuggestions(query) {
   if (!box) return;
   const q = String(query || '').trim().toUpperCase();
   if (!q) { box.innerHTML = ''; return; } // v.02: gak tampilin apa-apa sebelum ada huruf diketik
-  const semua = Object.keys(stokRollData).sort();
+  const semua = daftarSemuaWarnaDikenal_();
   const cocok = semua.filter(function (w) { return w.indexOf(q) === 0; });
   box.innerHTML = cocok.slice(0, 8).map(function (w) {
     return '<div class="suggestion-item" data-pick-warna="' + escapeAttr(w) + '">' + escapeHtml(w) + '</div>';
@@ -542,9 +565,17 @@ function renderRollSuggestions(query) {
   // v.03: begitu warna udah kepilih, langsung tampilin SEMUA roll yang ada buat warna itu
   // (gak perlu ketik dulu) - beda dari saran Warna yang emang sengaja nunggu ketikan.
   const cocok = q ? semua.filter(function (r) { return String(r.kodeRoll).toUpperCase().indexOf(q) === 0; }) : semua;
-  box.innerHTML = cocok.slice(0, 8).map(function (r) {
-    return '<div class="suggestion-item roll-suggestion" data-pick-roll="' + escapeAttr(r.kodeRoll) + '" data-kg="' + r.kg + '">Roll ' + escapeHtml(r.kodeRoll) + ' / ' + r.kg + 'kg</div>';
-  }).join('');
+  if (cocok.length) {
+    box.innerHTML = cocok.slice(0, 8).map(function (r) {
+      return '<div class="suggestion-item roll-suggestion" data-pick-roll="' + escapeAttr(r.kodeRoll) + '" data-kg="' + r.kg + '">Roll ' + escapeHtml(r.kodeRoll) + ' / ' + r.kg + 'kg</div>';
+    }).join('');
+  } else if (!q && itemBaru.warna) {
+    // v.06: warna udah kepilih tapi gak ada roll tersisa buat warna itu - kasih tau jelas
+    // (bukan diam2 kosong), biar tim potong tau ini beneran gak ada, bukan lagi loading/nyari.
+    box.innerHTML = '<div class="suggestion-item roll-suggestion" style="color:var(--gray-label);cursor:default;">- / kg (belum ada roll tercatat buat warna ini)</div>';
+  } else {
+    box.innerHTML = '';
+  }
   if (box.children.length) jagaTerlihat(box);
   box.querySelectorAll('[data-pick-roll]').forEach(function (el) {
     el.addEventListener('mousedown', function (e) {
@@ -857,7 +888,7 @@ function renderCustomWarnaSuggestions(idx, query) {
   if (!box) return;
   const q = String(query || '').trim().toUpperCase();
   if (!q) { box.innerHTML = ''; return; }
-  const semua = Object.keys(stokRollData).sort();
+  const semua = daftarSemuaWarnaDikenal_();
   const cocok = semua.filter(function (w) { return w.indexOf(q) === 0; });
   box.innerHTML = cocok.slice(0, 8).map(function (w) {
     return '<div class="suggestion-item" data-pick-cwarna="' + escapeAttr(w) + '" data-idx="' + idx + '">' + escapeHtml(w) + '</div>';
@@ -880,9 +911,15 @@ function renderCustomRollSuggestions(idx, query) {
   const warna = itemBaru.kombinasi.warna[idx];
   const semua = daftarRollUntukWarna(warna);
   const cocok = q ? semua.filter(function (r) { return String(r.kodeRoll).toUpperCase().indexOf(q) === 0; }) : semua;
-  box.innerHTML = cocok.slice(0, 8).map(function (r) {
-    return '<div class="suggestion-item roll-suggestion" data-pick-croll="' + escapeAttr(r.kodeRoll) + '" data-kg="' + r.kg + '" data-idx="' + idx + '">Roll ' + escapeHtml(r.kodeRoll) + ' / ' + r.kg + 'kg</div>';
-  }).join('');
+  if (cocok.length) {
+    box.innerHTML = cocok.slice(0, 8).map(function (r) {
+      return '<div class="suggestion-item roll-suggestion" data-pick-croll="' + escapeAttr(r.kodeRoll) + '" data-kg="' + r.kg + '" data-idx="' + idx + '">Roll ' + escapeHtml(r.kodeRoll) + ' / ' + r.kg + 'kg</div>';
+    }).join('');
+  } else if (!q && warna) {
+    box.innerHTML = '<div class="suggestion-item roll-suggestion" style="color:var(--gray-label);cursor:default;">- / kg (belum ada roll tercatat buat warna ini)</div>';
+  } else {
+    box.innerHTML = '';
+  }
   if (box.children.length) jagaTerlihat(box);
   box.querySelectorAll('[data-pick-croll]').forEach(function (el) {
     el.addEventListener('mousedown', function (e) {
@@ -901,9 +938,15 @@ function renderKombiRollSuggestions(idx, query) {
   const warna = itemBaru.kombinasi.warna[idx];
   const semua = daftarRollUntukWarna(warna);
   const cocok = q ? semua.filter(function (r) { return String(r.kodeRoll).toUpperCase().indexOf(q) === 0; }) : semua;
-  box.innerHTML = cocok.slice(0, 8).map(function (r) {
-    return '<div class="suggestion-item roll-suggestion" data-pick-kombi-roll="' + escapeAttr(r.kodeRoll) + '" data-kg="' + r.kg + '">Roll ' + escapeHtml(r.kodeRoll) + ' / ' + r.kg + 'kg</div>';
-  }).join('');
+  if (cocok.length) {
+    box.innerHTML = cocok.slice(0, 8).map(function (r) {
+      return '<div class="suggestion-item roll-suggestion" data-pick-kombi-roll="' + escapeAttr(r.kodeRoll) + '" data-kg="' + r.kg + '">Roll ' + escapeHtml(r.kodeRoll) + ' / ' + r.kg + 'kg</div>';
+    }).join('');
+  } else if (!q && warna) {
+    box.innerHTML = '<div class="suggestion-item roll-suggestion" style="color:var(--gray-label);cursor:default;">- / kg (belum ada roll tercatat buat warna ini)</div>';
+  } else {
+    box.innerHTML = '';
+  }
   if (box.children.length) jagaTerlihat(box);
   box.querySelectorAll('[data-pick-kombi-roll]').forEach(function (el) {
     el.addEventListener('mousedown', function (e) {
