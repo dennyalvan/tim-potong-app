@@ -1,4 +1,19 @@
 // ============================================================
+// CODE WORKER PRODUKSI ver.23
+// ============================================================
+// PERUBAHAN ver.23: BUG NYATA ditemukan Denny - kolom `tanggal` di tim_potong (diisi otomatis
+// pas Mini App submit tanpa kirim tanggal eksplisit) sebelumnya default ke
+// `new Date().toISOString().slice(0,10)`, yang hitung tanggal pakai UTC MENTAH, bukan WIB
+// (Asia/Jakarta, UTC+7). Submit jam 00:00-06:59 WIB (masih jam 17:00-23:59 UTC hari
+// SEBELUMNYA) kesimpen dengan tanggal KEMARIN, padahal buat Denny itu masih hari yang sama -
+// ketauan dari laporan RFL MERAH roll 0132 yang disubmit jam 01:39 WIB tapi kesimpen tanggal
+// 1 Agustus (harusnya 2 Agustus). Fix: helper baru tanggalHariIniJakarta_() hitung tanggal dari
+// kalender Asia/Jakarta yang sebenarnya (pakai Intl.DateTimeFormat, konsisten sama
+// formatTanggalIndoJakarta_ yang sudah lebih dulu ada), dipakai gantiin toISOString di baris
+// default `tanggal` handleSubmitProduksi_. 1 baris data lama (id 1000) sudah dikoreksi manual
+// via SQL langsung, gak lewat kode ini (data historis, bukan kejadian berulang).
+//
+// ============================================================
 // CODE WORKER PRODUKSI ver.22
 // ============================================================
 // PERUBAHAN ver.22: perbaikan kecil di cekDanCatatDuplikat_ (ver.21) - array `tim_potong_ids`
@@ -464,6 +479,18 @@ function formatTanggalIndoJakarta_(date) {
   const jakartaMs = date.getTime() + 7 * 60 * 60 * 1000;
   const dayIdx = new Date(jakartaMs).getUTCDay();
   return DAYS_ID_[dayIdx] + ',  ' + get('day') + '/' + get('month') + '/' + get('year');
+}
+
+// v.23: BUG NYATA ditemukan Denny - kolom `tanggal` di tim_potong sebelumnya default ke
+// `new Date().toISOString().slice(0,10)` yang hitung tanggal pakai UTC MENTAH, bukan WIB
+// (Asia/Jakarta, UTC+7). Efeknya: submit jam 00:00-06:59 WIB (masih jam 17:00-23:59 UTC hari
+// SEBELUMNYA) kesimpen dengan tanggal KEMARIN, padahal buat Denny itu masih hari yang sama.
+// Helper ini (dipakai gantiin toISOString di bawah) hitung tanggal YYYY-MM-DD dari kalender
+// Asia/Jakarta yang sebenarnya - konsisten sama formatTanggalIndoJakarta_ di atas.
+function tanggalHariIniJakarta_() {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+  const get = function (type) { const p = parts.find(function (x) { return x.type === type; }); return p ? p.value : ''; };
+  return get('year') + '-' + get('month') + '-' + get('day');
 }
 
 function htmlEscape_(teks) {
@@ -1344,7 +1371,7 @@ async function handleSubmitProduksi_(body, env) {
     }
 
     rows.push(Object.assign({
-      tanggal: it.tanggal || new Date().toISOString().slice(0, 10),
+      tanggal: it.tanggal || tanggalHariIniJakarta_(),
       jenis_warna_baju: namaItem,
       pemakaian_kain_kg: kgUtama,
       kode_roll: kodeRollUtama,
