@@ -1,0 +1,25 @@
+{
+  "spreadsheetId": "1fH5O0r4jSAbXWaaSPb5cdxAn4Jf-9wUXZGPz8mGzq1k",
+  "sheetName": "STOK KAIN",
+  "matchColumn": "F",
+  "writeColumn": "G",
+  "headerRow": 1,
+  "updates": [
+    {"matchValue": "1976", "value": 95000},
+    {"matchValue": "1346", "value": 95000},
+    {"matchValue": "1548", "value": 95000},
+    {"matchValue": "1550", "value": 95000},
+    {"matchValue": "1132", "value": 95000},
+    {"matchValue": "0564", "value": 98000},
+    {"matchValue": "0558", "value": 98000},
+    {"matchValue": "1863", "value": 98000},
+    {"matchValue": "1583", "value": 98000},
+    {"matchValue": "1427", "value": 102500},
+    {"matchValue": "1426", "value": 102500},
+    {"matchValue": "1421", "value": 102500},
+    {"matchValue": "0846", "value": 102500},
+    {"matchValue": "1878", "value": 102500},
+    {"matchValue": "1847", "value": 99500},
+    {"matchValue": "0056", "value": 98000}
+  ]
+}
