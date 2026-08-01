@@ -1,0 +1,27 @@
+name: Tulis ke Google Sheets
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'sheet-updates/*.json'
+
+jobs:
+  write-sheet:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout kode
+        uses: actions/checkout@v4
+
+      - name: Kirim update ke Web App Sheets
+        env:
+          WEBAPP_URL: ${{ secrets.SHEETS_WEBAPP_URL }}
+          WRITE_TOKEN: ${{ secrets.SHEETS_WRITE_TOKEN }}
+        run: |
+          set -e
+          for f in sheet-updates/*.json; do
+            echo "=== Memproses $f ==="
+            payload=$(jq --arg token "$WRITE_TOKEN" '. + {token: $token}' "$f")
+            curl -sL -X POST "$WEBAPP_URL" -H "Content-Type: application/json" -d "$payload"
+            echo ""
+          done
