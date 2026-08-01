@@ -1,1777 +1,1100 @@
+<!DOCTYPE html>
 <!--
-  HTML QC - ver.04
-  Dashboard web statis (3 tab: "✅ Proses & QC", "📦 Stok Kain", "📊 Rekap QC"), dibuka lewat
-  tombol Telegram (command /stok). Hosting GitHub Pages, upload dengan nama dashboard.html
-  (BUKAN nama file lokalnya). Backend: CODE TIM POTONG ver.09.js (WAJIB dideploy bareng - tab
-  Rekap QC butuh endpoint ?action=rekapQC & format LOG QC baru yang cuma ada mulai versi itu).
+============================================================
+DASHBOARD ver.10
+============================================================
+PERUBAHAN ver.10: perbaikan kecil di tab Stok Kain - kode roll kosong/null sekarang tampil "-"
+(bukan literal "null"), konsisten sama perbaikan serupa di testproduksi.html. Perbaikan
+UTAMA-nya sendiri ada di Worker (CODE WORKER PRODUKSI ver.17) - sebelumnya baris stok yang
+kode_roll-nya kosong gak pernah nyampe sama sekali ke endpoint /data/stok-utuh yang dipakai
+tab ini, jadi sebagian stok yang beneran ada bisa jadi gak kelihatan di sini juga.
 
-  PERUBAHAN ver.04 (dari ver.03):
-    - Tabel Rekap QC dirombak dari <table>+colgroup jadi CSS GRID (div-based) - ver.03 (table-
-      layout:fixed+colgroup) ternyata MASIH kepepet di webview Telegram (kemungkinan dukungan
-      colgroup/table-layout gak konsisten di situ). CSS Grid jauh lebih predictable lintas
-      browser/webview - grid-template-columns dipasang SAMA PERSIS di tiap baris (header &
-      data) via inline style dari JS, kolom dijamin gak pernah "direbut" kolom lain.
+DASHBOARD ver.09
+============================================================
+PERUBAHAN ver.09: cache instan (stale-while-revalidate) buat paint pertama di 3 tab (Proses &
+QC, Stok Kain, Rekap QC) - begitu dibuka, kalau ada data dari sesi sebelumnya di HP, LANGSUNG
+ditampilkan (bukan layar kosong nunggu network) TAPI label header jelas-jelas bilang "Terakhir
+dimuat X lalu - memuat ulang...", biar Denny/tim QC gak salah ambil keputusan dari angka basi.
+Begitu data asli selesai ditarik dari server, otomatis diganti + label balik normal. Dipicu
+CUMA di paint pertama (state masih kosong) - realtime/refresh manual sesudahnya tetap selalu
+langsung ke server seperti biasa, gak lewat cache lagi.
 
-  PERUBAHAN ver.03 (dari ver.02):
-    - Perbaikan styling tabel Rekap QC - sebelumnya table-layout AUTO bikin kolom Waktu (teks
-      panjang) "ngerebut" lebar dari kolom ukuran (S/M/L/dst), jadinya kolom2 itu kepepet
-      sampai nyaris 0 lebar & keliatan numpuk. (SUDAH DIGANTI CSS Grid di ver.04 di atas.)
+DASHBOARD ver.08
+============================================================
+PERUBAHAN ver.08: jaring pengaman Realtime - kalau koneksi WebSocket putus diam-diam (tab lama
+di background), begitu Mini App ini balik fokus/keliatan lagi, data ditarik ulang paksa
+(visibilitychange + window focus listener), gak nunggu event Realtime yang mungkin udah gak
+nyambung. Sekalian dibenerin: tab Rekap QC sebelumnya gak ikut ke-refresh otomatis waktu ada
+perubahan Realtime (cuma Proses & QC dan Stok Kain) - sekarang ikut lewat helper muatTabAktif_().
 
-  PERUBAHAN ver.02 (dari ver.01):
-    - Tab baru "📊 Rekap QC" - histori submit QC (1 baris = 1x submit, kolom ukuran + Reject +
-      Selesai), lazy-load kayak 2 tab lain. SENGAJA TIDAK nampilin Harga Jait/Total.
+DASHBOARD ver.07
+============================================================
+Dashboard Stok Kain + QC - connect ke Cloudflare Worker (tim-potong-api) + Supabase.
 
-  TAB "✅ Proses & QC" (default/pertama) - tempat tim QC lapor progress quality control per
-  laporan produksi TIM POTONG. Sumber data: baris TIM POTONG yang Status-nya BUKAN "SELESAI"
-  (TANPA syarat roll kain harus habis dulu). Pola input: antrian lokal ("+ Tambah ke Daftar"
-  per kartu -> "Kirim Rekap" kirim SEMUA sekaligus dalam 1 payload ke ?action=kirimRekapQCBatch),
-  sama persis dengan pola HTML PRODUKSI.html biar konsisten UX. Progress disimpan di sheet
-  LOG QC (append-only, undo = tandai "dibatalkan" bukan hapus fisik) - JANGAN edit manual
-  kolom Status di sheet TIM POTONG, pakai tombol Undo di app.
+PERUBAHAN ver.07 (compact pass ke-2, cross-check langsung ke CSS asli HTML QC ver.04.html
+biar presisi, bukan tebak dari screenshot):
+  1. Spacing di bagian expand (badge ukuran, progress bar, baris Sel/Rej/Sisa, toggle
+     Ringkas/Rincian, tabel rincian) dirapatkan - margin-bottom & padding diturunkan di semua
+     elemen tsb, nilai disamakan sedekat mungkin ke qc-sizes/qc-progress/qc-progress-label/
+     qc-mode-switch/qc-tabel di versi Apps Script.
+  2. Tombol "Ringkas"/"Rincian": TIDAK lagi stretch penuh (flex:1 dihapus) - sekarang pill
+     kecil nempel konten kayak qc-mode-btn asli (padding 4px 12px, radius 999px), dan
+     font-weight dinaikkan ke 800 (dari 700) di kedua state biar keliatan bold jelas -
+     sebelumnya 700 tapi keliatan tipis di font Inter ukuran kecil.
+  3. Tabel rincian (UK/QTY/SEL/REJ/SISA): padding sel & lebar input kotak angka dikecilkan
+     mendekati qc-tabel asli (input 42px, radius 8px).
 
-  TAB "📦 Stok Kain" - nampilin warna kain yang rollnya masih ada sisa & BELUM disentuh sama
-  sekali (Kg Terpakai = 0), dikelompokkan per warna kanonik (KAMUS SINONIM WARNA), detail
-  per-roll bisa di-expand.
+PERUBAHAN ver.06 (3 penyesuaian ke tampilan card yang lagi diinput, sesuai versi Apps Script):
+  1. Tombol "Ringkas"/"Rincian" dibikin lebih kecil & compact (padding & font-size diturunkan),
+     tetap bold semua (aktif maupun tidak).
+  2. Angka Sel/Rej/Sisa di baris ringkasan card utama (sebelum di-expand) sekarang dibungkus
+     roundbox (pill) berwarna sesuai konteksnya - hijau muda buat Sel, merah muda buat Rej,
+     abu-abu buat Sisa.
+  3. Blok "DAFTAR ANTRIAN" (label + kotak kosong + tombol Kirim Rekap + preview gelap) di
+     paling atas sekarang disembunyikan SELURUHNYA kalau antrian masih kosong - baru muncul
+     begitu ada minimal 1 laporan ditambahkan. Menghemat tampilan pas dashboard awal loading.
 
-  ⚠️ CATATAN PENAMAAN "TIM QC": tab ini BUKAN proyek "TIM QC v3" (proyek horizontal-layout
-  terpisah dengan sheet ANTRIAN QC/LOG PEMAKAIAN QC/REKAP QC & FIFO batch pairing yang sempat
-  dibahas terpisah) - kalau itu yang dimaksud, filenya belum ada di project ini. Dokumen ini
-  murni soal tab "Proses & QC" yang menyatu di file HTML QC.html ini, berbasis sheet LOG QC
-  & ARSIP SELESAI.
+PERUBAHAN ver.05 (5 temuan dari perbandingan screenshot lagi):
+  1. Preview "Daftar Antrian" dirombak: kartu putih per-item (nama, "Selesai +N · Reject +N",
+     tombol hapus ✕) + kotak gelap terpisah "📋 REKAP UPDATE QC (N laporan)" di bawahnya,
+     format sama persis kayak versi Apps Script.
+  2. "Diperbarui ..." dipindah jadi 1 baris sama "TIM POTONG · REKAP MAKLOON" (hemat baris).
+  3. "Atur Tampilan" jadi tombol roundbox (bg abu muda + border), bukan cuma teks link oranye.
+  4. Kotak Selesai/Reject sekarang KOSONG dengan "0" cuma placeholder (bayangan) - kursor
+     langsung siap ketik angka beneran, gak perlu hapus "0" dulu.
+  5. Live preview: begitu ada laporan yang masuk antrian, baris itu LANGSUNG nampilin angka
+     hasil akhirnya (lingkaran + progress bar + Sel/Rej/Sisa keupdate seolah sudah terkirim),
+     ditandai ikon jam kecil, sekalian ada pill "🕓 N di antrian (+X sel/+Y rej)" pas
+     di-expand. Setelah "+ Tambah ke Daftar" ditekan, baris otomatis nutup balik
+     (fitur ini sebenarnya SUDAH ada dari ver.02, dipastikan lagi masih jalan benar).
+  Dicegah juga: 1 laporan cuma boleh 1 entri aktif di antrian dalam satu waktu (coba tambah
+  lagi sebelum yang lama dikirim/dihapus akan ditolak) - biar gak dobel-booking sisa qty.
 
-  Histori versi SEBELUM ver.01 (dulu "v.05-22") ada lengkap di MD TIM QC.md dan MD STOK KAIN.md,
-  tidak diulang di sini.
+PERUBAHAN ver.04: samain tampilan visual ke versi Apps Script asli (HTML QC ver.04.html),
+hasil cross-check CSS langsung (bukan tebak dari screenshot) - 8 temuan dikonfirmasi Denny:
+  1. Font "Inter" ditambahkan (Google Fonts) - sebelumnya cuma font sistem.
+  2-3. Palet warna disamakan ke nilai default tema asli (indigo #5D5294, hijau #3F7A5C redup,
+     merah #A64236 redup - bukan warna Tailwind terang).
+  4. Badge kategori: logika DIBALIK - DEWASA (default) = badge TERANG (bg abu muda, teks
+     ungu, border tipis), ANAK = badge GELAP (bg nyaris hitam, teks putih). Sebelumnya
+     kebalik (Anak hijau, Dewasa navy).
+  5. Nomor urut (1,2,3...) dikembalikan di kiri tiap baris (sebelumnya cuma checkbox).
+  6. Chevron (▶ berputar pas expand) ditambahkan di ujung kanan tiap baris.
+  7. Ikon tab "Stok Kain" dikoreksi dari 🧵 jadi 📦 (sesuai kode asli).
+  8. Struktur baris laporan diubah dari "kartu terpisah berjarak" jadi "list menyatu
+     dipisah garis tipis" (1 wadah putih membungkus semua baris) - sesuai versi asli.
+CATATAN: warna di atas pakai nilai DEFAULT tema Apps Script - kalau Denny sempat kustomisasi
+lewat "Atur Tampilan" dan hasilnya masih beda dikit, kasih tau detail warnanya biar dipas-in
+lagi (fitur "Atur Tampilan" itu sendiri BELUM dibangun di versi ini - tombolnya ada tapi
+belum ada aksi apapun kalau ditekan).
+
+PERUBAHAN ver.03: ADOPSI fitur dari thread Apps Script terpisah - tab BARU "📊 Rekap QC"
+(histori submit QC apa adanya, 1 baris = 1x submit, urut waktu terbaru dulu, 14 hari
+terakhir). PENTING: dirender pakai CSS Grid (div-based), BUKAN <table> - porting persis dari
+HTML QC ver.04.html (Apps Script), yang punya catatan eksplisit <table>+colgroup PERNAH
+kebukti rusak di webview Telegram (kolom collapse). Kolom Harga Jait/Total Bayar SENGAJA
+TIDAK ditampilkan di tab ini (itu info akunting, bukan buat tim potong/QC).
+
+PERUBAHAN ver.02 (dari ver.01, disesuaikan persis ke tampilan pembanding Apps Script lama):
+- AUTO-UPDATE tanpa refresh manual - pakai Supabase Realtime beneran (bukan polling), lewat
+  kunci PUBLIK (anon/publishable, aman di client) yang cuma bisa BACA tabel yang diizinkan RLS.
+  Ada indikator "Memuat..." pas lagi ambil data.
+- Tampilan dirapatkan/compact (padding & margin dikecilkan) biar lebih mirip versi lama.
+- Format tanggal jadi "Selasa, 21/07/26" (bukan ISO "2026-07-21").
+- Format kg jadi "24,95 kg" (koma Indonesia + spasi), bukan "24.95kg".
+- Checkbox di tiap baris jadi SHORTCUT FUNGSIONAL: tap = otomatis isi "Selesai = sisa saat
+  ini, Reject = 0" lalu langsung masuk ke Daftar Antrian - TETAP harus di-konfirmasi lewat
+  "Kirim Rekap" (belum langsung terkirim ke server saat itu juga).
+- Angka progress (mis. "92/108") - angka SELESAI-nya dibungkus lingkaran hitam CUMA kalau
+  progressnya udah lebih dari 0. Kalau masih 0, ditulis "-/108" polos tanpa lingkaran.
+- Badge ukuran (S 13, M 30, dst) dirapatkan, gak pakai kotak background lagi.
+
+2 tab: "Proses & QC" (daftar laporan belum SELESAI, expand per baris buat input QC mode
+Ringkas/Rincian, antrian multi-laporan, Arsip Selesai N hari terakhir) dan "Stok Kain"
+(ringkasan total + detail per warna, expand buat lihat per-roll). 1 tab baru "Rekap QC".
+
+BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
+============================================================
 -->
-<!doctype html>
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Dashboard Stok Kain — TIM POTONG</title>
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Dashboard Stok Kain + QC</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
-:root{
-  --bg:#F3F5FE; --surface:#FFFFFF; --surface-2:#E4E7F5;
-  --ink:#292B31; --ink-muted:#6B6F82; --line:#D7DAEC;
-  --accent:#796CBF; --accent-deep:#5D5294;
-  --good:#3F7A5C; --good-tint:#E3F1E9;
-  --warn:#A5750F; --warn-tint:#FBEEDA;
-  --bad:#A64236; --bad-tint:#F8E4E0;
-  --shadow: 0 1px 2px rgba(41,43,49,0.05), 0 8px 24px -12px rgba(41,43,49,0.14);
-  --scale-card:1; --scale-antrian:1; --scale-preview:1;
-}
-:root[data-theme="dark"]{
-  --bg:#161826; --surface:#232532; --surface-2:#2B2E3D;
-  --ink:#E9E9ED; --ink-muted:#9397AB; --line:#3F424D;
-  --accent:#9184D9; --accent-deep:#B5ABFC;
-  --good:#5CB88A; --good-tint:#1C2E26;
-  --warn:#E0A94D; --warn-tint:#332811;
-  --bad:#E0736A; --bad-tint:#3A2422;
-  --shadow: 0 0 0 1px #3F424D, 0 6px 18px rgba(0,0,0,0.55);
-}
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){
-    --bg:#161826; --surface:#232532; --surface-2:#2B2E3D;
-    --ink:#E9E9ED; --ink-muted:#9397AB; --line:#3F424D;
-    --accent:#9184D9; --accent-deep:#B5ABFC;
-    --good:#5CB88A; --good-tint:#1C2E26;
-    --warn:#E0A94D; --warn-tint:#332811;
-    --bad:#E0736A; --bad-tint:#3A2422;
-    --shadow: 0 0 0 1px #3F424D, 0 6px 18px rgba(0,0,0,0.55);
+  :root {
+    --bg: #F3F5FE;
+    --card-bg: #ffffff;
+    --indigo: #5D5294;
+    --indigo-dark: #4a4178;
+    --accent: #796CBF;
+    --navy-dark: #292B31;
+    --blue-link: #5D5294;
+    --orange-link: #A5750F;
+    --gray-label: #9aa3b2;
+    --gray-text: #6B6F82;
+    --border: #D7DAEC;
+    --surface-2: #E4E7F5;
+    --green: #3F7A5C;
+    --danger: #A64236;
+    --green-bg: #E1EEE6;
+    --danger-bg: #F3E1DE;
   }
-}
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: #292B31; padding-bottom: 20px; }
+  #app { max-width: 520px; margin: 0 auto; padding: 16px; }
 
-*{box-sizing:border-box;}
-html,body{height:100%;}
-body{
-  margin:0; background:var(--bg); color:var(--ink);
-  font-family:"Inter",-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;
-  -webkit-font-smoothing:antialiased;
-}
-.page{ max-width:1000px; margin:0 auto; padding:16px 16px 32px; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
+  .header .brand { font-size: 12px; color: var(--blue-link); font-weight: 700; margin: 0 0 2px; }
+  .last-update-inline { font-size: 10.5px; color: var(--gray-text); font-weight: 600; text-transform: none; letter-spacing: 0; margin-left: 4px; }
+  .header h1 { font-size: 20px; margin: 0; }
+  .header-right { text-align: right; }
+  .btn-refresh { background: #fff; border: 1px solid var(--border); border-radius: 20px; padding: 8px 16px; font-weight: 700; font-size: 13px; cursor: pointer; color: #374151; }
+  .loading-indicator { font-size: 11px; color: var(--gray-text); margin-top: 4px; }
 
-.topbar{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; padding:2px 4px 14px; }
-.topbar h1{ font-size:22px; font-weight:700; letter-spacing:-0.01em; margin:0; text-wrap:balance; }
-.topbar .eyebrow{ display:block; font-size:11px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--accent); margin-bottom:4px; }
-.topbar .updated{ font-size:12px; color:var(--ink-muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
-.topbar .updated .cache-tag{ font-size:10px; font-weight:700; color:var(--accent); margin-left:4px; }
-.topbar-right{ display:flex; flex-direction:column; align-items:flex-end; gap:0; flex:0 0 auto; }
-.refresh-btn{
-  display:flex; align-items:center; gap:5px; flex:0 0 auto; font-size:11.5px; font-weight:700;
-  color:var(--accent-deep); background:var(--surface); border:1px solid var(--line); border-radius:999px;
-  padding:6px 12px; cursor:pointer; -webkit-tap-highlight-color:transparent; margin-top:6px;
-}
-.refresh-btn svg{ width:13px; height:13px; transition:transform .5s ease; }
-.refresh-btn.loading svg{ animation:spin .7s linear infinite; }
-.refresh-btn:disabled{ opacity:0.6; pointer-events:none; }
-@keyframes spin{ from{transform:rotate(0deg);} to{transform:rotate(360deg);} }
+  .tab-toggle { display: flex; gap: 10px; margin-bottom: 12px; }
+  .tab-btn { flex: 1; padding: 11px 6px; border-radius: 12px; border: none; background: #fff; font-weight: 700; font-size: 12.5px; cursor: pointer; color: #374151; display: flex; align-items: center; justify-content: center; gap: 4px; }
+  .tab-btn.active { background: var(--indigo); color: #fff; }
 
-.main-tabs{ display:flex; gap:6px; margin:4px 0 16px; max-width:420px; }
-.main-tab-btn{
-  flex:1 1 auto; text-align:center; font-size:12.5px; font-weight:700; padding:10px;
-  border-radius:8px; border:1.4px solid var(--line); background:var(--surface); color:var(--ink-muted);
-  cursor:pointer; -webkit-tap-highlight-color:transparent;
-}
-.main-tab-btn.active{ background:var(--accent-deep); border-color:var(--accent-deep); color:#fff; }
+  .btn-atur-tampilan { display: block; margin-left: auto; margin-bottom: 14px; background: var(--surface-2); color: var(--navy-dark); border: 1px solid var(--border); border-radius: 8px; font-size: 11px; font-weight: 700; padding: 6px 10px; cursor: pointer; white-space: nowrap; }
 
-.stats{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:18px; }
-@media (max-width:520px){ .stats{grid-template-columns:1fr;} }
-.stat-card{ position:relative; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:18px 18px 16px; box-shadow:var(--shadow); overflow:hidden; }
-.stat-card .label{ font-size:12.5px; font-weight:600; color:var(--ink-muted); margin:0 0 10px; max-width:70%; }
-.stat-card .value{ font-size:32px; font-weight:750; letter-spacing:-0.02em; font-variant-numeric:tabular-nums; line-height:1; margin:0 0 6px; }
-.stat-card .value small{ font-size:16px; font-weight:600; color:var(--ink-muted); margin-left:2px; }
-.stat-card .sub{ font-size:12.5px; color:var(--ink-muted); margin:0; }
-.stat-card.good{border-top:3px solid var(--good);} .stat-card.warn{border-top:3px solid var(--warn);}
-.stat-card .sub b{color:var(--ink);font-weight:600;}
+  .card { background: var(--card-bg); border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+  .section-label { font-size: 12px; color: var(--gray-label); font-weight: 700; letter-spacing: 0.5px; margin: 14px 0 8px; }
 
-h2.section-title{
-  font-size:12.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em;
-  color:var(--ink-muted); margin:22px 0 4px; display:flex; justify-content:space-between; align-items:center;
-}
-.section-summary{ font-size:11.5px; color:var(--ink-muted); margin:0 0 8px; }
-.section-summary b{ color:var(--ink); font-weight:700; }
+  .empty-box { border: 1px dashed var(--border); border-radius: 14px; padding: 16px; color: var(--gray-text); font-size: 13px; text-align: center; margin-bottom: 12px; }
+  .btn-kirim-rekap { background: var(--indigo); color: #fff; border: none; border-radius: 12px; padding: 12px 20px; font-weight: 700; font-size: 14px; cursor: pointer; width: 100%; margin-bottom: 12px; }
+  .btn-kirim-rekap:disabled { background: #b9c0e8; cursor: default; }
+  .status-bar { background: var(--navy-dark); color: #fff; border-radius: 12px; padding: 14px 16px; font-size: 13px; margin-bottom: 14px; }
 
-.filter-bar{ display:flex; gap:6px; margin:0 0 8px; flex-wrap:wrap; }
-.filter-chip{
-  font-size:10.5px; font-weight:600; padding:4px 10px; border-radius:999px;
-  border:1px solid var(--line); background:var(--surface); color:var(--ink-muted);
-  cursor:pointer; -webkit-tap-highlight-color:transparent; white-space:nowrap;
-}
-.filter-chip.active{ background:var(--accent); border-color:var(--accent); color:#fff; }
+  .antrian-caption { font-size: 12px; color: var(--gray-text); margin-bottom: 8px; }
+  .antrian-kartu { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .antrian-kartu .info { flex: 1; min-width: 0; }
+  .antrian-kartu .nama { font-weight: 700; font-size: 13px; }
+  .antrian-kartu .detail { font-size: 12px; color: var(--gray-text); margin-top: 2px; }
+  .antrian-kartu .btn-hapus { background: var(--surface-2); color: var(--danger); border: none; border-radius: 50%; width: 24px; height: 24px; flex-shrink: 0; cursor: pointer; font-weight: 700; font-size: 13px; }
+  .preview-rekap-box { background: var(--navy-dark); color: #fff; border-radius: 12px; padding: 14px 16px; font-size: 13px; margin-bottom: 14px; }
+  .preview-rekap-box .judul { font-weight: 700; margin-bottom: 10px; }
+  .preview-rekap-box .item { margin-bottom: 8px; }
+  .preview-rekap-box .item .inama { font-weight: 700; }
+  .preview-rekap-box .item .iangka { color: #c8cce0; font-size: 12px; margin-top: 1px; }
+  .preview-rekap-box .hint { font-size: 11px; font-style: italic; color: #9aa3c0; margin-top: 4px; }
 
-.search-wrap{ position:relative; margin:0 0 10px; }
-.search-wrap input{ width:100%; padding:10px 34px 10px 14px; border-radius:8px; border:1.4px solid var(--line); background:var(--surface); font-size:13.5px; color:var(--ink); }
-.search-wrap input:focus{ outline:2px solid var(--accent); outline-offset:1px; }
-.search-wrap .icon{ position:absolute; right:11px; top:50%; transform:translateY(-50%); width:16px; height:16px; color:var(--ink-muted); pointer-events:none; }
-.search-clear{ position:absolute; right:9px; top:50%; transform:translateY(-50%); font-size:11px; font-weight:700; color:var(--ink-muted); background:var(--surface-2); border:none; border-radius:999px; width:20px; height:20px; cursor:pointer; display:none; }
+  .pending-badge { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; background: var(--indigo); color: #fff; border-radius: 50%; font-size: 9px; margin-left: 4px; vertical-align: middle; }
+  .pending-pill { display: inline-block; background: var(--surface-2); color: var(--indigo); font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px; margin-bottom: 8px; }
 
-.empty-state, .error-state{ padding:20px; text-align:center; font-size:12px; color:var(--ink-muted); grid-column:1/-1; }
-.error-state{ color:var(--warn); }
+  .search-box { width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; font-size: 14px; margin-bottom: 8px; background: #fff; }
+  .count-label { font-size: 12px; color: var(--gray-text); margin-bottom: 8px; }
+  .filter-chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 10px; }
+  .chip { flex-shrink: 0; padding: 8px 14px; border-radius: 20px; border: 1px solid var(--border); background: #fff; font-size: 13px; font-weight: 600; cursor: pointer; color: #374151; white-space: nowrap; }
+  .chip.active { background: var(--indigo); color: #fff; border-color: var(--indigo); }
 
-/* ===== REKAP QC: histori submit (1 baris = 1x submit) - CSS GRID, bukan <table> ===== */
-/* v.04: sebelumnya pakai <table>+colgroup, ternyata masih kepepet di webview Telegram
-   (kemungkinan dukungan table-layout:fixed/colgroup gak konsisten). CSS Grid jauh lebih
-   predictable - tiap baris (header & data) grid-template-columns SAMA PERSIS (di-set inline
-   dari JS), jadi kolom dijamin selalu selebar yang ditentukan, gak pernah "direbut" kolom lain. */
-.rekap-wrap{ background:var(--surface); border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow); overflow-x:auto; }
-.rekap-row{ display:grid; align-items:center; }
-.rekap-row > div{ padding:8px 6px; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.rekap-head{ border-bottom:1.4px solid var(--line); }
-.rekap-head > div{ font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-muted); }
-.rekap-row:not(.rekap-head){ border-bottom:1px solid var(--line); }
-.rekap-row:last-child{ border-bottom:none; }
-.rekap-num{ text-align:right; font-variant-numeric:tabular-nums; }
-.rekap-muted{ color:var(--ink-muted); }
-.rekap-selesai{ font-weight:700; text-align:right; font-variant-numeric:tabular-nums; }
-.rekap-reject{ color:var(--bad); font-weight:600; text-align:right; font-variant-numeric:tabular-nums; }
-.rekap-foot{ display:flex; justify-content:flex-end; gap:18px; padding:9px 12px; font-size:12px; border-top:1px solid var(--line); background:var(--surface-2); }
-.rekap-foot b{ color:var(--ink); }
+  .laporan-wrap { background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+  .laporan-card { background: transparent; border-radius: 0; padding: 0; margin: 0; border-top: 1px solid var(--border); }
+  .laporan-card:first-child { border-top: none; }
+  .laporan-top { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; padding: 10px 12px; }
+  .laporan-top .idx { color: var(--gray-label); font-size: 11px; font-weight: 700; padding-top: 3px; width: 12px; flex-shrink: 0; }
+  .chk-selesai { margin-top: 3px; width: 15px; height: 15px; flex-shrink: 0; cursor: pointer; }
+  .row-chevron { width: 12px; color: var(--gray-label); flex-shrink: 0; align-self: center; margin-left: 2px; transition: transform 0.15s ease; font-size: 11px; }
+  .row-chevron.open { transform: rotate(90deg); }
+  .laporan-info { flex: 1; min-width: 0; }
+  .laporan-info .nama { font-weight: 700; font-size: 13px; }
+  .badge-kat { display: inline-block; font-size: 9px; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-left: 5px; background: var(--surface-2); color: var(--indigo); border: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.03em; vertical-align: 1px; }
+  .badge-kat.anak { background: var(--navy-dark); color: #fff; border-color: var(--navy-dark); }
+  .laporan-meta { font-size: 11px; color: var(--gray-text); margin-top: 2px; }
+  .laporan-meta .roll { color: var(--orange-link); font-weight: 600; }
+  .progress-circle { text-align: right; flex-shrink: 0; }
+  .progress-circle .fraction-circle { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 22px; padding: 0 6px; background: var(--navy-dark); color: #fff; border-radius: 50px; font-weight: 800; font-size: 13px; }
+  .progress-circle .fraction-total { font-weight: 700; font-size: 13px; color: #1c1c1e; }
+  .progress-bar-mini { width: 60px; height: 4px; background: #e5e9f2; border-radius: 4px; margin-top: 4px; margin-left: auto; overflow: hidden; }
+  .progress-bar-mini .fill { height: 100%; background: var(--green); }
 
-/* ===== STOK: grid 2+ kolom, expand per kartu ===== */
-.stok-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:8px; }
-.scard{ background:var(--surface); border:1px solid var(--line); border-radius:8px; box-shadow:var(--shadow); overflow:hidden; align-self:start; }
-.scard-head{ display:flex; align-items:center; gap:7px; padding:8px 9px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
-.scard-head:active{ background:var(--surface-2); }
-.num{ width:16px; height:16px; border-radius:50%; background:var(--surface-2); color:var(--ink-muted); font-size:9px; font-weight:700; flex:0 0 auto; display:flex; align-items:center; justify-content:center; }
-.swatch{ width:16px; height:16px; border-radius:5px; flex:0 0 auto; border:1px solid rgba(0,0,0,.08); }
-.scard-main{ flex:1 1 auto; min-width:0; }
-.scard-title{ font-size:11.5px; font-weight:600; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.scard-sub{ font-size:9.5px; color:var(--ink-muted); margin:0; }
-.scard-kg{ font-size:10.5px; font-weight:700; flex:0 0 auto; text-align:right; }
-.scard-chevron{ flex:0 0 auto; width:11px; height:11px; color:var(--ink-muted); transition:transform .2s ease; margin-left:2px; }
-.scard-head.open .scard-chevron{ transform:rotate(90deg); }
-.scard-detail{ max-height:0; overflow:hidden; transition:max-height .2s ease; background:var(--surface-2); }
-.scard-detail-inner{ padding:2px 9px 8px 32px; }
-.roll-item{ display:flex; justify-content:space-between; padding:4px 0; font-size:10px; border-bottom:1px dashed var(--line); }
-.roll-item:last-child{ border-bottom:none; }
-.roll-item .kode{ color:var(--ink-muted); }
-.roll-item .kg{ font-weight:600; }
+  .laporan-expand { margin-top: 8px; border-top: 1px solid var(--border); padding: 8px 12px 10px; }
+  .ukuran-badges { display: flex; gap: 3px 8px; flex-wrap: wrap; margin-bottom: 6px; font-size: 11.5px; }
+  .ukuran-badge { font-weight: 700; color: #374151; }
+  .ukuran-badge .n { color: var(--gray-text); font-weight: 600; margin-left: 2px; }
+  .progress-bar-full { width: 100%; height: 5px; background: #e5e9f2; border-radius: 6px; overflow: hidden; margin-bottom: 5px; }
+  .progress-bar-full .fill { height: 100%; background: var(--green); }
+  .stats-line { display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; color: var(--gray-text); font-weight: 600; margin-bottom: 6px; }
+  .stats-line .sel { color: var(--green); }
+  .stats-line .rej { color: var(--danger); }
+  .stats-line .num { display: inline-block; margin-left: 3px; padding: 0px 7px; border-radius: 999px; font-weight: 700; background: var(--surface-2); color: #374151; }
+  .stats-line .sel .num { background: var(--green-bg); color: var(--green); }
+  .stats-line .rej .num { background: var(--danger-bg); color: var(--danger); }
 
-/* ===== LAPORAN BELUM SELESAI: grid + checkbox ===== */
-.proses-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(215px, 1fr)); gap:8px; }
-.pcard{ background:var(--surface); border:1px solid var(--line); border-radius:8px; box-shadow:var(--shadow); padding:9px 10px 8px; display:flex; gap:8px; align-items:flex-start; }
-.pcard.done{ opacity:.45; }
-.pcard.done .p-title{ text-decoration:line-through; }
-.chk{ width:18px; height:18px; border-radius:6px; border:1.6px solid var(--line); flex:0 0 auto; margin-top:1px; cursor:pointer; display:flex; align-items:center; justify-content:center; background:var(--surface); transition:background .15s,border-color .15s; }
-.chk.checked{ background:var(--good); border-color:var(--good); }
-.chk.busy{ opacity:.5; pointer-events:none; }
-.chk svg{ width:11px; height:11px; opacity:0; }
-.chk.checked svg{ opacity:1; }
-.p-main{ flex:1 1 auto; min-width:0; }
-.p-title{ font-size:11.5px; font-weight:700; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.p-meta{ font-size:10px; font-weight:700; color:var(--ink); margin:3px 0 5px; display:flex; flex-wrap:wrap; gap:3px 6px; }
-.p-meta .roll{ color:var(--accent-deep); }
-.p-meta .kg{ color:var(--warn); }
-.p-meta .dot{ color:var(--line); font-weight:400; }
-.p-sizes{ display:flex; flex-wrap:wrap; gap:3px; margin-bottom:3px; }
-.size-chip{ font-size:calc(10.5px * var(--scale-card)); font-weight:600; background:var(--surface-2); color:var(--ink); padding:2px 6px; border-radius:5px; }
-.size-chip b{ color:var(--accent); font-weight:700; }
-.p-days{ font-size:9.5px; color:var(--ink-muted); margin-top:2px; }
-.p-days.stale{ color:var(--warn); font-weight:700; }
-.p-error{ font-size:9.5px; color:var(--bad); margin-top:4px; }
+  .mode-toggle { display: flex; gap: 5px; margin-bottom: 8px; }
+  .mode-btn { padding: 4px 12px; border-radius: 999px; border: 1px solid var(--border); background: #fff; font-weight: 800; font-size: 11px; cursor: pointer; color: #374151; }
+  .mode-btn.active { background: var(--indigo); color: #fff; border-color: var(--indigo); font-weight: 800; }
 
-/* ===== QC ===== */
-.qc-toolbar{ display:flex; justify-content:space-between; align-items:center; margin:0 0 10px; gap:8px; flex-wrap:wrap; }
-.qc-toolbar span{ font-size:11px; color:var(--ink-muted); }
-.btn-rekap{ font-size:calc(11.5px * var(--scale-preview)); font-weight:700; color:#fff; background:var(--accent); border:none; border-radius:999px; padding:8px 14px; cursor:pointer; }
-.btn-rekap:disabled{ opacity:.6; pointer-events:none; }
-.btn-rekap-float{
-  position:fixed; right:16px; bottom:16px; z-index:39; display:none; align-items:center; gap:7px;
-  font-size:13px; font-weight:700; color:#fff; background:var(--accent); border:none;
-  border-radius:999px; padding:12px 18px; box-shadow:var(--shadow); cursor:pointer;
-}
-.btn-rekap-float.show{ display:flex; }
-.btn-rekap-float .cnt{ background:rgba(255,255,255,.28); border-radius:999px; padding:1px 8px; font-size:11.5px; }
+  .ringkas-fields { display: flex; gap: 10px; margin-bottom: 10px; }
+  .ringkas-fields .field { flex: 1; }
+  .ringkas-fields label { font-size: 12px; font-weight: 700; display: block; margin-bottom: 5px; }
+  .ringkas-fields input { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 10px; font-size: 15px; }
 
-/* Daftar Antrian floating */
-.antrian-float{
-  position:fixed; right:16px; bottom:66px; z-index:38; width:280px; max-width:calc(100vw - 32px);
-  background:var(--surface); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow);
-  display:none; overflow:hidden;
-}
-.antrian-float.show{ display:block; }
-.antrian-float-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
-.antrian-float-head b{ font-size:12.5px; }
-.antrian-float-head span{ color:var(--accent-deep); }
-.antrian-float-chevron{ width:12px; height:12px; color:var(--ink-muted); transition:transform .2s; flex:0 0 auto; }
-.antrian-float-head.open .antrian-float-chevron{ transform:rotate(90deg); }
-.antrian-float-body{ max-height:0; overflow:hidden; transition:max-height .2s ease; border-top:1px solid var(--line); }
-.antrian-float-body-inner{ padding:8px 12px 10px; max-height:280px; overflow-y:auto; }
+  table.rincian-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 12px; }
+  table.rincian-table th { text-align: left; color: var(--gray-label); font-weight: 700; font-size: 10.5px; padding: 3px 2px; }
+  table.rincian-table td { padding: 4px 2px; border-top: 1px solid #f1f4f9; }
+  table.rincian-table input { width: 42px; padding: 5px; border: 1px solid var(--border); border-radius: 8px; text-align: center; font-size: 12px; }
 
-.antrian-wrap{ margin-bottom:12px; }
-.antrian-empty{ font-size:calc(11.5px * var(--scale-antrian)); color:var(--ink-muted); background:var(--surface); border:1px dashed var(--line); border-radius:12px; padding:12px 14px; text-align:left; }
-.antrian-list{ display:flex; flex-direction:column; gap:6px; }
-.antrian-item{ display:flex; align-items:center; gap:8px; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:8px 10px; box-shadow:var(--shadow); }
-.antrian-item .a-info{ flex:1 1 auto; min-width:0; }
-.antrian-item .a-name{ font-size:calc(11.5px * var(--scale-antrian)); font-weight:700; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.antrian-item .a-detail{ font-size:calc(10px * var(--scale-antrian)); color:var(--ink-muted); margin:2px 0 0; }
-.antrian-item .a-detail b{ color:var(--good); }
-.antrian-item .a-detail b.rej{ color:var(--warn); }
-.antrian-del{ flex:0 0 auto; width:22px; height:22px; border-radius:50%; border:none; background:var(--bad-tint); color:var(--bad); font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; }
-.antrian-count{ font-size:calc(11px * var(--scale-antrian)); font-weight:700; color:var(--ink); margin:0 0 6px; }
-.antrian-count span{ color:var(--accent-deep); }
-.telegram-mock{ background:#0E1621; border-radius:14px; padding:12px; margin-bottom:14px; }
-.bubble{ background:#1E2A38; color:#E8EDF2; border-radius:12px; padding:11px 13px; font-size:calc(12px * var(--scale-preview)); line-height:1.5; white-space:pre-wrap; font-family:-apple-system,system-ui,sans-serif; }
-.bubble b{ color:#8FCBC0; }
-.bubble .waktu{ display:block; text-align:right; font-size:9.5px; color:#7C8A99; margin-top:6px; }
-.btn-kirim-beneran{
-  margin-top:10px; font-size:11.5px; font-weight:700; color:#0E1621; background:#8FCBC0;
-  border:none; border-radius:999px; padding:8px 14px; cursor:pointer;
-}
-.btn-kirim-beneran:disabled{ opacity:.6; pointer-events:none; }
+  .btn-tambah-antrian { width: 100%; background: var(--indigo); color: #fff; border: none; border-radius: 10px; padding: 10px; font-weight: 700; font-size: 13.5px; cursor: pointer; }
 
-.qc-grid{ display:flex; flex-direction:column; }
-.qc-card{ background:transparent; border:none; border-top:1px solid var(--line); box-shadow:none; border-radius:0; padding:0; position:relative; }
-.qc-card:first-child{ border-top:none; }
-.qc-card.mengirim::after{
-  content:"● menyimpan…"; position:absolute; top:9px; right:4px; font-size:8px; font-weight:700;
-  color:var(--accent-deep); background:var(--surface); border:1px solid var(--line);
-  border-radius:999px; padding:2px 7px;
-}
-.qc-card.lengkap{ background:var(--good-tint); }
-.qc-row-head{ display:flex; align-items:center; gap:8px; padding:10px 4px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
-.qc-row-head:active{ background:var(--surface-2); }
-.qc-row-main{ flex:1 1 auto; min-width:0; }
-.qc-row-title{ font-size:calc(12.5px * var(--scale-card)); font-weight:700; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.qc-row-title-wrap{ display:flex; align-items:center; gap:6px; min-width:0; }
-.qc-row-title-wrap .qc-row-title{ flex:0 1 auto; }
-.kat-badge{ flex:0 0 auto; font-size:calc(9px * var(--scale-card)); font-weight:700; padding:2px 8px; border-radius:999px; background:var(--surface-2); color:var(--accent-deep); border:1px solid var(--line); text-transform:uppercase; letter-spacing:.03em; }
-.kat-badge.kat-anak{ background:var(--ink); color:var(--surface); border-color:var(--ink); }
-.qc-quick-complete{ flex:0 0 auto; width:17px; height:17px; margin:0; cursor:pointer; accent-color:var(--good); }
-.qc-row-meta{ font-size:calc(10px * var(--scale-card)); font-weight:600; color:var(--ink-muted); margin:2px 0 0; display:flex; flex-wrap:wrap; gap:2px 6px; }
-.qc-row-meta .roll{ color:var(--accent-deep); }
-.qc-row-meta .kg{ color:var(--warn); }
-.qc-row-meta .dot{ color:var(--line); font-weight:400; }
-.qc-row-right{ flex:0 0 auto; text-align:right; min-width:60px; }
-.qc-row-frac{ font-size:calc(15.5px * var(--scale-card)); font-weight:700; color:var(--ink); }
-.qc-frac-sel{ display:inline-flex; align-items:center; justify-content:center; min-width:1.7em; height:1.7em; padding:0 0.25em; border-radius:999px; background:var(--ink); color:var(--surface); }
-.qc-row-bar{ height:4px; border-radius:2px; background:var(--surface-2); overflow:hidden; display:flex; margin-top:3px; }
-.qc-row-chevron{ width:12px; height:12px; color:var(--ink-muted); transition:transform .15s ease; flex:0 0 auto; margin-left:2px; }
-.qc-row-head.open .qc-row-chevron{ transform:rotate(90deg); }
-.qc-row-body{ max-height:0; overflow:hidden; transition:max-height .2s ease; }
-.qc-row-body-inner{ padding:0 4px 14px 27px; }
-.qc-num{ display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border-radius:50%; background:var(--surface-2); color:var(--ink-muted); font-size:9px; font-weight:700; flex:0 0 auto; }
-.qc-meta2{ font-size:calc(11.5px * var(--scale-card)); font-weight:700; color:var(--ink); margin:3px 0 6px; display:flex; flex-wrap:wrap; align-items:center; gap:3px 6px; }
-.qc-meta2 .roll{ color:var(--accent-deep); }
-.qc-meta2 .kg{ color:var(--warn); }
-.qc-meta2 .dot{ color:var(--line); font-weight:400; }
-.qc-badge{ font-size:calc(10.5px * var(--scale-card)); font-weight:700; background:var(--good); color:#fff; padding:2px 8px; border-radius:999px; white-space:nowrap; flex:0 0 auto; }
-.qc-days{ font-size:calc(10.5px * var(--scale-card)); font-weight:600; color:var(--ink-muted); white-space:nowrap; flex:0 0 auto; }
-.qc-days.stale{ color:var(--warn); font-weight:700; }
-.qc-sizes{ display:flex; flex-wrap:wrap; gap:3px; margin-bottom:6px; }
-.qc-progress{ height:5px; border-radius:3px; background:var(--surface-2); overflow:hidden; display:flex; margin:6px 0 3px; }
-.qc-progress .p-sel{ background:var(--good); height:100%; }
-.qc-progress .p-rej{ background:var(--warn); height:100%; }
-.qc-progress-label{ display:flex; justify-content:space-between; font-size:calc(10.5px * var(--scale-card)); color:var(--ink-muted); margin-bottom:6px; }
-.qc-progress-label b{ color:var(--ink); font-weight:700; }
-.qc-mode-switch{ display:flex; gap:5px; margin-bottom:6px; justify-content:space-between; align-items:center; }
-.mode-left{ display:flex; gap:5px; }
-.qc-mode-btn{ font-size:calc(10.5px * var(--scale-card)); font-weight:700; padding:3px 9px; border-radius:999px; border:1px solid var(--line); background:var(--surface); color:var(--ink-muted); cursor:pointer; }
-.qc-mode-btn.active{ background:var(--accent); border-color:var(--accent); color:#fff; }
-.qc-form-row{ display:flex; flex-direction:column; gap:6px; }
-.qc-form-fields{ display:flex; gap:8px; }
-.qc-field{ flex:1 1 auto; min-width:0; }
-.qc-field label{ font-size:calc(10.5px * var(--scale-card)); font-weight:600; color:var(--ink-muted); display:block; margin-bottom:2px; }
-.qc-field input{ width:100%; padding:9px 8px; border-radius:14px; border:1.3px solid var(--line); font-size:calc(14px * var(--scale-card)); font-weight:700; font-family:inherit; background:var(--surface); color:var(--ink); }
-.qc-btn-submit{ background:var(--accent); color:#fff; border:none; border-radius:10px; font-size:calc(11px * var(--scale-card)); font-weight:700; padding:9px 9px; cursor:pointer; width:100%; white-space:nowrap; }
-.qc-btn-submit:disabled{ opacity:.6; }
-.btn-atur-tampilan{ background:var(--surface-2); color:var(--ink); border:1px solid var(--line); border-radius:8px; font-size:11px; font-weight:700; padding:6px 10px; cursor:pointer; white-space:nowrap; }
-.settings-row{ display:flex; justify-content:flex-end; margin:8px 0 14px; }
-.cfg-overlay{ position:fixed; inset:0; background:rgba(20,17,10,.45); display:flex; align-items:flex-end; justify-content:center; z-index:50; }
-.cfg-sheet{ background:var(--surface); width:100%; max-width:460px; border-radius:16px 16px 0 0; padding:16px 16px 20px; max-height:82vh; overflow-y:auto; box-shadow:0 -8px 30px rgba(0,0,0,.25); }
-.cfg-sheet h3{ margin:0 0 3px; font-size:15px; }
-.cfg-sheet .cfg-sub{ font-size:11.5px; color:var(--ink-muted); margin:0 0 14px; }
-.cfg-row{ display:flex; align-items:center; gap:9px; padding:9px 8px; border:1px solid var(--line); border-radius:10px; margin-bottom:7px; background:var(--surface); }
-.cfg-row label{ flex:1 1 auto; display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700; cursor:pointer; }
-.cfg-row input[type="checkbox"]{ width:17px; height:17px; accent-color:var(--accent); flex:0 0 auto; }
-.cfg-row.off label{ color:var(--ink-muted); }
-.cfg-move{ display:flex; gap:3px; flex:0 0 auto; }
-.cfg-move button{ width:26px; height:26px; border-radius:7px; border:1px solid var(--line); background:var(--surface-2); color:var(--ink); font-size:12px; cursor:pointer; }
-.cfg-move button:disabled{ opacity:.35; cursor:default; }
-.cfg-actions{ display:flex; gap:8px; margin-top:14px; }
-.cfg-actions button{ flex:1 1 auto; border:none; border-radius:9px; padding:10px; font-size:13px; font-weight:700; cursor:pointer; }
-.cfg-btn-batal{ background:var(--surface-2); color:var(--ink); }
-.cfg-btn-simpan{ background:var(--accent); color:#fff; }
-.cfg-btn-simpan:disabled{ opacity:.6; }
-.cfg-group-title{ font-size:11.5px; font-weight:800; text-transform:uppercase; letter-spacing:.3px; color:var(--ink-muted); margin:16px 0 7px; }
-.cfg-group-title:first-of-type{ margin-top:0; }
-.cfg-group-note{ font-size:10.5px; color:var(--ink-muted); margin:-3px 0 8px; }
-.cfg-row{ position:relative; }
-.cfg-row .cfg-chk{ width:17px; height:17px; accent-color:var(--accent); flex:0 0 auto; margin-right:2px; }
-.cfg-row-label{ flex:1 1 auto; font-size:13px; font-weight:700; min-width:0; }
-.cfg-label-input{ flex:1 1 auto; min-width:0; font-size:13px; font-weight:700; padding:5px 7px; border-radius:6px; border:1.3px solid var(--line); background:var(--surface); color:var(--ink); }
-.cfg-inline-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 2px; }
-.cfg-inline-row label{ font-size:13px; font-weight:700; }
-.cfg-inline-row select, .cfg-inline-row input[type="number"]{ font-size:13px; padding:6px 8px; border-radius:8px; border:1.3px solid var(--line); background:var(--surface); color:var(--ink); }
-.cfg-swatch-row{ display:flex; gap:9px; padding:4px 2px 2px; }
-.cfg-swatch{ width:34px; height:34px; border-radius:50%; border:2.5px solid transparent; cursor:pointer; padding:0; }
-.cfg-swatch.active{ border-color:var(--ink); }
-.qc-pending-badge{ font-size:calc(10.5px * var(--scale-card)); font-weight:700; color:var(--accent-deep); background:var(--surface-2); border:1px dashed var(--accent); border-radius:999px; padding:3px 8px; margin:0 0 6px; display:inline-block; }
-.pending-val{ color:var(--accent-deep); font-weight:700; }
-.pending-val i{ font-size:8px; font-weight:700; font-style:normal; opacity:.75; margin-left:3px; text-transform:uppercase; }
-.qc-tabel{ width:100%; border-collapse:collapse; margin-bottom:5px; }
-.qc-tabel th{ font-size:calc(10px * var(--scale-card)); font-weight:700; text-transform:uppercase; color:var(--ink-muted); text-align:center; padding:3px 2px; border-bottom:1px solid var(--line); }
-.qc-tabel th:first-child{ text-align:left; }
-.qc-tabel td{ padding:4px 2px; text-align:center; border-bottom:1px dashed var(--line); font-size:calc(12px * var(--scale-card)); font-weight:700; }
-.qc-tabel td:first-child{ text-align:left; font-weight:700; }
-.qc-tabel tr.lengkap-u td{ color:var(--good); }
-.qc-tabel input{ width:42px; padding:5px; border-radius:10px; border:1.3px solid var(--line); font-size:calc(12.5px * var(--scale-card)); font-weight:700; font-family:inherit; text-align:center; background:var(--surface); color:var(--ink); }
-.qc-undo{ font-size:calc(10.5px * var(--scale-card)); font-weight:700; color:var(--bad); background:var(--bad-tint); border:none; border-radius:999px; padding:3px 9px; cursor:pointer; flex:0 0 auto; }
-.qc-error{ font-size:calc(11px * var(--scale-card)); color:var(--bad); margin-top:4px; }
+  .arsip-toggle { background: #fff; border-radius: 14px; padding: 14px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; margin-top: 14px; font-weight: 700; font-size: 13px; }
+  .arsip-toggle .sub { display: block; font-weight: 400; color: var(--gray-text); font-size: 12px; margin-top: 2px; }
+  .arsip-list { margin-top: 8px; }
+  .arsip-item { background: #fff; border-radius: 12px; padding: 10px 12px; margin-bottom: 6px; font-size: 13px; display: flex; justify-content: space-between; }
+  .arsip-item .nama { font-weight: 700; }
+  .arsip-item .meta { color: var(--gray-text); font-size: 11px; }
 
-/* Hilangkan panah stepper bawaan browser di semua input angka */
-input[type="number"]::-webkit-inner-spin-button,
-input[type="number"]::-webkit-outer-spin-button{ -webkit-appearance:none; margin:0; }
-input[type="number"]{ -moz-appearance:textfield; appearance:textfield; }
+  .total-card { background: #fff; border-radius: 16px; padding: 16px; margin-bottom: 14px; border-top: 3px solid var(--green); }
+  .total-card .label { font-size: 12px; color: var(--gray-text); }
+  .total-card .value { font-size: 30px; font-weight: 800; }
+  .total-card .value .unit { font-size: 15px; font-weight: 600; color: var(--gray-text); }
+  .total-card .sub { font-size: 12px; color: var(--gray-text); margin-top: 2px; }
 
-.foot-note{ font-size:10.5px; color:var(--ink-muted); margin-top:16px; line-height:1.5; }
+  .warna-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .warna-card { background: #fff; border-radius: 14px; padding: 12px 14px; cursor: pointer; }
+  .warna-card-top { display: flex; align-items: center; gap: 8px; }
+  .warna-card .swatch { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+  .warna-card .nama { font-weight: 700; font-size: 13px; flex: 1; }
+  .warna-card .kg { font-weight: 800; font-size: 13px; }
+  .warna-card .roll-count { font-size: 11px; color: var(--gray-text); margin-top: 2px; }
+  .warna-detail { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px; }
+  .warna-detail .roll-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; border-bottom: 1px dashed #f1f4f9; }
 
-/* ===== TWEAKS (feel-level controls: suasana / kepadatan / gaya aksen) ===== */
-.tweaks-fab{ position:fixed; right:16px; bottom:16px; width:44px; height:44px; border-radius:50%; border:1px solid var(--line); background:var(--accent-deep); color:#fff; font-size:18px; box-shadow:var(--shadow); cursor:pointer; z-index:40; }
-.tweaks-panel{ position:fixed; right:16px; bottom:68px; width:238px; background:var(--surface); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); padding:14px; z-index:41; }
-.tweaks-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; font-size:13px; font-weight:700; }
-.tweaks-close{ border:none; background:var(--surface-2); color:var(--ink); width:22px; height:22px; border-radius:50%; cursor:pointer; }
-.tweaks-row{ margin-bottom:10px; }
-.tweaks-row:last-child{ margin-bottom:0; }
-.tweaks-label{ display:block; font-size:10.5px; font-weight:700; color:var(--ink-muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:5px; }
-.seg3{ display:flex; gap:4px; }
-.seg3 span{ flex:1 1 auto; text-align:center; font-size:10.5px; font-weight:700; padding:6px 4px; border-radius:8px; border:1px solid var(--line); background:var(--surface-2); color:var(--ink-muted); cursor:pointer; -webkit-tap-highlight-color:transparent; }
-.seg3 span.active{ background:var(--accent); border-color:var(--accent); color:#fff; }
+  /* ============ REKAP QC - CSS GRID (BUKAN <table>) ============
+     Porting persis dari HTML QC ver.04.html (Apps Script) - <table>+colgroup TERBUKTI rusak
+     di webview Telegram (kolom ukuran suka "collapse"). Div-based CSS Grid, lebar kolom
+     dipasang SAMA PERSIS di setiap baris (header & data) lewat inline style, jadi kolom
+     dijamin selalu selebar itu & align sempurna antar baris. */
+  .rekap-summary { font-size: 12px; color: var(--gray-text); margin-bottom: 8px; }
+  .rekap-wrap { background: #fff; border-radius: 14px; overflow-x: auto; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+  .rekap-row { display: grid; align-items: center; }
+  .rekap-row > div { padding: 8px 6px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rekap-head { border-bottom: 1.4px solid var(--border); }
+  .rekap-head > div { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--gray-label); }
+  .rekap-row:not(.rekap-head) { border-bottom: 1px solid var(--border); }
+  .rekap-row:last-child { border-bottom: none; }
+  .rekap-num { text-align: right; font-variant-numeric: tabular-nums; }
+  .rekap-muted { color: var(--gray-text); }
+  .rekap-selesai { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; color: var(--green); }
+  .rekap-reject { color: var(--danger); font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+  .rekap-foot { display: flex; justify-content: flex-end; gap: 18px; padding: 9px 12px; font-size: 12px; border-top: 1px solid var(--border); background: #f7f9fd; }
+  .rekap-foot b { color: #1c1c1e; }
 
-/* Kepadatan: Lega loosens rhythm across sections at once, not one pixel value */
-[data-density="lega"] .page{ padding:20px 20px 44px; }
-[data-density="lega"] .stat-card{ padding:22px 22px 20px; }
-[data-density="lega"] .stok-grid{ gap:14px; }
-[data-density="lega"] .proses-grid{ gap:14px; }
-[data-density="lega"] .qc-grid .qc-row-head{ padding:14px 6px; gap:12px; }
-[data-density="lega"] .qc-row-body-inner{ padding:0 6px 20px 33px; }
-[data-density="lega"] .scard-head{ padding:12px 12px; gap:10px; }
-[data-density="lega"] .pcard{ padding:14px 14px 12px; }
-[data-density="lega"] h2.section-title{ margin:30px 0 8px; }
-[data-density="lega"] .antrian-item{ padding:11px 13px; }
-
-/* Gaya Aksen: Tegas raises visual weight everywhere at once (bolder bars, harder edges) */
-[data-style="tegas"] .qc-row-bar{ height:7px; border-radius:4px; }
-[data-style="tegas"] .qc-progress{ height:8px; }
-[data-style="tegas"] .qc-badge{ font-weight:800; box-shadow:0 1px 5px rgba(0,0,0,.22); }
-[data-style="tegas"] .qc-row-frac{ font-size:calc(17.5px * var(--scale-card)); }
-[data-style="tegas"] .filter-chip.active,[data-style="tegas"] .main-tab-btn.active{ box-shadow:0 3px 10px color-mix(in srgb, var(--accent) 45%, transparent); }
-[data-style="tegas"] .scard,[data-style="tegas"] .pcard,[data-style="tegas"] .qc-card.lengkap,[data-style="tegas"] .stat-card{ border-width:1.6px; }
-[data-style="tegas"] .qc-qty-badge,[data-style="tegas"] .stat-card .value{ letter-spacing:-0.02em; }
-[data-style="tegas"] .btn-rekap,[data-style="tegas"] .qc-btn-submit{ box-shadow:0 2px 8px color-mix(in srgb, var(--accent) 35%, transparent); }
-
-/* ===== ARSIP SELESAI (collapsible, di bawah tiap tab) ===== */
-.arsip-toggle{
-  display:flex; align-items:center; justify-content:space-between; gap:8px;
-  background:var(--surface); border:1px solid var(--line); border-radius:8px;
-  padding:11px 14px; margin-top:18px; cursor:pointer; box-shadow:var(--shadow);
-  -webkit-tap-highlight-color:transparent;
-}
-.arsip-toggle .left{ display:flex; align-items:center; gap:8px; }
-.arsip-toggle .txt b{ font-size:12.5px; }
-.arsip-toggle .txt span{ display:block; font-size:10.5px; color:var(--ink-muted); }
-.arsip-chevron{ width:14px; height:14px; color:var(--ink-muted); transition:transform .2s; flex:0 0 auto; }
-.arsip-toggle.open .arsip-chevron{ transform:rotate(90deg); }
-.arsip-body{ max-height:0; overflow:hidden; transition:max-height .25s ease; }
-.arsip-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(215px, 1fr)); gap:8px; margin-top:10px; }
-.acard{ background:var(--surface); border:1px solid var(--good); background-color:var(--good-tint); border-radius:8px; padding:9px 10px 8px; opacity:0.85; }
-.acard .a-title{ font-size:11.5px; font-weight:700; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.acard .a-meta{ font-size:10px; font-weight:700; color:var(--ink); margin:3px 0 5px; display:flex; flex-wrap:wrap; gap:3px 6px; }
-.acard .a-meta .roll{ color:var(--accent-deep); }
-.acard .a-meta .kg{ color:var(--warn); }
-.acard .a-meta .dot{ color:var(--line); font-weight:400; }
-.acard .a-when{ font-size:9.5px; color:var(--good); font-weight:700; margin-top:4px; }
-.toast{
-  position:fixed; left:16px; right:16px; bottom:18px; background:var(--accent-deep); color:#fff;
-  font-size:12.5px; font-weight:600; padding:11px 16px; border-radius:12px; text-align:center;
-  box-shadow:var(--shadow); opacity:0; transform:translateY(8px); transition:all .25s ease;
-  pointer-events:none; z-index:20; max-width:680px; margin:0 auto;
-}
+  .toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); background: #1c1c1e; color: #fff; padding: 10px 18px; border-radius: 10px; font-size: 13px; z-index: 999; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
 </style>
 </head>
 <body>
 
-<div class="page">
-
-  <div class="topbar">
+<div id="app">
+  <div class="header">
     <div>
-      <span class="eyebrow">Tim Potong · Rekap Makloon</span>
-      <h1>Dashboard Stok Kain</h1>
+      <p class="brand">TIM POTONG · REKAP MAKLOON <span class="last-update-inline" id="lastUpdate"></span></p>
+      <h1 id="pageTitle">Dashboard Stok Kain</h1>
     </div>
-    <div class="topbar-right">
-      <div class="updated" id="updatedAt">Memuat…</div>
-      <button class="refresh-btn" id="btnRefresh" type="button">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M4 4v5h5M20 20v-5h-5M4.5 15a8 8 0 0013.9 3.5M19.5 9A8 8 0 005.6 5.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        Refresh
-      </button>
+    <div class="header-right">
+      <button class="btn-refresh" id="btnRefresh">🔄 Refresh</button>
+      <p class="loading-indicator" id="loadingIndicator" style="display:none">Memuat...</p>
     </div>
   </div>
 
-  <div class="main-tabs">
-    <div class="main-tab-btn" data-maintab="qc">✅ Proses &amp; QC</div>
-    <div class="main-tab-btn active" data-maintab="stok">📦 Stok Kain</div>
-    <div class="main-tab-btn" data-maintab="rekap">📊 Rekap QC</div>
+  <div class="tab-toggle">
+    <button class="tab-btn active" data-tab="qc">✅ Proses & QC</button>
+    <button class="tab-btn" data-tab="stok">📦 Stok Kain</button>
+    <button class="tab-btn" data-tab="rekap">📊 Rekap QC</button>
   </div>
-  <div class="settings-row">
-    <button class="btn-atur-tampilan" type="button" id="btnAturTampilan">✏️ Atur Tampilan</button>
-  </div>
+  <button class="btn-atur-tampilan" id="btnAturTampilan">✏️ Atur Tampilan</button>
 
-  <div id="panel-stok">
-    <div class="stat-card good" style="max-width:340px;">
-      <p class="label">Total Kain Tersisa</p>
-      <p class="value" id="stokValue">—<small>kg</small></p>
-      <p class="sub" id="stokSub">Memuat data…</p>
+  <!-- ============ TAB: PROSES & QC ============ -->
+  <div id="tabQC">
+    <div id="antrianSection" style="display:none">
+      <div class="section-label">DAFTAR ANTRIAN</div>
+      <div id="antrianIsiWrap">
+        <p class="antrian-caption" id="antrianCaption"></p>
+        <div id="antrianKartuList"></div>
+      </div>
+      <button class="btn-kirim-rekap" id="btnKirimRekap" disabled>🚀 Kirim Rekap (0)</button>
+      <div class="preview-rekap-box" id="antrianPreviewBox" style="display:none"></div>
     </div>
 
-    <h2 class="section-title">Stok Tersisa per Warna</h2>
-    <p class="section-summary" id="stokSummary"></p>
-    <div class="filter-bar" id="stokFilterBar">
-      <span class="filter-chip active" data-sort="kg">Kg terbanyak</span>
-      <span class="filter-chip" data-sort="az">Nama A-Z</span>
-      <span class="filter-chip" data-sort="roll">Roll terbanyak</span>
-    </div>
-    <div class="stok-grid" id="stok-list"><div class="empty-state">Memuat…</div></div>
-
-    <p class="foot-note">Cuma nampilin warna yang rollnya masih ada sisa dan belum disentuh sama sekali. Klik kartu buat lihat detail per-roll.</p>
-  </div>
-
-  <div id="panel-qc" style="display:none;">
-    <div id="blockKartuQC">
-      <div class="search-wrap" id="secSearchQC">
-        <input type="text" id="searchQC" placeholder="Cari laporan/warna...">
-        <svg class="icon" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M21 21l-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        <button class="search-clear" id="btnClearQC">✕</button>
-      </div>
-      <div class="qc-toolbar">
-        <span id="qcCount"></span>
-      </div>
-      <div style="display:flex; align-items:center; gap:8px; flex-wrap:nowrap; overflow-x:auto; margin:0 0 8px;">
-        <div class="filter-bar" id="qcKatFilterBar" style="margin:0; flex:0 0 auto;">
-          <span class="filter-chip active" data-kat="semua">Semua</span>
-          <span class="filter-chip" data-kat="anak">Anak</span>
-          <span class="filter-chip" data-kat="dewasa">Dewasa</span>
-        </div>
-        <div class="filter-bar" id="qcFilterBar" style="margin:0; flex:0 0 auto;"></div>
-      </div>
-      <div class="qc-grid" id="qc-list"><div class="empty-state">Memuat…</div></div>
-      <p class="foot-note">Mode Ringkas: 2 angka total otomatis dituang ke ukuran yang masih kosong. Isi form di kartu lalu tekan "+ Tambah ke Daftar" - belum kekirim, masih bisa dihapus dulu di "Daftar Antrian" di bawah. Kalau semua sudah benar, baru tekan "Kirim Rekap" sekali buat kirim semuanya sekaligus.</p>
+    <input type="text" class="search-box" id="searchLaporan" placeholder="Cari laporan/warna...">
+    <div class="count-label" id="countLabel">0 dari 0 laporan</div>
+    <div class="filter-chips">
+      <div class="chip active" data-filter="semua">Semua</div>
+      <div class="chip" data-filter="anak">Anak</div>
+      <div class="chip" data-filter="dewasa">Dewasa</div>
+      <div class="chip active" data-sort="lama">Paling lama</div>
+      <div class="chip" data-sort="baru">Tanggal terbaru</div>
     </div>
 
-    <div id="blockAntrian">
-      <h2 class="section-title" style="margin-top:22px;">Daftar Antrian</h2>
-      <div class="antrian-wrap" id="antrian-wrap"></div>
-    </div>
+    <div class="laporan-wrap"><div id="daftarLaporan"></div></div>
 
-    <div id="blockPreview">
-      <div class="qc-toolbar" style="margin-top:4px;">
-        <span></span>
-        <button class="btn-rekap" type="button" id="btnKirimRekap">✈️ Kirim Rekap</button>
-      </div>
-      <div class="telegram-mock">
-        <div class="bubble" id="telegramPreview">Belum ada laporan di daftar antrian.</div>
-      </div>
+    <div class="arsip-toggle" id="arsipToggle">
+      <span>📁 Arsip Selesai (3 hari terakhir)<span class="sub" id="arsipSub">Ketuk buat lihat</span></span>
+      <span id="arsipChevron">▾</span>
     </div>
-
-    <div id="secArsipQC">
-      <div class="arsip-toggle" data-arsip="qc">
-        <div class="left"><span>📜</span><div class="txt"><b>Arsip Selesai (3 hari terakhir)</b><span id="arsipSummary-qc">Ketuk buat lihat</span></div></div>
-        <svg class="arsip-chevron" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </div>
-      <div class="arsip-body" id="arsipBody-qc"><div class="arsip-grid" id="arsipGrid-qc"></div></div>
-    </div>
+    <div class="arsip-list" id="arsipList" style="display:none"></div>
   </div>
 
-  <div id="panel-rekap" style="display:none;">
-    <h2 class="section-title">Rekap QC</h2>
-    <p class="section-summary" id="rekapSummary">Memuat…</p>
+  <!-- ============ TAB: STOK KAIN ============ -->
+  <div id="tabStok" style="display:none">
+    <div class="total-card">
+      <div class="label">Total Kain Tersisa</div>
+      <div class="value" id="totalKgTersisa">0 <span class="unit">kg</span></div>
+      <div class="sub" id="totalKgSub">di 0 roll · 0 warna</div>
+    </div>
+    <div class="section-label">STOK TERSISA PER WARNA</div>
+    <input type="text" class="search-box" id="searchWarna" placeholder="Cari nama kain/warna...">
+    <div class="filter-chips">
+      <div class="chip active" data-sortwarna="kg">Kg terbanyak</div>
+      <div class="chip" data-sortwarna="nama">Nama A-Z</div>
+      <div class="chip" data-sortwarna="roll">Roll terbanyak</div>
+    </div>
+    <div class="warna-grid" id="warnaGrid"></div>
+  </div>
+
+  <!-- ============ TAB: REKAP QC ============ -->
+  <div id="tabRekap" style="display:none">
+    <div class="section-label">REKAP QC</div>
+    <p class="rekap-summary" id="rekapSummary">Memuat...</p>
     <div class="rekap-wrap">
-      <div id="rekapList">
-        <div class="rekap-row"><div class="empty-state">Memuat…</div></div>
-      </div>
+      <div id="rekapList"></div>
       <div class="rekap-foot" id="rekapFoot"></div>
     </div>
-    <p class="foot-note">1 baris = 1x submit QC, diurutkan sesuai waktu submit ke Telegram. Kalau 1 pekerjaan disubmit beberapa kali, tiap submit muncul sebagai baris terpisah - totalnya tetap sama dengan sheet TIM POTONG.</p>
-  </div>
-
-</div>
-
-<div class="toast" id="toastEl"></div>
-
-<div class="antrian-float" id="antrianFloat">
-  <div class="antrian-float-head open" id="antrianFloatHead">
-    <b>🧾 Daftar Antrian <span id="antrianFloatCount">0</span></b>
-    <svg class="antrian-float-chevron" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  </div>
-  <div class="antrian-float-body" id="antrianFloatBody"><div class="antrian-float-body-inner" id="antrian-wrap-float"></div></div>
-</div>
-
-<button class="btn-rekap-float" id="btnKirimRekapFloat" type="button">✈️ Kirim Rekap <span class="cnt" id="btnKirimRekapFloatCnt">0</span></button>
-
-<div class="cfg-overlay" id="cfgOverlay" style="display:none;">
-  <div class="cfg-sheet">
-    <h3>Atur Tampilan Dashboard</h3>
-    <p class="cfg-sub">Semua pengaturan di sini tersimpan di server - berlaku buat SEMUA orang yang buka dashboard ini.</p>
-
-    <div class="cfg-group-title">Urutan Bagian (Tab QC)</div>
-    <p class="cfg-group-note">Atur urutan tampil Kartu QC, Daftar Antrian, dan Preview &amp; Kirim Rekap.</p>
-    <div id="cfgRowsQCLayout"></div>
-
-    <div class="cfg-group-title">Ukuran Font</div>
-    <div class="cfg-inline-row">
-      <label for="cfgFontCard">Kartu QC</label>
-      <select id="cfgFontCard"></select>
-    </div>
-    <div class="cfg-inline-row">
-      <label for="cfgFontAntrian">Daftar Antrian</label>
-      <select id="cfgFontAntrian"></select>
-    </div>
-    <div class="cfg-inline-row">
-      <label for="cfgFontPreview">Preview &amp; Kirim Rekap</label>
-      <select id="cfgFontPreview"></select>
-    </div>
-
-    <div class="cfg-group-title">Info di Kartu QC</div>
-    <p class="cfg-group-note">Ganti label, sembunyikan, atau atur urutan info yang tampil di tiap kartu.</p>
-    <div id="cfgRowsQCFields"></div>
-
-    <div class="cfg-group-title">Filter Urutan (Tab QC)</div>
-    <p class="cfg-group-note">Minimal 1 filter harus tetap aktif.</p>
-    <div id="cfgRowsQCFilters"></div>
-
-    <div class="cfg-group-title">Info di Kartu Stok</div>
-    <div id="cfgRowsStokFields"></div>
-
-    <div class="cfg-group-title">Tampilkan/Sembunyikan Bagian</div>
-    <div id="cfgRowsSections"></div>
-
-    <div class="cfg-group-title">Pengaturan Umum</div>
-    <div class="cfg-inline-row">
-      <label for="cfgDefaultTab">Tab dibuka pertama kali</label>
-      <select id="cfgDefaultTab">
-        <option value="qc">✅ Proses &amp; QC</option>
-        <option value="stok">📦 Stok Kain</option>
-      </select>
-    </div>
-    <div class="cfg-inline-row">
-      <label for="cfgDefaultFilter">Filter QC default</label>
-      <select id="cfgDefaultFilter"></select>
-    </div>
-    <div class="cfg-inline-row">
-      <label for="cfgStaleDays">Tandai "lama" mulai (hari)</label>
-      <input type="number" id="cfgStaleDays" min="1" max="30" style="width:64px;">
-    </div>
-
-    <div class="cfg-group-title">Warna Aksen</div>
-    <div class="cfg-swatch-row" id="cfgSwatchRow"></div>
-    <div class="cfg-color-row" id="cfgColorRow" style="display:flex;align-items:center;gap:10px;margin-top:8px;">
-      <input type="color" id="cfgAccentPicker" style="width:44px;height:44px;padding:0;border:1.3px solid var(--line);border-radius:10px;background:none;cursor:pointer;">
-      <span style="font-size:11.5px;color:var(--ink-muted);">Pilih warna aksen bebas — ringan, pakai color picker bawaan browser/HP.</span>
-    </div>
-
-    <div class="cfg-actions">
-      <button class="cfg-btn-batal" type="button" id="cfgBatal">Batal</button>
-      <button class="cfg-btn-simpan" type="button" id="cfgSimpan">Simpan</button>
-    </div>
   </div>
 </div>
+
+<div class="toast" id="toast"></div>
 
 <script>
-// v.11: kalau halaman ini dibuka sebagai Mini App Telegram beneran (lewat link Mini App, bukan
-// link browser biasa - lihat catatan DASHBOARD_MINIAPP_SHORT_NAME di backend), tg.ready()/
-// tg.expand() bikin tampilannya "menyatu" ke Telegram (gak jadi floating window pas
-// di-minimize) - PERSIS pola yang sudah dipakai di Mini App Tim Potong (index_v07.html).
-// Kalau dibuka lewat link browser biasa (window.Telegram gak ada), `tg` jadi null dan baris ini
-// dilewati - aman, halaman tetap jalan seperti biasa.
-const tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
+// ============================================================
+// KONFIGURASI - GANTI sesuai URL Worker produksi
+// ============================================================
+const WORKER_URL = 'https://tim-potong-api.dennyalvan.workers.dev';
+// v.02: Supabase Realtime - buat auto-update tanpa refresh manual. Kunci di bawah ini kunci
+// PUBLIK (anon/publishable), AMAN dipasang di kode client-side - beda dari kunci "secret" yang
+// dipakai Worker. Kunci publik ini cuma bisa BACA (SELECT) tabel yang emang udah dikasih izin
+// lewat RLS policy (tim_potong, log_qc, stok_kain) - gak bisa dipakai buat nulis/ubah data.
+const SUPABASE_URL = 'https://upszwynqszlbnwlsutds.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_ryWCacc05wyW7KQK_kEVQQ_AGrJ8998';
+const DAFTAR_UKURAN_URUT = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL', '5XL', '6XL'];
+const HARI_ID = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+
+function formatTanggalPendek(tanggalStr) {
+  if (!tanggalStr) return '';
+  const d = new Date(tanggalStr + 'T00:00:00');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yy = String(d.getFullYear()).slice(-2);
+  return HARI_ID[d.getDay()] + ', ' + dd + '/' + mm + '/' + yy;
+}
+
+function formatKg(n) {
+  return Number(n || 0).toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 2 }) + ' kg';
+}
+const WARNA_KE_HEX = {}; // opsional, kalau mau dipetakan ke warna asli - default abu-abu
+
+const tg = window.Telegram ? window.Telegram.WebApp : null;
 if (tg) { tg.ready(); tg.expand(); }
 
-const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzaWvCi3Vw2fnFgBPfn1qvFBSqYXOrdWi8yxvKc8WOtaIH78JN83dIMiQtQeockW6EDBw/exec";
+let daftarLaporanData = [];
+let antrianQC = []; // [{timPotongId, mode, ringkas, rincian, preview}]
+let filterKategori = 'semua';
+let sortLaporan = 'lama';
+let searchQuery = '';
+let laporanTerbuka = {}; // { [id]: true } - state expand per baris
+let modePerLaporan = {}; // { [id]: 'ringkas'|'rincian' }
 
-function fmtKg(n){ return (n || 0).toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 }); }
-function tampilkanToast(teks){
-  const el = document.getElementById("toastEl");
-  el.textContent = teks;
-  el.style.opacity = "1"; el.style.transform = "translateY(0)";
-  clearTimeout(window._toastTimer);
-  window._toastTimer = setTimeout(function(){ el.style.opacity = "0"; el.style.transform = "translateY(8px)"; }, 2600);
-}
+let stokUtuhData = null;
+let sortWarna = 'kg';
+let searchWarnaQuery = '';
+let warnaTerbuka = {};
 
-// ============ WARNA -> HEX (swatch sesuai nama warna) ============
-const PETA_WARNA = [
-  ["ABU MUDA","#B9B6AC"], ["ABU TUA","#5B5850"], ["MERAH MUDA","#E3899C"], ["HIJAU LUMUT","#5B6B3F"],
-  ["HITAM","#202020"], ["BLACK","#202020"], ["PUTIH","#F5F3EC"], ["WHITE","#F5F3EC"], ["NAVY","#1D2A47"],
-  ["ABU","#8C887E"], ["GREY","#8C887E"], ["GRAY","#8C887E"], ["MERAH","#C1372B"], ["RED","#C1372B"],
-  ["MAROON","#6B1E28"], ["BIRU","#2F5FA8"], ["BLUE","#2F5FA8"], ["KUNING","#E6B92E"], ["YELLOW","#E6B92E"],
-  ["MUSTARD","#C79A3A"], ["HIJAU","#3F7D52"], ["GREEN","#3F7D52"], ["TOSKA","#2E8B80"], ["TEAL","#2E8B80"],
-  ["COKLAT","#6B4A34"], ["COKELAT","#6B4A34"], ["BROWN","#6B4A34"], ["CREAM","#E8DCC0"], ["KREM","#E8DCC0"],
-  ["UNGU","#6E4E93"], ["PURPLE","#6E4E93"], ["PINK","#E28EA1"], ["ORANGE","#DD7A34"], ["ORANYE","#DD7A34"],
-  ["TERACOTA","#BE6640"], ["TERRACOTA","#BE6640"], ["TERRACOTTA","#BE6640"], ["SILVER","#B7B7B3"],
-  ["GOLD","#C6A24B"], ["EMAS","#C6A24B"], ["DENIM","#3C5A75"],
-];
-function cariWarnaCocok(namaUpper){
-  const found = []; let sisa = " " + namaUpper + " ";
-  for (const [kunci, hex] of PETA_WARNA) {
-    const token = " " + kunci + " ";
-    if (sisa.indexOf(token) !== -1) { found.push(hex); sisa = sisa.split(token).join("  "); if (found.length >= 2) break; }
+// ------------------------------------------------------------
+// TAB SWITCH
+// ------------------------------------------------------------
+document.querySelectorAll('.tab-btn').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    const tab = btn.dataset.tab;
+    document.getElementById('tabQC').style.display = tab === 'qc' ? 'block' : 'none';
+    document.getElementById('tabStok').style.display = tab === 'stok' ? 'block' : 'none';
+    document.getElementById('tabRekap').style.display = tab === 'rekap' ? 'block' : 'none';
+    document.getElementById('pageTitle').textContent = 'Dashboard Stok Kain';
+    if (tab === 'stok' && !stokUtuhData) muatStokUtuh();
+    if (tab === 'rekap') muatRekapQC();
+  });
+});
+
+document.getElementById('btnRefresh').addEventListener('click', function () {
+  tampilkanToast('Memuat ulang...');
+  muatDaftarLaporan();
+  if (stokUtuhData) muatStokUtuh();
+});
+
+// v.09: cache instan (stale-while-revalidate) khusus buat PAINT PERTAMA - data yang tampil
+// dari cache SELALU ditandai jelas di label "Terakhir dimuat ... - memuat ulang..." (bukan
+// diam-diam dianggap fresh), dan begitu data asli selesai ditarik, langsung diganti + label
+// balik normal. BEDA dari testproduksi.html: di sini datanya emang harus selalu fresh buat
+// keputusan QC, jadi cache CUMA buat isi layar sebentar sambil nunggu, bukan pengganti fetch.
+function ambilCacheDashboard_(kunci) {
+  try {
+    const raw = localStorage.getItem('dashboard_cache_' + kunci);
+    if (!raw) return null;
+    return JSON.parse(raw); // { waktu, data }
+  } catch (e) {
+    return null;
   }
-  return found;
 }
-function hashColor(nama){ let hash=0; for (let i=0;i<nama.length;i++) hash = nama.charCodeAt(i)+((hash<<5)-hash); return "hsl("+(Math.abs(hash)%360)+",30%,55%)"; }
-function swatchStyle(nama){
-  const cocok = cariWarnaCocok(String(nama||"").toUpperCase());
-  if (cocok.length === 2) return "background:linear-gradient(135deg,"+cocok[0]+" 50%,"+cocok[1]+" 50%)";
-  if (cocok.length === 1) return "background:"+cocok[0];
-  return "background:"+hashColor(String(nama||""));
+function simpanCacheDashboard_(kunci, data) {
+  try {
+    localStorage.setItem('dashboard_cache_' + kunci, JSON.stringify({ waktu: Date.now(), data: data }));
+  } catch (e) {
+    // storage penuh/disabled - gak fatal, cuma gak ke-cache
+  }
+}
+function formatWaktuLalu_(waktuMs) {
+  const detik = Math.round((Date.now() - waktuMs) / 1000);
+  if (detik < 60) return 'baru saja';
+  const menit = Math.round(detik / 60);
+  if (menit < 60) return menit + ' menit lalu';
+  const jam = Math.round(menit / 60);
+  return jam + ' jam lalu';
+}
+function tampilkanLabelCache_(namaTab, waktuCache) {
+  document.getElementById('lastUpdate').textContent = 'Terakhir dimuat ' + formatWaktuLalu_(waktuCache) + ' (' + namaTab + ') - memuat ulang...';
 }
 
-document.querySelectorAll(".main-tab-btn").forEach(function(btn){
-  btn.addEventListener("click", function(){
-    document.querySelectorAll(".main-tab-btn").forEach(function(b){ b.classList.remove("active"); });
-    btn.classList.add("active");
-    document.getElementById("panel-stok").style.display = btn.dataset.maintab === "stok" ? "" : "none";
-    document.getElementById("panel-qc").style.display = btn.dataset.maintab === "qc" ? "" : "none";
-    document.getElementById("panel-rekap").style.display = btn.dataset.maintab === "rekap" ? "" : "none";
-    if (btn.dataset.maintab === "qc" && !qcSudahDimuat) muatDashboardQC();
-    if (btn.dataset.maintab === "stok" && !stokSudahDimuat) muatDashboard();
-    if (btn.dataset.maintab === "rekap" && !rekapSudahDimuat) muatRekapQC();
-    updateFloatingRekapBtn();
-    updateAntrianFloatVisibility();
+function updateJamRefresh() {
+  const now = new Date();
+  document.getElementById('lastUpdate').textContent = 'Diperbarui ' + now.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) + ', ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+}
+
+// ------------------------------------------------------------
+// MUAT DAFTAR LAPORAN
+// ------------------------------------------------------------
+function muatDaftarLaporan() {
+  if (daftarLaporanData.length === 0) {
+    const cache = ambilCacheDashboard_('laporan_qc');
+    if (cache) {
+      daftarLaporanData = cache.data || [];
+      tampilkanLabelCache_('Proses & QC', cache.waktu);
+      renderDaftarLaporan();
+    }
+  }
+  tampilkanLoading(true);
+  fetch(WORKER_URL + '/data/laporan-qc')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      daftarLaporanData = Array.isArray(data) ? data : [];
+      simpanCacheDashboard_('laporan_qc', daftarLaporanData);
+      updateJamRefresh();
+      renderDaftarLaporan();
+    })
+    .catch(function (e) { tampilkanToast('Gagal memuat laporan: ' + e.message); })
+    .finally(function () { tampilkanLoading(false); });
+}
+
+function tampilkanLoading(tampil) {
+  document.getElementById('loadingIndicator').style.display = tampil ? 'block' : 'none';
+}
+
+function hariLaluTeks(tanggalStr) {
+  if (!tanggalStr) return '';
+  const tgl = new Date(tanggalStr + 'T00:00:00');
+  const now = new Date();
+  const diffHari = Math.floor((now - tgl) / (1000 * 60 * 60 * 24));
+  if (diffHari <= 0) return 'hari ini';
+  if (diffHari === 1) return '1 hari lalu';
+  return diffHari + ' hari lalu';
+}
+
+function renderDaftarLaporan() {
+  let data = daftarLaporanData.slice();
+
+  if (filterKategori !== 'semua') {
+    data = data.filter(function (r) { return String(r.kategoriBadge || '').toLowerCase() === filterKategori; });
+  }
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    data = data.filter(function (r) { return String(r.jenisWarnaBaju || '').toLowerCase().indexOf(q) !== -1; });
+  }
+  data.sort(function (a, b) {
+    if (sortLaporan === 'lama') return new Date(a.tanggal) - new Date(b.tanggal);
+    return new Date(b.tanggal) - new Date(a.tanggal);
   });
-});
 
-// ============ STATE (data mentah, dipakai ulang tiap ganti filter/search) ============
-let stokItemsRaw = [];
-let stokSortMode = "kg";
-let stokSudahDimuat = false; // v.16: Stok sekarang JUGA lazy-load (dulu selalu dimuat duluan
-// gak peduli tab default apa) - biar dashboard yang defaultnya buka tab QC gak ikut nunggu Stok
-// selesai dimuat juga.
+  document.getElementById('countLabel').textContent = data.length + ' dari ' + daftarLaporanData.length + ' laporan';
 
-function urutkanStok(items, mode){
-  const copy = items.slice();
-  if (mode === "az") copy.sort(function(a,b){ return a.warna.localeCompare(b.warna, "id"); });
-  else if (mode === "roll") copy.sort(function(a,b){ return (b.rolls||[]).length - (a.rolls||[]).length; });
-  else copy.sort(function(a,b){ return b.kg - a.kg; });
-  return copy;
+  const container = document.getElementById('daftarLaporan');
+  container.innerHTML = data.map(function (r, idx) { return renderLaporanCard(r, idx + 1); }).join('');
+  pasangEventLaporanCard();
 }
 
-// ============ RENDER: STOK (grid, expand independen per kartu) ============
-function renderStok(stok){
-  document.getElementById("stokValue").innerHTML = fmtKg(stok.totalKg) + "<small>kg</small>";
-  document.getElementById("stokSub").innerHTML = "di <b>" + (stok.totalRoll||0) + " roll</b> utuh · " + (stok.totalWarna||0) + " warna";
-  stokItemsRaw = stok.items || [];
-  renderStokList(urutkanStok(stokItemsRaw, stokSortMode));
-}
+function renderLaporanCard(r, nomor) {
+  const pending = hitungPendingUntukLaporan_(r.id);
+  const selesaiTampil = r.totalSelesai + pending.pendingSelesai;
+  const persen = r.jumlah > 0 ? Math.round((selesaiTampil / r.jumlah) * 100) : 0;
+  const terbuka = !!laporanTerbuka[r.id];
+  const badgeClass = String(r.kategoriBadge || '').toLowerCase() === 'anak' ? 'anak' : '';
+  const badgeJam = pending.jumlahEntri > 0 ? '<span class="pending-badge">🕓</span>' : '';
 
-function renderStokList(items){
-  const totalKg = items.reduce(function(s,it){ return s+it.kg; },0);
-  const totalRoll = items.reduce(function(s,it){ return s+(it.rolls||[]).length; },0);
-  document.getElementById("stokSummary").innerHTML = items.length + " warna · <b>"+totalRoll+" roll</b> · <b>"+fmtKg(totalKg)+" kg</b>";
+  // v.02: lingkaran cuma muncul kalau UDAH ADA progress (totalSelesai > 0) - biar mata
+  // langsung fokus ke angka yang lagi dikerjakan. Kalau masih 0, tampil "-/jumlah" polos
+  // tanpa lingkaran (sesuai contoh pembanding). v.05: kalau ada entri "nunggu dikirim" di
+  // antrian, angka & progress bar-nya LANGSUNG kelihatan hasil akhirnya (live preview),
+  // ditandai ikon jam kecil - biar Denny gak perlu nunggu submit beneran buat lihat efeknya.
+  const fraksiHtml = selesaiTampil > 0
+    ? '<span class="fraction-circle">' + selesaiTampil + '</span><span class="fraction-total">/' + r.jumlah + '</span>' + badgeJam
+    : '<span class="fraction-total">-/' + r.jumlah + '</span>' + badgeJam;
 
-  const wrap = document.getElementById("stok-list");
-  if (!items.length) { wrap.innerHTML = '<div class="empty-state">Belum ada roll yang masih utuh.</div>'; return; }
-
-  wrap.innerHTML = items.map(function(s, i){
-    const rolls = s.rolls || [];
-    const detailId = "stokdetail-"+i;
-    const showJumlahRoll = !stokFieldConfig.length || (stokFieldConfig.find(function(f){return f.key==="jumlahRoll";})||{show:true}).show;
-    const subHtml = showJumlahRoll ? '<p class="scard-sub">'+rolls.length+' roll</p>' : '';
-    return '<div class="scard">' +
-      '<div class="scard-head" data-target="'+detailId+'">' +
-        '<span class="num">'+(i+1)+'</span>' +
-        '<div class="swatch" style="'+swatchStyle(s.warna)+'"></div>' +
-        '<div class="scard-main"><p class="scard-title">'+s.warna+'</p>'+subHtml+'</div>' +
-        '<div class="scard-kg">'+fmtKg(s.kg)+'<br>kg</div>' +
-        '<svg class="scard-chevron" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
-      '</div>' +
-      '<div class="scard-detail" id="'+detailId+'"><div class="scard-detail-inner">' +
-        (rolls.length ? rolls.map(function(r){ return '<div class="roll-item"><span class="kode">Roll '+r.kodeRoll+'</span><span class="kg">'+fmtKg(r.kg)+' kg</span></div>'; }).join("") : '<div class="roll-item">Tidak ada detail roll.</div>') +
-      '</div></div>' +
+  let html = '<div class="laporan-card" data-id="' + r.id + '">' +
+    '<div class="laporan-top">' +
+    '<span class="idx">' + nomor + '</span>' +
+    '<input type="checkbox" class="chk-selesai" data-quickdone="' + r.id + '" title="Tandai selesai semua sisa">' +
+    '<div class="laporan-info" data-toggle="' + r.id + '">' +
+    '<span class="nama">' + escapeHtml(r.jenisWarnaBaju) + '</span>' +
+    (r.kategoriBadge ? '<span class="badge-kat ' + badgeClass + '">' + escapeHtml(r.kategoriBadge) + '</span>' : '') +
+    '<div class="laporan-meta">' + formatTanggalPendek(r.tanggal) + ' · <span class="roll">Roll ' + (r.kodeRoll ? escapeHtml(r.kodeRoll) : '-') + '</span> · ' + formatKg(r.pemakaianKainKg) + ' · ' + hariLaluTeks(r.tanggal) + '</div>' +
+    '</div>' +
+    '<div class="progress-circle" data-toggle="' + r.id + '">' + fraksiHtml +
+    '<div class="progress-bar-mini"><div class="fill" style="width:' + persen + '%"></div></div></div>' +
+    '<span class="row-chevron' + (terbuka ? ' open' : '') + '" data-toggle="' + r.id + '">▶</span>' +
     '</div>';
-  }).join("");
 
-  wrap.querySelectorAll(".scard-head").forEach(function(head){
-    head.addEventListener("click", function(){
-      const detail = document.getElementById(head.dataset.target);
-      const isOpen = head.classList.contains("open");
-      head.classList.toggle("open", !isOpen);
-      detail.style.maxHeight = !isOpen ? detail.scrollHeight + "px" : null;
+  if (terbuka) {
+    html += renderLaporanExpand(r);
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderLaporanExpand(r) {
+  const pending = hitungPendingUntukLaporan_(r.id);
+  const selesaiTampil = r.totalSelesai + pending.pendingSelesai;
+  const rejectTampil = r.totalReject + pending.pendingReject;
+  const sisaTampil = r.jumlah - selesaiTampil - rejectTampil;
+  const persen = r.jumlah > 0 ? Math.round((selesaiTampil / r.jumlah) * 100) : 0;
+  const mode = modePerLaporan[r.id] || 'ringkas';
+  const perUkuranSorted = r.perUkuran.slice().sort(function (a, b) { return DAFTAR_UKURAN_URUT.indexOf(a.ukuran) - DAFTAR_UKURAN_URUT.indexOf(b.ukuran); });
+
+  let html = '<div class="laporan-expand">' +
+    '<div class="ukuran-badges">' + perUkuranSorted.map(function (u) { return '<span class="ukuran-badge">' + u.ukuran + '<span class="n">' + u.qty + '</span></span>'; }).join('') + '</div>';
+
+  if (pending.jumlahEntri > 0) {
+    html += '<div class="pending-pill">🕓 ' + pending.jumlahEntri + ' di antrian (+' + pending.pendingSelesai + ' sel / +' + pending.pendingReject + ' rej)</div>';
+  }
+
+  html += '<div class="progress-bar-full"><div class="fill" style="width:' + persen + '%"></div></div>' +
+    '<div class="stats-line"><span class="sel">Sel<span class="num">' + selesaiTampil + '</span></span><span class="rej">Rej<span class="num">' + rejectTampil + '</span></span><span class="sisa">Sisa<span class="num">' + sisaTampil + '</span></span></div>' +
+    '<div class="mode-toggle">' +
+    '<button class="mode-btn ' + (mode === 'ringkas' ? 'active' : '') + '" data-modebtn="ringkas" data-id="' + r.id + '">Ringkas</button>' +
+    '<button class="mode-btn ' + (mode === 'rincian' ? 'active' : '') + '" data-modebtn="rincian" data-id="' + r.id + '">Rincian</button>' +
+    '</div>';
+
+  if (mode === 'ringkas') {
+    html += '<div class="ringkas-fields">' +
+      '<div class="field"><label>Selesai</label><input type="number" min="0" id="ringkasSelesai-' + r.id + '" placeholder="0"></div>' +
+      '<div class="field"><label>Reject</label><input type="number" min="0" id="ringkasReject-' + r.id + '" placeholder="0"></div>' +
+      '</div>';
+  } else {
+    html += '<table class="rincian-table"><thead><tr><th>UK</th><th>QTY</th><th>SEL</th><th>REJ</th><th>SISA</th></tr></thead><tbody>';
+    perUkuranSorted.forEach(function (u) {
+      const selesai = u.sisa <= 0
+        ? u.selesai
+        : '<input type="number" min="0" max="' + u.sisa + '" id="rincianSel-' + r.id + '-' + u.ukuran + '" placeholder="0">';
+      const reject = u.sisa <= 0
+        ? u.reject
+        : '<input type="number" min="0" max="' + u.sisa + '" id="rincianRej-' + r.id + '-' + u.ukuran + '" placeholder="0">';
+      html += '<tr><td>' + u.ukuran + '</td><td>' + u.qty + '</td><td>' + selesai + '</td><td>' + reject + '</td><td>' + u.sisa + '</td></tr>';
+    });
+    html += '</tbody></table>';
+  }
+
+  html += '<button class="btn-tambah-antrian" data-tambah="' + r.id + '">+ Tambah ke Daftar</button></div>';
+  return html;
+}
+
+function pasangEventLaporanCard() {
+  document.querySelectorAll('[data-toggle]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      const id = el.dataset.toggle;
+      laporanTerbuka[id] = !laporanTerbuka[id];
+      renderDaftarLaporan();
+    });
+  });
+  document.querySelectorAll('[data-modebtn]').forEach(function (el) {
+    el.addEventListener('click', function (e) {
+      e.stopPropagation();
+      modePerLaporan[el.dataset.id] = el.dataset.modebtn;
+      renderDaftarLaporan();
+    });
+  });
+  document.querySelectorAll('[data-tambah]').forEach(function (el) {
+    el.addEventListener('click', function (e) {
+      e.stopPropagation();
+      tambahKeAntrian(parseInt(el.dataset.tambah, 10));
+    });
+  });
+  // v.02: checkbox shortcut "tandai selesai semua sisa" - LANGSUNG masuk antrian (mode ringkas,
+  // Selesai = sisa saat ini, Reject 0), TAPI tetap harus lewat "Kirim Rekap" buat beneran
+  // terkirim - jadi tetap ada jeda konfirmasi (antrian ringkasan-nya berfungsi sebagai preview),
+  // bukan langsung submit ke server saat itu juga.
+  document.querySelectorAll('[data-quickdone]').forEach(function (el) {
+    el.addEventListener('click', function (e) {
+      e.stopPropagation();
+      const id = parseInt(el.dataset.quickdone, 10);
+      const r = daftarLaporanData.find(function (x) { return x.id === id; });
+      el.checked = false; // checkbox ini cuma "tombol sekali tap", bukan status permanen
+      if (!r || r.sisa <= 0) { tampilkanToast('Item ini sudah gak ada sisa.'); return; }
+      const sudahDiAntrian = antrianQC.some(function (a) { return a.timPotongId === id; });
+      if (sudahDiAntrian) { tampilkanToast('Item ini sudah ada di antrian.'); return; }
+      antrianQC.push({
+        timPotongId: id, mode: 'ringkas', ringkas: { selesai: r.sisa, reject: 0 },
+        preview: r.jenisWarnaBaju + ' - Selesaikan sisa ' + r.sisa + ' pcs'
+      });
+      renderAntrian();
+      tampilkanToast('✓ "' + r.jenisWarnaBaju + '" ditambahkan ke antrian (selesaikan semua sisa) - cek dulu di daftar antrian sebelum Kirim Rekap.');
     });
   });
 }
 
-// ============ FILTER SORT CHIPS (dipakai bareng Stok & tab Proses/QC) ============
-function pasangFilterBar(barId, onPilih){
-  const bar = document.getElementById(barId);
-  bar.addEventListener("click", function(ev){
-    const chip = ev.target.closest(".filter-chip");
-    if (!chip) return;
-    bar.querySelectorAll(".filter-chip").forEach(function(c){ c.classList.remove("active"); });
-    chip.classList.add("active");
-    onPilih(chip.dataset.sort);
-  });
-}
-pasangFilterBar("stokFilterBar", function(mode){ stokSortMode = mode; renderStokList(urutkanStok(stokItemsRaw, stokSortMode)); });
+function tambahKeAntrian(id) {
+  const sudahAdaDiAntrian = antrianQC.some(function (a) { return a.timPotongId === id; });
+  if (sudahAdaDiAntrian) { tampilkanToast('Laporan ini sudah ada di antrian - hapus dulu kalau mau ubah angkanya.'); return; }
 
-// ============ MUAT DASHBOARD UTAMA (Stok saja - Proses digabung ke tab QC) ============
-function muatDashboard(paksaRefresh){
-  const btnRefresh = document.getElementById("btnRefresh");
-  btnRefresh.classList.add("loading"); btnRefresh.disabled = true;
-  const url = WEBAPP_URL + "?action=dashboard" + (paksaRefresh ? "&refresh=1" : "");
-  fetch(url, { cache: "no-store" })
-    .then(function(res){ return res.json(); })
-    .then(function(data){
-      stokSudahDimuat = true;
-      renderStok(data.stok || {});
-      const updated = data.updatedAt ? new Date(data.updatedAt) : new Date();
-      const cacheTag = data.dariCache ? '<span class="cache-tag">· cache</span>' : '';
-      document.getElementById("updatedAt").innerHTML =
-        "Diperbarui " + updated.toLocaleDateString("id-ID", { day:"numeric", month:"short" }) + ", " +
-        updated.toLocaleTimeString("id-ID", { hour:"2-digit", minute:"2-digit" }) + cacheTag;
-    })
-    .catch(function(err){
-      document.getElementById("updatedAt").textContent = "Gagal memuat";
-      document.getElementById("stok-list").innerHTML = '<div class="error-state">Gagal memuat: '+err.message+'</div>';
-    })
-    .finally(function(){ btnRefresh.classList.remove("loading"); btnRefresh.disabled = false; });
-}
-document.getElementById("btnRefresh").addEventListener("click", function(){
-  muatDashboard(true);
-  muatDashboardQC(true); // v.08: dulu cuma Stok yang ke-refresh, QC-nya kelupaan
-  if (rekapSudahDimuat) muatRekapQC(true);
-});
+  const r = daftarLaporanData.find(function (x) { return x.id === id; });
+  const mode = modePerLaporan[id] || 'ringkas';
+  let entry = { timPotongId: id, mode: mode, preview: r.jenisWarnaBaju };
 
-// ============ TAB REKAP QC (histori submit LOG QC, 1 baris = 1x submit) ============
-let rekapItemsRaw = [];
-let rekapDaftarUkuran = [];
-let rekapSudahDimuat = false;
-
-function muatRekapQC(paksaRefresh){
-  fetch(WEBAPP_URL + "?action=rekapQC" + (paksaRefresh ? "&refresh=1" : ""), { cache: "no-store" })
-    .then(function(res){ return res.json(); })
-    .then(function(data){
-      rekapSudahDimuat = true;
-      rekapItemsRaw = data.items || [];
-      rekapDaftarUkuran = data.daftarUkuran || [];
-      renderRekapQC();
-    })
-    .catch(function(err){
-      document.getElementById("rekapSummary").textContent = "Gagal memuat";
-      document.getElementById("rekapList").innerHTML = '<div class="rekap-row" style="grid-template-columns:1fr"><div class="error-state">Gagal memuat: '+err.message+'</div></div>';
+  if (mode === 'ringkas') {
+    const s = parseFloat(document.getElementById('ringkasSelesai-' + id).value) || 0;
+    const rj = parseFloat(document.getElementById('ringkasReject-' + id).value) || 0;
+    if (s <= 0 && rj <= 0) { tampilkanToast('Isi dulu Selesai/Reject.'); return; }
+    entry.ringkas = { selesai: s, reject: rj };
+    entry.preview += ' - Ringkas Sel ' + s + ' Rej ' + rj;
+  } else {
+    const rincian = [];
+    r.perUkuran.forEach(function (u) {
+      if (u.sisa <= 0) return;
+      const selEl = document.getElementById('rincianSel-' + id + '-' + u.ukuran);
+      const rejEl = document.getElementById('rincianRej-' + id + '-' + u.ukuran);
+      const s = selEl ? (parseFloat(selEl.value) || 0) : 0;
+      const rj = rejEl ? (parseFloat(rejEl.value) || 0) : 0;
+      if (s > 0 || rj > 0) rincian.push({ ukuran: u.ukuran, selesai: s, reject: rj });
     });
+    if (rincian.length === 0) { tampilkanToast('Isi dulu minimal 1 ukuran.'); return; }
+    entry.rincian = rincian;
+    entry.preview += ' - Rincian ' + rincian.map(function (x) { return x.ukuran + ':' + x.selesai + '/' + x.reject; }).join(', ');
+  }
+
+  antrianQC.push(entry);
+  laporanTerbuka[id] = false;
+  renderDaftarLaporan();
+  renderAntrian();
+  tampilkanToast('✓ Ditambahkan ke antrian');
 }
 
-// Kolom ukuran cuma yang BENERAN dipakai (biar gak banyak kolom kosong kalau kategori yang lagi
-// disubmit cuma pakai sebagian dari XS..6XL). Kolom Reject SENGAJA cuma 1 (total), bukan
-// dipecah per ukuran - detail per-ukurannya tetap tersimpan di sheet (notasi ringkas), cuma
-// gak ditampilkan di sini biar tabelnya gak penuh. Harga Jait/Total SENGAJA tidak ditampilkan.
-function renderRekapQC(){
-  const items = rekapItemsRaw;
-  const ukuranDipakai = rekapDaftarUkuran.filter(function(u){
-    return items.some(function(it){ return (it.sizes[u]||0) > 0; });
+// Hitung total Selesai/Reject yang lagi "nunggu dikirim" buat 1 laporan (dari antrianQC) -
+// dipakai buat preview live di baris laporan (lingkaran angka + pill "di antrian").
+function hitungPendingUntukLaporan_(id) {
+  const entri = antrianQC.filter(function (a) { return a.timPotongId === id; });
+  let pendingSelesai = 0, pendingReject = 0;
+  entri.forEach(function (a) {
+    if (a.mode === 'ringkas') {
+      pendingSelesai += a.ringkas.selesai;
+      pendingReject += a.ringkas.reject;
+    } else {
+      a.rincian.forEach(function (r2) { pendingSelesai += r2.selesai; pendingReject += r2.reject; });
+    }
   });
+  return { jumlahEntri: entri.length, pendingSelesai: pendingSelesai, pendingReject: pendingReject };
+}
 
-  // v.04: CSS Grid, bukan <table> lagi (table-layout:fixed+colgroup ternyata masih kepepet di
-  // webview Telegram). grid-template-columns yang SAMA PERSIS dipasang di SETIAP baris (header
-  // & data) via inline style, jadi kolom dijamin selalu selebar ini, gak pernah direbut kolom
-  // lain, dan otomatis align sempurna antar baris.
-  const LEBAR_WAKTU = 150, LEBAR_WARNA = 110, LEBAR_VARIAN = 120, LEBAR_UKURAN = 40, LEBAR_ANGKA = 68;
-  const templateKolom = LEBAR_WAKTU+'px '+LEBAR_WARNA+'px '+LEBAR_VARIAN+'px ' +
-    ukuranDipakai.map(function(){ return LEBAR_UKURAN+'px'; }).join(' ') +
-    ' '+LEBAR_ANGKA+'px '+LEBAR_ANGKA+'px';
-  const lebarTotal = LEBAR_WAKTU + LEBAR_WARNA + LEBAR_VARIAN + (ukuranDipakai.length*LEBAR_UKURAN) + (LEBAR_ANGKA*2);
+function hapusDariAntrian(index) {
+  antrianQC.splice(index, 1);
+  renderDaftarLaporan();
+  renderAntrian();
+}
 
-  const list = document.getElementById("rekapList");
-  list.style.minWidth = lebarTotal + "px";
+function renderAntrian() {
+  const section = document.getElementById('antrianSection');
+  const caption = document.getElementById('antrianCaption');
+  const kartuList = document.getElementById('antrianKartuList');
+  const btnKirim = document.getElementById('btnKirimRekap');
+  const previewBox = document.getElementById('antrianPreviewBox');
 
-  const summary = document.getElementById("rekapSummary");
-  const headHtml = '<div class="rekap-row rekap-head" style="grid-template-columns:'+templateKolom+'">' +
-    '<div>Waktu</div><div>Warna</div><div>Varian</div>' +
-    ukuranDipakai.map(function(u){ return '<div class="rekap-num">'+u+'</div>'; }).join('') +
-    '<div class="rekap-num">Selesai</div><div class="rekap-num">Reject</div></div>';
-
-  if (!items.length) {
-    summary.textContent = "Belum ada submit QC.";
-    list.innerHTML = headHtml + '<div class="rekap-row" style="grid-template-columns:1fr"><div class="empty-state">Belum ada submit QC.</div></div>';
-    document.getElementById("rekapFoot").innerHTML = "";
+  if (antrianQC.length === 0) {
+    section.style.display = 'none';
+    previewBox.style.display = 'none';
+    btnKirim.textContent = '🚀 Kirim Rekap (0)';
+    btnKirim.disabled = true;
     return;
   }
-  summary.innerHTML = items.length + " submit";
 
-  const barisHtml = items.map(function(it){
-    return '<div class="rekap-row" style="grid-template-columns:'+templateKolom+'">' +
-      '<div class="rekap-muted">'+(it.waktu||'-')+'</div>' +
-      '<div>'+(it.warna||'-')+'</div>' +
-      '<div class="rekap-muted">'+(it.varian||'-')+'</div>' +
-      ukuranDipakai.map(function(u){ return '<div class="rekap-num">'+(it.sizes[u] ? it.sizes[u] : '<span class="rekap-muted">–</span>')+'</div>'; }).join('') +
-      '<div class="rekap-selesai">'+it.selesai+'</div>' +
-      '<div class="'+(it.reject>0?'rekap-reject':'rekap-num rekap-muted')+'">'+it.reject+'</div>' +
-    '</div>';
+  section.style.display = 'block';
+  caption.textContent = antrianQC.length + ' laporan menunggu dikirim';
+
+  // Kartu putih per-item, ada tombol hapus (X)
+  kartuList.innerHTML = antrianQC.map(function (a, i) {
+    const angka = a.mode === 'ringkas' ? a.ringkas : null;
+    const detailTeks = angka
+      ? ('Selesai +' + angka.selesai + ' · Reject +' + angka.reject)
+      : a.rincian.map(function (r2) { return r2.ukuran + ' +' + r2.selesai + '/' + r2.reject; }).join(', ');
+    return '<div class="antrian-kartu">' +
+      '<div class="info"><div class="nama">' + escapeHtml(a.preview.split(' - ')[0]) + '</div>' +
+      '<div class="detail">' + escapeHtml(detailTeks) + '</div></div>' +
+      '<button class="btn-hapus" data-hapusantrian="' + i + '">✕</button>' +
+      '</div>';
+  }).join('');
+  kartuList.querySelectorAll('[data-hapusantrian]').forEach(function (el) {
+    el.addEventListener('click', function () { hapusDariAntrian(parseInt(el.dataset.hapusantrian, 10)); });
+  });
+
+  btnKirim.textContent = '🚀 Kirim Rekap (' + antrianQC.length + ')';
+  btnKirim.disabled = false;
+
+  // Kotak preview gelap - format "REKAP UPDATE QC", sama kayak versi Apps Script
+  previewBox.style.display = 'block';
+  previewBox.innerHTML = '<div class="judul">📋 REKAP UPDATE QC (' + antrianQC.length + ' laporan)</div>' +
+    antrianQC.map(function (a) {
+      const angka = a.mode === 'ringkas' ? a.ringkas : null;
+      const angkaTeks = angka
+        ? ('Selesai: ' + angka.selesai + ' pcs · Reject: ' + angka.reject + ' pcs')
+        : a.rincian.map(function (r2) { return r2.ukuran + ': ' + r2.selesai + ' sel / ' + r2.reject + ' rej'; }).join(', ');
+      return '<div class="item"><div class="inama">' + escapeHtml(a.preview.split(' - ')[0]) + '</div>' +
+        '<div class="iangka">' + escapeHtml(angkaTeks) + '</div></div>';
+    }).join('') +
+    '<div class="hint">preview - klik "Kirim Rekap" utk kirim beneran</div>';
+}
+
+document.getElementById('btnKirimRekap').addEventListener('click', function () {
+  if (!tg || !tg.initData) { tampilkanToast('Harus dibuka lewat Telegram.'); return; }
+  if (antrianQC.length === 0) return;
+  const btn = this;
+  btn.disabled = true;
+  btn.textContent = 'Mengirim...';
+
+  const antrianSalinan = antrianQC.slice();
+  let berhasil = 0, gagalPesan = [];
+
+  function prosesSatuPersatu(i) {
+    if (i >= antrianSalinan.length) {
+      antrianQC = [];
+      renderAntrian();
+      muatDaftarLaporan();
+      if (gagalPesan.length > 0) {
+        tampilkanToast(berhasil + ' berhasil, ' + gagalPesan.length + ' gagal - cek detail.');
+        alert('Gagal:\n' + gagalPesan.join('\n'));
+      } else {
+        tampilkanToast('✓ Semua (' + berhasil + ') berhasil dikirim!');
+      }
+      return;
+    }
+    const item = antrianSalinan[i];
+    const payload = { initData: tg.initData, timPotongId: item.timPotongId, mode: item.mode };
+    if (item.mode === 'ringkas') payload.ringkas = item.ringkas; else payload.rincian = item.rincian;
+
+    fetch(WORKER_URL + '/submit-qc', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.ok) berhasil++; else gagalPesan.push(item.preview + ': ' + data.error);
+        prosesSatuPersatu(i + 1);
+      })
+      .catch(function (e) {
+        gagalPesan.push(item.preview + ': ' + e.message);
+        prosesSatuPersatu(i + 1);
+      });
+  }
+  prosesSatuPersatu(0);
+});
+
+// ------------------------------------------------------------
+// SEARCH & FILTER
+// ------------------------------------------------------------
+document.getElementById('searchLaporan').addEventListener('input', function () {
+  searchQuery = this.value;
+  renderDaftarLaporan();
+});
+document.querySelectorAll('.chip[data-filter]').forEach(function (el) {
+  el.addEventListener('click', function () {
+    document.querySelectorAll('.chip[data-filter]').forEach(function (c) { c.classList.remove('active'); });
+    el.classList.add('active');
+    filterKategori = el.dataset.filter;
+    renderDaftarLaporan();
+  });
+});
+document.querySelectorAll('.chip[data-sort]').forEach(function (el) {
+  el.addEventListener('click', function () {
+    document.querySelectorAll('.chip[data-sort]').forEach(function (c) { c.classList.remove('active'); });
+    el.classList.add('active');
+    sortLaporan = el.dataset.sort;
+    renderDaftarLaporan();
+  });
+});
+
+// ------------------------------------------------------------
+// ARSIP SELESAI
+// ------------------------------------------------------------
+let arsipDimuat = false;
+document.getElementById('arsipToggle').addEventListener('click', function () {
+  const list = document.getElementById('arsipList');
+  const terbuka = list.style.display === 'block';
+  list.style.display = terbuka ? 'none' : 'block';
+  document.getElementById('arsipChevron').textContent = terbuka ? '▾' : '▴';
+  if (!terbuka && !arsipDimuat) muatArsip();
+});
+function muatArsip() {
+  fetch(WORKER_URL + '/data/arsip-selesai?hari=3')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      arsipDimuat = true;
+      const list = Array.isArray(data) ? data : [];
+      document.getElementById('arsipSub').textContent = list.length + ' laporan';
+      document.getElementById('arsipList').innerHTML = list.map(function (a) {
+        return '<div class="arsip-item"><div><div class="nama">' + escapeHtml(a.jenisWarnaBaju) + '</div>' +
+          '<div class="meta">' + (a.tanggal || '') + ' · ' + (a.jumlah || 0) + ' pcs</div></div>' +
+          '<div class="meta">' + new Date(a.waktu).toLocaleString('id-ID') + '</div></div>';
+      }).join('');
+    })
+    .catch(function (e) { tampilkanToast('Gagal memuat arsip: ' + e.message); });
+}
+
+// ------------------------------------------------------------
+// TAB STOK KAIN
+// ------------------------------------------------------------
+function muatStokUtuh() {
+  if (!stokUtuhData) {
+    const cache = ambilCacheDashboard_('stok_utuh');
+    if (cache && cache.data) {
+      stokUtuhData = cache.data;
+      tampilkanLabelCache_('Stok Kain', cache.waktu);
+      document.getElementById('totalKgTersisa').innerHTML = formatAngka(stokUtuhData.totalKg) + ' <span class="unit">kg</span>';
+      document.getElementById('totalKgSub').textContent = 'di ' + stokUtuhData.totalRoll + ' roll · ' + stokUtuhData.totalWarna + ' warna';
+      renderWarnaGrid();
+    }
+  }
+  fetch(WORKER_URL + '/data/stok-utuh')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      stokUtuhData = data;
+      simpanCacheDashboard_('stok_utuh', data);
+      updateJamRefresh();
+      document.getElementById('totalKgTersisa').innerHTML = formatAngka(data.totalKg) + ' <span class="unit">kg</span>';
+      document.getElementById('totalKgSub').textContent = 'di ' + data.totalRoll + ' roll · ' + data.totalWarna + ' warna';
+      renderWarnaGrid();
+    })
+    .catch(function (e) { tampilkanToast('Gagal memuat stok: ' + e.message); });
+}
+function renderWarnaGrid() {
+  if (!stokUtuhData) return;
+  let list = stokUtuhData.perWarna.slice();
+  if (searchWarnaQuery) {
+    const q = searchWarnaQuery.toLowerCase();
+    list = list.filter(function (w) { return w.warna.toLowerCase().indexOf(q) !== -1; });
+  }
+  if (sortWarna === 'kg') list.sort(function (a, b) { return b.totalKg - a.totalKg; });
+  else if (sortWarna === 'nama') list.sort(function (a, b) { return a.warna.localeCompare(b.warna); });
+  else if (sortWarna === 'roll') list.sort(function (a, b) { return b.jumlahRoll - a.jumlahRoll; });
+
+  document.getElementById('warnaGrid').innerHTML = list.map(function (w, i) {
+    const terbuka = !!warnaTerbuka[w.warna];
+    let html = '<div class="warna-card" data-warnatoggle="' + escapeAttr(w.warna) + '">' +
+      '<div class="warna-card-top"><span class="swatch" style="background:' + (WARNA_KE_HEX[w.warna] || '#9aa3b2') + '"></span>' +
+      '<span class="nama">' + (i + 1) + '. ' + escapeHtml(w.warna) + '</span></div>' +
+      '<div style="display:flex;justify-content:space-between;margin-top:4px"><span class="roll-count">' + w.jumlahRoll + ' roll</span><span class="kg">' + formatAngka(w.totalKg) + ' kg</span></div>';
+    if (terbuka) {
+      html += '<div class="warna-detail">' + w.rolls.map(function (r) {
+        return '<div class="roll-row"><span>Roll ' + (r.kodeRoll ? escapeHtml(r.kodeRoll) : '-') + '</span><span>' + formatAngka(r.kg) + ' kg</span></div>';
+      }).join('') + '</div>';
+    }
+    html += '</div>';
+    return html;
+  }).join('');
+
+  document.querySelectorAll('[data-warnatoggle]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      const w = el.dataset.warnatoggle;
+      warnaTerbuka[w] = !warnaTerbuka[w];
+      renderWarnaGrid();
+    });
+  });
+}
+document.getElementById('searchWarna').addEventListener('input', function () {
+  searchWarnaQuery = this.value;
+  renderWarnaGrid();
+});
+document.querySelectorAll('.chip[data-sortwarna]').forEach(function (el) {
+  el.addEventListener('click', function () {
+    document.querySelectorAll('.chip[data-sortwarna]').forEach(function (c) { c.classList.remove('active'); });
+    el.classList.add('active');
+    sortWarna = el.dataset.sortwarna;
+    renderWarnaGrid();
+  });
+});
+
+// ------------------------------------------------------------
+// TAB REKAP QC - histori submit apa adanya (1 baris = 1x submit), CSS Grid (BUKAN <table> -
+// pernah kebukti rusak di webview Telegram, lihat catatan CSS di atas).
+// ------------------------------------------------------------
+let rekapItemsRaw = [];
+
+function muatRekapQC() {
+  let munculDariCache = false;
+  if (rekapItemsRaw.length === 0) {
+    const cache = ambilCacheDashboard_('rekap_qc');
+    if (cache && cache.data) {
+      rekapItemsRaw = cache.data;
+      tampilkanLabelCache_('Rekap QC', cache.waktu);
+      renderRekapQC();
+      munculDariCache = true;
+    }
+  }
+  if (!munculDariCache) document.getElementById('rekapSummary').textContent = 'Memuat...';
+  fetch(WORKER_URL + '/data/rekap-qc?hari=14')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      rekapItemsRaw = Array.isArray(data) ? data : [];
+      simpanCacheDashboard_('rekap_qc', rekapItemsRaw);
+      updateJamRefresh();
+      renderRekapQC();
+    })
+    .catch(function (e) {
+      if (munculDariCache) {
+        tampilkanToast('Gagal refresh Rekap QC: ' + e.message);
+      } else {
+        document.getElementById('rekapSummary').textContent = 'Gagal memuat';
+        document.getElementById('rekapList').innerHTML = '<div class="rekap-row" style="grid-template-columns:1fr"><div class="rekap-muted">Gagal memuat: ' + escapeHtml(e.message) + '</div></div>';
+      }
+    });
+}
+
+function formatWaktuRekap(waktuIso) {
+  if (!waktuIso) return '-';
+  const d = new Date(waktuIso);
+  return d.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+}
+
+// Kolom ukuran cuma yang BENERAN dipakai di data yang lagi ditampilkan (biar gak banyak kolom
+// kosong). Kolom Reject SENGAJA cuma 1 (total angka), bukan dipecah per ukuran - detail
+// per-ukurannya tetap ada di database (notasi ringkas), cuma gak ditampilkan di sini biar
+// tabel gak penuh. Harga Jait/Total Bayar SENGAJA TIDAK ditampilkan (itu info akunting).
+function renderRekapQC() {
+  const items = rekapItemsRaw;
+  const semuaUkuranDipakai = {};
+  items.forEach(function (it) { it.perUkuran.forEach(function (u) { semuaUkuranDipakai[u.ukuran] = true; }); });
+  const ukuranDipakai = DAFTAR_UKURAN_URUT.filter(function (u) { return semuaUkuranDipakai[u]; });
+
+  const LEBAR_WAKTU = 92, LEBAR_WARNA = 110, LEBAR_VARIAN = 100, LEBAR_UKURAN = 34, LEBAR_ANGKA = 60;
+  const templateKolom = LEBAR_WAKTU + 'px ' + LEBAR_WARNA + 'px ' + LEBAR_VARIAN + 'px ' +
+    ukuranDipakai.map(function () { return LEBAR_UKURAN + 'px'; }).join(' ') +
+    ' ' + LEBAR_ANGKA + 'px ' + LEBAR_ANGKA + 'px';
+  const lebarTotal = LEBAR_WAKTU + LEBAR_WARNA + LEBAR_VARIAN + (ukuranDipakai.length * LEBAR_UKURAN) + (LEBAR_ANGKA * 2);
+
+  const list = document.getElementById('rekapList');
+  list.style.minWidth = lebarTotal + 'px';
+
+  const summary = document.getElementById('rekapSummary');
+  const headHtml = '<div class="rekap-row rekap-head" style="grid-template-columns:' + templateKolom + '">' +
+    '<div>Waktu</div><div>Warna</div><div>Varian</div>' +
+    ukuranDipakai.map(function (u) { return '<div class="rekap-num">' + u + '</div>'; }).join('') +
+    '<div class="rekap-num">Selesai</div><div class="rekap-num">Reject</div></div>';
+
+  if (items.length === 0) {
+    summary.textContent = 'Belum ada submit QC dalam 14 hari terakhir.';
+    list.innerHTML = headHtml + '<div class="rekap-row" style="grid-template-columns:1fr"><div class="rekap-muted">Belum ada submit QC.</div></div>';
+    document.getElementById('rekapFoot').innerHTML = '';
+    return;
+  }
+  summary.textContent = items.length + ' submit (14 hari terakhir)';
+
+  const barisHtml = items.map(function (it) {
+    const petaUkuran = {};
+    it.perUkuran.forEach(function (u) { petaUkuran[u.ukuran] = u.selesai; });
+    return '<div class="rekap-row" style="grid-template-columns:' + templateKolom + '">' +
+      '<div class="rekap-muted">' + formatWaktuRekap(it.waktu) + '</div>' +
+      '<div>' + escapeHtml(it.warna || '-') + '</div>' +
+      '<div class="rekap-muted">' + escapeHtml(it.varian || '-') + '</div>' +
+      ukuranDipakai.map(function (u) { return '<div class="rekap-num">' + (petaUkuran[u] ? petaUkuran[u] : '<span class="rekap-muted">–</span>') + '</div>'; }).join('') +
+      '<div class="rekap-selesai">' + it.total + '</div>' +
+      '<div class="' + (it.rejectTotal > 0 ? 'rekap-reject' : 'rekap-num rekap-muted') + '">' + it.rejectTotal + '</div>' +
+      '</div>';
   }).join('');
 
   list.innerHTML = headHtml + barisHtml;
 
-  const totalSel = items.reduce(function(s,it){ return s+it.selesai; },0);
-  const totalRej = items.reduce(function(s,it){ return s+it.reject; },0);
-  document.getElementById("rekapFoot").innerHTML =
-    '<span>Total selesai: <b>'+totalSel+'</b></span>' +
-    '<span>Total reject: <b>'+totalRej+'</b></span>';
+  const totalSel = items.reduce(function (s, it) { return s + it.total; }, 0);
+  const totalRej = items.reduce(function (s, it) { return s + it.rejectTotal; }, 0);
+  document.getElementById('rekapFoot').innerHTML =
+    '<span>Total selesai: <b>' + totalSel + '</b></span><span>Total reject: <b>' + totalRej + '</b></span>';
 }
 
-// ============ TAB QC ============
-let qcItemsRaw = [];
-let qcQuery = "";
-let qcSortMode = "hari";
-let qcSudahDimuat = false;
-const qcModeUI = {};
-const qcExpandState = {};
-
-// v.13: konfigurasi field mana yang tampil di baris meta kartu (+ urutannya) - datang dari
-// server (dashboardQC payload, field dashCfg.qcFields), disimpan bareng lewat panel "Atur Tampilan".
-// Default di sini CUMA fallback sebelum data pertama kali kemuat / kalau server belum pernah
-// menyimpan pengaturan - begitu fetch pertama sukses, langsung ditimpa sama punya server.
-let qcCardConfig = [
-  { key: "tanggal", label: "Tanggal", show: true },
-  { key: "roll", label: "Kode Roll", show: true },
-  { key: "kg", label: "Kg Terpakai", show: true },
-  { key: "status", label: "Status", show: true }
-];
-// v.15: kelompok config lain - dibundel bareng qcCardConfig, semuanya datang dari & tersimpan
-// ke server sekaligus (satu bundle "dashCfg") lewat panel "Atur Tampilan" yang sama.
-let qcFilterConfig = [
-  { key: "hari", label: "Paling lama", show: true },
-  { key: "tanggal", label: "Tanggal terbaru", show: true }
-];
-let stokFieldConfig = [
-  { key: "jumlahRoll", label: "Jumlah roll", show: true }
-];
-let sectionConfig = [
-  { key: "searchQC", label: "Kolom cari (tab QC)", show: true },
-  { key: "filterBarQC", label: "Baris filter urutan (tab QC)", show: true },
-  { key: "arsipQC", label: "Section Arsip Selesai (tab QC)", show: true }
-];
-// v.16: urutan & tampil/sembunyikan 3 bagian utama tab QC. "Atur Tampilan" sengaja TIDAK ikut
-// blok manapun di sini (dipindah ke baris tombol yang selalu kelihatan) - biar Denny gak
-// kekunci gak bisa buka panel lagi kalau salah satu blok ini disembunyikan.
-let qcLayoutConfig = [
-  { key: "blockKartuQC", label: "Kartu QC", show: true },
-  { key: "blockAntrian", label: "Daftar Antrian", show: true },
-  { key: "blockPreview", label: "Preview & Kirim Rekap", show: true }
-];
-const FONT_SCALE_PRESETS = [
-  { key: "kecil", label: "Kecil", value: 0.85 },
-  { key: "sedang", label: "Sedang (default)", value: 1 },
-  { key: "besar", label: "Besar", value: 1.15 },
-  { key: "sangatbesar", label: "Sangat Besar", value: 1.3 }
-];
-let generalConfig = {
-  defaultTab: "stok", defaultFilterQC: "hari", staleDays: 3, accent: "teal",
-  cardFontScale: "sedang", antrianFontScale: "sedang", previewFontScale: "sedang"
-};
-const ACCENT_PRESETS = {
-  teal:  { accent:"#796CBF", deep:"#5D5294" },
-  blue:  { accent:"#5D6EBF", deep:"#3F4B8A" },
-  plum:  { accent:"#8A5CA8", deep:"#5E3B73" },
-  amber: { accent:"#A5750F", deep:"#7A5209" }
-};
-let configPertamaKaliDimuat = false; // dipakai supaya "tab/filter default" cuma diterapkan SEKALI pas dashboard baru dibuka
-
-function fontScaleValue(presetKey){
-  const p = FONT_SCALE_PRESETS.find(function(f){ return f.key === presetKey; });
-  return p ? p.value : 1;
-}
-function applyFontScales(){
-  document.documentElement.style.setProperty("--scale-card", fontScaleValue(generalConfig.cardFontScale));
-  document.documentElement.style.setProperty("--scale-antrian", fontScaleValue(generalConfig.antrianFontScale));
-  document.documentElement.style.setProperty("--scale-preview", fontScaleValue(generalConfig.previewFontScale));
-}
-function applyQcLayout(){
-  const parent = document.getElementById("panel-qc");
-  const arsip = document.getElementById("secArsipQC");
-  qcLayoutConfig.forEach(function(f){
-    const el = document.getElementById(f.key);
-    if (!el) return;
-    el.style.display = f.show ? "" : "none";
-    parent.insertBefore(el, arsip); // nempatin sesuai urutan array, arsip selalu di paling bawah
-  });
+// ------------------------------------------------------------
+// HELPER
+// ------------------------------------------------------------
+function escapeHtml(t) { return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function escapeAttr(t) { return escapeHtml(t).replace(/"/g, '&quot;'); }
+function formatAngka(n) { return Number(n).toLocaleString('id-ID', { maximumFractionDigits: 1 }); }
+function tampilkanToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(function () { el.classList.remove('show'); }, 2500);
 }
 
-function applyAccent(val){
-  const isHex = /^#/.test(val || "");
-  const accent = isHex ? val : ((ACCENT_PRESETS[val] || ACCENT_PRESETS.teal).accent);
-  const deep = isHex ? "color-mix(in srgb, "+val+" 68%, black)" : ((ACCENT_PRESETS[val] || ACCENT_PRESETS.teal).deep);
-  document.documentElement.style.setProperty("--accent", accent);
-  document.documentElement.style.setProperty("--accent-deep", deep);
-}
-function applySections(){
-  const map = {};
-  sectionConfig.forEach(function(f){ map[f.key] = f.show; });
-  const elSearch = document.getElementById("secSearchQC");
-  if (elSearch) elSearch.style.display = map.searchQC === false ? "none" : "";
-  const elFilter = document.getElementById("qcFilterBar");
-  if (elFilter) elFilter.style.display = map.filterBarQC === false ? "none" : "";
-  const elArsip = document.getElementById("secArsipQC");
-  if (elArsip) elArsip.style.display = map.arsipQC === false ? "none" : "";
-}
-function renderQCFilterBar(isInitial){
-  const visible = qcFilterConfig.filter(function(f){ return f.show; });
-  if (isInitial && generalConfig.defaultFilterQC && visible.some(function(f){ return f.key === generalConfig.defaultFilterQC; })) {
-    qcSortMode = generalConfig.defaultFilterQC;
-  }
-  if (!visible.some(function(f){ return f.key === qcSortMode; })) {
-    qcSortMode = visible.length ? visible[0].key : "hari";
-  }
-  const bar = document.getElementById("qcFilterBar");
-  bar.innerHTML = visible.map(function(f){
-    return '<span class="filter-chip'+(f.key===qcSortMode?' active':'')+'" data-sort="'+f.key+'">'+f.label+'</span>';
-  }).join("");
-  renderQCCards();
-}
-function terapkanConfigBundle(bundle, isInitial){
-  if (bundle.qcFields && bundle.qcFields.length) qcCardConfig = bundle.qcFields;
-  if (bundle.qcFilters && bundle.qcFilters.length) qcFilterConfig = bundle.qcFilters.filter(function(f){ return f.key !== "jenis"; });
-  if (bundle.stokFields && bundle.stokFields.length) stokFieldConfig = bundle.stokFields;
-  if (bundle.sections && bundle.sections.length) sectionConfig = bundle.sections;
-  if (bundle.qcLayout && bundle.qcLayout.length) qcLayoutConfig = bundle.qcLayout;
-  if (bundle.general) generalConfig = Object.assign({}, generalConfig, bundle.general);
-
-  applySections();
-  applyQcLayout();
-  applyFontScales();
-  applyAccent(generalConfig.accent);
-  renderQCFilterBar(isInitial);
-  if (stokItemsRaw.length) renderStokList(urutkanStok(stokItemsRaw, stokSortMode));
-
-  if (isInitial && generalConfig.defaultTab === "qc") {
-    const btnQC = document.querySelector('.main-tab-btn[data-maintab="qc"]');
-    if (btnQC && !btnQC.classList.contains("active")) btnQC.click();
-  }
+// ------------------------------------------------------------
+// REALTIME - auto-update tanpa refresh manual. Begitu ada perubahan di tim_potong/log_qc di
+// Supabase (dari Mini App Input Produksi, atau dari Dashboard ini sendiri sesi lain), data di
+// layar ini ke-refresh OTOMATIS. Pakai "debounce" biar kalau banyak perubahan numpuk
+// bersamaan, gak nembak ulang Worker berkali-kali beruntun - tunggu 800ms hening dulu.
+// ------------------------------------------------------------
+// v.08: helper terpusat - refresh tab yang LAGI KELIATAN aja (bukan semua tab sekaligus,
+// biar gak boros request buat tab yang gak lagi dilihat).
+function muatTabAktif_() {
+  muatDaftarLaporan();
+  if (document.getElementById('tabStok').style.display !== 'none') muatStokUtuh();
+  if (document.getElementById('tabRekap').style.display !== 'none') muatRekapQC();
 }
 
-function metaFieldHtml(key, item, badgeKanan){
-  if (key === "tanggal") return "<span>"+(item.tanggal||"-")+"</span>";
-  if (key === "roll") return '<span class="roll">Roll '+item.roll+'</span>';
-  if (key === "kg") return '<span class="kg">'+fmtKg(item.kg||0)+' kg</span>';
-  if (key === "status") return badgeKanan;
-  return "";
-}
-function buildMetaLine(item, badgeKanan){
-  const visible = (qcCardConfig||[]).filter(function(f){ return f.show; });
-  if (!visible.length) return "";
-  return visible.map(function(f){ return metaFieldHtml(f.key, item, badgeKanan); }).join('<span class="dot">·</span>');
+let timerDebounceRealtime = null;
+function jadwalkanMuatUlang() {
+  if (timerDebounceRealtime) clearTimeout(timerDebounceRealtime);
+  timerDebounceRealtime = setTimeout(muatTabAktif_, 800);
 }
 
-// v.10: antrian lokal - laporan yang sudah "Tambah ke Daftar" tapi BELUM dikirim ke server.
-// Tiap elemen: { tempId, baris, item, roll, kg, mode, totSel, totRej, perUkuran, deltaPerUkuran, deltaSel, deltaRej }
-let qcAntrian = [];
-let antrianSeq = 0;
-
-function qcDaftarUkuran(item){ return Object.keys(item.sizes); }
-
-// v.10: "sisa" sekarang dihitung MEMPERHITUNGKAN juga angka yang masih nangkring di antrian
-// (belum dikirim ke server) - biar user gak bisa nambah lagi ngelebihin sisa yang beneran ada.
-function pendingUntukBaris(baris){
-  return qcAntrian.filter(function(a){ return a.baris === baris; });
-}
-function pendingDeltaUkuran(baris, u){
-  let sel = 0, rej = 0;
-  pendingUntukBaris(baris).forEach(function(a){
-    const d = a.deltaPerUkuran[u];
-    if (d) { sel += d.sel; rej += d.rej; }
-  });
-  return { sel: sel, rej: rej };
-}
-function qcSisaUkuran(item, u){
-  const s = item.sizes[u];
-  const p = pendingDeltaUkuran(item.baris, u);
-  return s.qty - s.selesai - s.reject - p.sel - p.rej;
-}
-function qcLengkapUkuran(item, u){ return qcSisaUkuran(item, u) <= 0; }
-function qcLengkapSemua(item){ return qcDaftarUkuran(item).every(function(u){ return qcLengkapUkuran(item, u); }); }
-function cocokQCQuery(item){ return !qcQuery || item.item.toUpperCase().indexOf(qcQuery.toUpperCase()) !== -1; }
-const ANAK_VARIAN = ["PENDEK KOMBINASI","PANJANG KOMBINASI","ONESET","PENDEK","PANJANG","RUFFLE","SETELAN","SET.","CELANA"];
-const ANAK_WARNA = ["CREAM CHOCO","CREAM MUSTARD","CREAM SAGE","STEEL NAVY","BLACK TERACOTA","WHITE TERACOTA","MUSTARD NAVY","NAVY WHITE","NAVY CREAM","TERACOTA GREEN","WHITE MUSTARD","WHITE SAGE"];
-function qcIsAnak(item){
-  const up = item.item.toUpperCase();
-  return ANAK_VARIAN.some(function(v){ return up.indexOf(v) !== -1; }) || ANAK_WARNA.some(function(v){ return up.indexOf(v) !== -1; });
-}
-// v.19: filter kategori ANAK/DEWASA (tab QC) - independen dari filter urutan/search yang sudah ada.
-let qcKatFilter = "semua";
-function cocokKatFilter(item){
-  if (qcKatFilter === "semua") return true;
-  const isAnak = qcIsAnak(item);
-  return qcKatFilter === "anak" ? isAnak : !isAnak;
-}
-function urutkanQC(items, mode){
-  const copy = items.slice();
-  if (mode === "jenis") copy.sort(function(a,b){ return a.item.localeCompare(b.item, "id"); });
-  else if (mode === "tanggal") copy.sort(function(a,b){ return (a.hari===null?999:a.hari) - (b.hari===null?999:b.hari); });
-  else copy.sort(function(a,b){ return (b.hari===null?-1:b.hari) - (a.hari===null?-1:a.hari); });
-  return copy;
-}
-
-function muatDashboardQC(paksaRefresh){
-  const list = document.getElementById("qc-list");
-  if (!qcSudahDimuat) list.innerHTML = '<div class="empty-state">Memuat…</div>';
-  const url = WEBAPP_URL + "?action=dashboardQC" + (paksaRefresh ? "&refresh=1" : "");
-  fetch(url, { cache: "no-store" })
-    .then(function(res){ return res.json(); })
-    .then(function(data){
-      qcSudahDimuat = true;
-      qcItemsRaw = data.items || [];
-      // v.09: nomor urut STABIL - ditentukan dari baris (sheet row) ascending SEKALI di sini,
-      // BUKAN dihitung ulang tiap render/sort. Jadi walau tampilan diurutkan ulang (filter sort
-      // chip), nomor yang nempel di tiap kartu gak ikut berubah posisi.
-      qcItemsRaw.slice().sort(function(a,b){ return a.baris - b.baris; })
-        .forEach(function(item, i){ item.num = i + 1; });
-      if (data.dashCfg) {
-        terapkanConfigBundle(data.dashCfg, !configPertamaKaliDimuat);
-        configPertamaKaliDimuat = true;
-      }
-      renderQCCards();
-      renderDaftarAntrian();
-    })
-    .catch(function(err){ list.innerHTML = '<div class="error-state">Gagal memuat data QC: '+err.message+'</div>'; });
-}
-
-function simpanIsianForm(wrap){
-  const data = {};
-  wrap.querySelectorAll("input[type=number][id]").forEach(function(inp){
-    if (inp.value !== "") data[inp.id] = inp.value;
-  });
-  return data;
-}
-function pulihkanIsianForm(wrap, data){
-  Object.keys(data).forEach(function(id){
-    const el = wrap.querySelector("#"+CSS.escape(id));
-    if (el) el.value = data[id];
-  });
-}
-function renderQCCards(){
-  const filtered = urutkanQC(qcItemsRaw.filter(cocokQCQuery).filter(cocokKatFilter), qcSortMode);
-  document.getElementById("qcCount").textContent = filtered.length + " dari " + qcItemsRaw.length + " laporan";
-  const wrap = document.getElementById("qc-list");
-  const inputSnapshot = simpanIsianForm(wrap); // v.19: rebuild penuh tiap render sebelumnya bikin
-  // angka yang lagi diketik di kartu LAIN ikut ke-reset ke 0 pas salah satu kartu ditekan
-  // "+ Tambah ke Daftar" - sekarang isian yang belum dikirim disimpan dulu & dikembalikan lagi
-  // setelah HTML kartu di-generate ulang.
-
-  if (!filtered.length) {
-    wrap.innerHTML = '<div class="empty-state">' + (qcQuery ? 'Gak ada laporan yang cocok dengan "'+qcQuery+'".' : 'Tidak ada laporan yang menunggu konfirmasi QC 🎉') + '</div>';
-    return;
-  }
-
-  wrap.innerHTML = filtered.map(function(item){
-    // lengkapServer: BENERAN sudah lengkap 100% di server (dari sesi2 sebelumnya) - baris ini
-    // eligible buat tombol Undo (server-side, disimulasikan di preview).
-    const serverSel = item.totalSelesai, serverRej = item.totalReject, asli = item.totalAsli;
-    const lengkapServer = (serverSel + serverRej) >= asli;
-    // lengkapEfektif: sudah penuh KALAU ikut menghitung yang masih di antrian (belum dikirim).
-    const pendingRow = pendingUntukBaris(item.baris);
-    const pendingSelBaris = pendingRow.reduce(function(s,a){ return s+a.deltaSel; },0);
-    const pendingRejBaris = pendingRow.reduce(function(s,a){ return s+a.deltaRej; },0);
-    const effSel = serverSel + pendingSelBaris, effRej = serverRej + pendingRejBaris;
-    const lengkapEfektif = (effSel + effRej) >= asli;
-    const pctSel = Math.round((effSel/asli)*100), pctRej = Math.round((effRej/asli)*100);
-    if (!qcModeUI[item.baris]) qcModeUI[item.baris] = "ringkas";
-    const undoBtn = lengkapServer ? '<button class="qc-undo" data-baris="'+item.baris+'">↩ Undo</button>' : '';
-    const pendingBadge = pendingRow.length ? '<span class="qc-pending-badge">🕓 '+pendingRow.length+' di antrian (+'+pendingSelBaris+' sel / +'+pendingRejBaris+' rej)</span>' : '';
-
-    let formHtml = "";
-    if (!lengkapEfektif) {
-      if (qcModeUI[item.baris] === "detail") {
-        const barisTabel = qcDaftarUkuran(item).map(function(u){
-          const s = item.sizes[u];
-          const done = qcLengkapUkuran(item, u); // efektif (server + antrian)
-          const doneServer = (s.selesai + s.reject) >= s.qty; // BENERAN sudah tersimpan di server
-          const p = pendingDeltaUkuran(item.baris, u);
-          let selCell, rejCell;
-          if (doneServer) {
-            selCell = s.selesai; rejCell = s.reject;
-          } else if (done) {
-            // penuh cuma karena masih di antrian (belum dikirim) - tandai beda dari yang beneran tersimpan
-            selCell = '<span class="pending-val">'+(s.selesai + p.sel)+'<i>antre</i></span>';
-            rejCell = '<span class="pending-val">'+(s.reject + p.rej)+'<i>antre</i></span>';
-          } else {
-            selCell = '<input type="number" min="0" id="qcSel-'+item.baris+'-'+u+'" placeholder="0">';
-            rejCell = '<input type="number" min="0" id="qcRej-'+item.baris+'-'+u+'" placeholder="0">';
-          }
-          return '<tr class="'+(done?'lengkap-u':'')+'">' +
-            '<td>'+u+'</td><td>'+s.qty+'</td>' +
-            '<td>'+selCell+'</td>' +
-            '<td>'+rejCell+'</td>' +
-            '<td>'+Math.max(qcSisaUkuran(item,u),0)+'</td>' +
-          '</tr>';
-        }).join("");
-        formHtml = '<table class="qc-tabel"><thead><tr><th>Uk</th><th>Qty</th><th>Sel</th><th>Rej</th><th>Sisa</th></tr></thead><tbody>'+barisTabel+'</tbody></table>' +
-          '<button class="qc-btn-submit" data-mode="detail" data-baris="'+item.baris+'">+ Tambah ke Daftar</button>';
-      } else {
-        formHtml = '<div class="qc-form-row">' +
-            '<div class="qc-form-fields">' +
-            '<div class="qc-field"><label>Selesai</label><input type="number" min="0" id="qcTotSel-'+item.baris+'" placeholder="0"></div>' +
-            '<div class="qc-field"><label>Reject</label><input type="number" min="0" id="qcTotRej-'+item.baris+'" placeholder="0"></div>' +
-            '</div>' +
-            '<button class="qc-btn-submit" data-mode="ringkas" data-baris="'+item.baris+'">+ Tambah ke Daftar</button>' +
-          '</div>';
-      }
-    }
-
-    const sizeChips = qcDaftarUkuran(item).map(function(u){ return '<span class="size-chip">'+u+' <b>'+item.sizes[u].qty+'</b></span>'; }).join("");
-    const isAnak = qcIsAnak(item);
-    const kategori = isAnak ? "Anak" : "Dewasa";
-    const stale = item.hari !== null && item.hari >= (generalConfig.staleDays || 3);
-    const hariLabel = item.hari === null ? "-" : (item.hari === 0 ? "hari ini" : item.hari + " hari lalu");
-
-    const modeSwitchRow = lengkapEfektif
-      ? (undoBtn ? '<div class="qc-mode-switch"><span></span>'+undoBtn+'</div>' : '')
-      : '<div class="qc-mode-switch"><span class="mode-left">' +
-          '<span class="qc-mode-btn'+(qcModeUI[item.baris]==="ringkas"?" active":"")+'" data-switch="ringkas" data-baris="'+item.baris+'">Ringkas</span>' +
-          '<span class="qc-mode-btn'+(qcModeUI[item.baris]==="detail"?" active":"")+'" data-switch="detail" data-baris="'+item.baris+'">Rincian</span>' +
-        '</span>'+undoBtn+'</div>';
-
-    const badgeKanan = lengkapServer ? '<span class="qc-badge">✅</span>'
-      : (lengkapEfektif ? '<span class="qc-badge" style="background:var(--accent);">🕓</span>' : '<span class="qc-days'+(stale?' stale':'')+'">'+hariLabel+'</span>');
-
-    const detailId = "qcdetail-"+item.baris;
-    const isOpen = !!qcExpandState[item.baris];
-
-    return '<div class="qc-card'+(lengkapEfektif?' lengkap':'')+'" data-baris="'+item.baris+'">' +
-      '<div class="qc-row-head'+(isOpen?' open':'')+'" data-target="'+detailId+'" data-baris="'+item.baris+'">' +
-        '<span class="qc-num">'+(item.num||'')+'</span>' +
-        '<div class="qc-row-main">' +
-          '<div class="qc-row-title-wrap">' +
-            (!lengkapEfektif ? '<input type="checkbox" class="qc-quick-complete" data-baris="'+item.baris+'" title="Tandai LENGKAP langsung (semua ukuran sekaligus, tanpa isi angka)">' : '') +
-            '<p class="qc-row-title">'+item.item+'</p><span class="kat-badge'+(isAnak?' kat-anak':'')+'">'+kategori+'</span></div>' +
-          '<div class="qc-row-meta">'+buildMetaLine(item, badgeKanan)+'</div>' +
-        '</div>' +
-        '<div class="qc-row-right">' +
-          '<span class="qc-row-frac">'+(effSel ? '<span class="qc-frac-sel">'+effSel+'</span>' : '-')+'/'+(item.jumlah||asli)+'</span>' +
-          '<div class="qc-row-bar"><div style="height:100%;background:var(--good);width:'+pctSel+'%;"></div><div style="height:100%;background:var(--warn);width:'+pctRej+'%;"></div></div>' +
-        '</div>' +
-        '<svg class="qc-row-chevron" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
-      '</div>' +
-      '<div class="qc-row-body" id="'+detailId+'"><div class="qc-row-body-inner">' +
-        '<div class="qc-sizes">'+sizeChips+'</div>' +
-        (pendingBadge ? '<div>'+pendingBadge+'</div>' : '') +
-        '<div class="qc-progress"><div class="p-sel" style="width:'+pctSel+'%"></div><div class="p-rej" style="width:'+pctRej+'%"></div></div>' +
-        '<div class="qc-progress-label"><span>Sel <b>'+effSel+'</b></span><span>Rej <b>'+effRej+'</b></span><span>Sisa <b>'+Math.max(asli-effSel-effRej,0)+'</b></span></div>' +
-        modeSwitchRow + formHtml +
-        '<p class="qc-error" id="qcErr-'+item.baris+'" style="display:none;"></p>' +
-      '</div></div>' +
-    '</div>';
-  }).join("");
-  pulihkanIsianForm(wrap, inputSnapshot);
-
-  wrap.querySelectorAll(".qc-row-head").forEach(function(head){
-    head.addEventListener("click", function(){
-      const body = document.getElementById(head.dataset.target);
-      const isOpen2 = head.classList.contains("open");
-      head.classList.toggle("open", !isOpen2);
-      qcExpandState[head.dataset.baris] = !isOpen2;
-      body.style.maxHeight = !isOpen2 ? body.scrollHeight + "px" : null;
-    });
-  });
-  wrap.querySelectorAll(".qc-row-head.open").forEach(function(head){
-    const body = document.getElementById(head.dataset.target);
-    if (body) body.style.maxHeight = body.scrollHeight + "px";
-  });
-
-  wrap.querySelectorAll(".qc-mode-btn").forEach(function(btn){
-    btn.addEventListener("click", function(){ qcModeUI[parseInt(btn.dataset.baris,10)] = btn.dataset.switch; renderQCCards(); });
-  });
-
-  // v.10: klik "+ Tambah ke Daftar" HANYA memasukkan ke antrian lokal `qcAntrian` - TIDAK ada
-  // fetch ke server sama sekali di sini. Data baru beneran terkirim pas "Kirim Rekap" ditekan.
-  wrap.querySelectorAll(".qc-btn-submit").forEach(function(btn){
-    btn.addEventListener("click", function(){
-      const baris = parseInt(btn.dataset.baris, 10);
-      const item = qcItemsRaw.find(function(x){ return x.baris === baris; });
-      const errEl = document.getElementById("qcErr-"+baris);
-      errEl.style.display = "none";
-
-      let deltaSel = 0, deltaRej = 0, deltaPerUkuran = {}, mode = btn.dataset.mode, totSel = 0, totRej = 0, perUkuran = {};
-      if (mode === "ringkas") {
-        totSel = parseInt((document.getElementById("qcTotSel-"+baris)||{}).value, 10) || 0;
-        totRej = parseInt((document.getElementById("qcTotRej-"+baris)||{}).value, 10) || 0;
-        if (totSel + totRej <= 0) { errEl.style.display="block"; errEl.textContent="Isi minimal salah satu angka."; return; }
-        // Alokasi client-side (sama seperti server nanti bakal proses): tuang ke ukuran yang
-        // masih sisa, urut daftar ukuran, sisa dihitung SUDAH memperhitungkan antrian sebelumnya.
-        let sisaSel = totSel, sisaRej = totRej;
-        for (const u of qcDaftarUkuran(item)) {
-          const kapAwal = qcSisaUkuran(item, u);
-          if (kapAwal <= 0) continue;
-          let kap = kapAwal;
-          const aSel = Math.min(sisaSel, kap);
-          if (aSel > 0) deltaPerUkuran[u] = { sel: aSel, rej: 0 };
-          sisaSel -= aSel; kap -= aSel;
-          const aRej = Math.min(sisaRej, kap);
-          if (aRej > 0) { deltaPerUkuran[u] = deltaPerUkuran[u] || { sel:0, rej:0 }; deltaPerUkuran[u].rej = aRej; }
-          sisaRej -= aRej; kap -= aRej;
-          if (sisaSel<=0 && sisaRej<=0) break;
-        }
-        if (sisaSel > 0 || sisaRej > 0) { errEl.style.display="block"; errEl.textContent="Total melebihi sisa yang ada."; return; }
-        deltaSel = totSel; deltaRej = totRej;
-      } else {
-        let adaIsi = false;
-        for (const u of qcDaftarUkuran(item)) {
-          if (qcLengkapUkuran(item, u)) continue;
-          const s = parseInt((document.getElementById("qcSel-"+baris+"-"+u)||{}).value, 10) || 0;
-          const r = parseInt((document.getElementById("qcRej-"+baris+"-"+u)||{}).value, 10) || 0;
-          if (s+r > 0) { perUkuran[u] = { selesai:s, reject:r }; deltaPerUkuran[u] = { sel:s, rej:r }; adaIsi = true; deltaSel += s; deltaRej += r; }
-        }
-        if (!adaIsi) { errEl.style.display="block"; errEl.textContent="Isi minimal 1 ukuran."; return; }
-        totSel = deltaSel; totRej = deltaRej;
-      }
-
-      qcAntrian.push({
-        tempId: ++antrianSeq, baris: baris, item: item.item, roll: item.roll, kg: item.kg,
-        mode: mode, totSel: totSel, totRej: totRej, perUkuran: perUkuran,
-        deltaPerUkuran: deltaPerUkuran, deltaSel: deltaSel, deltaRej: deltaRej
-      });
-
-      // kosongin isian kartu yang barusan disubmit (biar gak ke-restore lagi ke sisa yang baru)
-      wrap.querySelectorAll('[id^="qcTotSel-'+baris+'"],[id^="qcTotRej-'+baris+'"],[id^="qcSel-'+baris+'-"],[id^="qcRej-'+baris+'-"]').forEach(function(inp){ inp.value = ""; });
-
-      renderQCCards();
-      renderDaftarAntrian();
-      tampilkanToast("✓ Ditambahkan ke daftar");
-    });
-  });
-
-  // v.19: checkbox shortcut "Tandai LENGKAP langsung" di pinggir judul - buat laporan yang QC-nya
-  // udah pasti tuntas semua ukuran (gak perlu cek angka satu-satu), tanpa harus isi form manual.
-  // CUMA masuk ke antrian lokal (qcAntrian) - PERSIS sama kayak klik "+ Tambah ke Daftar" biasa,
-  // BUKAN langsung kirim ke server/Telegram. Tetap wajib tekan "Kirim Rekap" buat benar-benar
-  // mengirimkan (jadi ada 2 lapis konfirmasi: dialog confirm() pas dicentang + tombol Kirim Rekap).
-  wrap.querySelectorAll(".qc-quick-complete").forEach(function(cb){
-    // stopPropagation di CLICK (bukan cuma change) - checkbox ini nempel di dalam .qc-row-head
-    // yang punya listener klik sendiri buat buka/tutup detail kartu, tanpa ini nyentang checkbox
-    // bakal ikut nge-toggle buka/tutup kartunya juga.
-    cb.addEventListener("click", function(e){ e.stopPropagation(); });
-    cb.addEventListener("change", function(){
-      if (!cb.checked) return; // cuma proses pas DICENTANG, gak ada aksi pas dilepas
-      const baris = parseInt(cb.dataset.baris, 10);
-      const item = qcItemsRaw.find(function(x){ return x.baris === baris; });
-      if (!item) { cb.checked = false; return; }
-
-      let deltaPerUkuran = {}, deltaSel = 0;
-      for (const u of qcDaftarUkuran(item)) {
-        const sisa = qcSisaUkuran(item, u);
-        if (sisa > 0) { deltaPerUkuran[u] = { sel: sisa, rej: 0 }; deltaSel += sisa; }
-      }
-      if (deltaSel <= 0) { cb.checked = false; tampilkanToast("Gak ada sisa yang perlu diselesaikan."); return; }
-
-      const ok = confirm(item.item + ' sudah yakin lengkap semua?\nTOTAL ' + deltaSel + '\n\nJika yakin, akan tetap masuk ke daftar, lalu kamu bisa lanjut kirim rekap seperti biasa.');
-      if (!ok) { cb.checked = false; return; }
-
-      qcAntrian.push({
-        tempId: ++antrianSeq, baris: baris, item: item.item, roll: item.roll, kg: item.kg,
-        mode: "ringkas", totSel: deltaSel, totRej: 0, perUkuran: {},
-        deltaPerUkuran: deltaPerUkuran, deltaSel: deltaSel, deltaRej: 0
-      });
-
-      renderQCCards();
-      renderDaftarAntrian();
-      tampilkanToast('✓ "' + item.item + '" ditambahkan LENGKAP ke daftar');
-    });
-  });
-
-  // Undo laporan yang SUDAH lengkap 100% dari sesi-sesi sebelumnya (sudah tersimpan di Sheet).
-  // Di file PREVIEW ini disimulasikan - TIDAK memanggil endpoint `undoQC` yang asli.
-  wrap.querySelectorAll(".qc-undo").forEach(function(btn){
-    btn.addEventListener("click", function(){
-      const baris = parseInt(btn.dataset.baris, 10);
-      btn.disabled = true; btn.textContent = "Membatalkan…";
-      fetch(WEBAPP_URL + "?action=undoQC&baris="+baris, { cache: "no-store" })
-        .then(function(res){ return res.json(); })
-        .then(function(hasil){
-          if (hasil && hasil.ok) {
-            tampilkanToast("↩ Submit terakhir dibatalkan");
-            muatDashboardQC(true);
-          } else {
-            tampilkanToast("Gagal undo: " + ((hasil && hasil.error) || "tidak diketahui"));
-            btn.disabled = false; btn.textContent = "↩ Undo";
-          }
-        })
-        .catch(function(err){ tampilkanToast("Gagal undo: "+err.message); btn.disabled = false; btn.textContent = "↩ Undo"; });
-    });
-  });
-}
-
-const searchQC = document.getElementById("searchQC");
-const btnClearQC = document.getElementById("btnClearQC");
-searchQC.addEventListener("input", function(){
-  qcQuery = searchQC.value.trim();
-  btnClearQC.style.display = qcQuery ? "block" : "none";
-  renderQCCards();
+// v.08: JARING PENGAMAN - koneksi WebSocket Realtime bisa putus diam-diam kalau tab dibiarkan
+// lama di background (WebView Telegram/OS suka "menidurkan" tab background buat hemat baterai),
+// tanpa ada tanda apa pun ke user. Begitu tab ini balik keliatan/fokus lagi, TARIK ULANG data
+// sekali secara paksa (gak nunggu event Realtime yang mungkin udah gak nyambung lagi) - jadi
+// walau koneksi sempat putus, paling telat ke-update pas dibuka lagi, bukan nyangkut selamanya.
+document.addEventListener('visibilitychange', function () {
+  if (document.visibilityState === 'visible') muatTabAktif_();
 });
-btnClearQC.addEventListener("click", function(){
-  searchQC.value = ""; qcQuery = ""; btnClearQC.style.display = "none";
-  renderQCCards();
-});
-pasangFilterBar("qcFilterBar", function(mode){ qcSortMode = mode; renderQCCards(); });
-document.getElementById("qcKatFilterBar").addEventListener("click", function(ev){
-  const chip = ev.target.closest(".filter-chip");
-  if (!chip) return;
-  document.querySelectorAll("#qcKatFilterBar .filter-chip").forEach(function(c){ c.classList.remove("active"); });
-  chip.classList.add("active");
-  qcKatFilter = chip.dataset.kat;
-  renderQCCards();
-});
+window.addEventListener('focus', muatTabAktif_);
 
-// ============ PANEL "ATUR TAMPILAN" (v.15 - satu panel buat semua group config) ============
-// draftBundle = copy kerja sementara selama modal terbuka. Config ASLI (qcCardConfig dkk) baru
-// ketimpa & diterapkan pas tombol Simpan sukses - biar batal/tutup modal gak ninggalin perubahan
-// setengah jalan.
-let draftBundle = null;
-
-function cloneList(list){ return list.map(function(f){ return { key:f.key, label:f.label, show:f.show }; }); }
-
-// Renderer generik dipakai buat 4 grup list (qcFields, qcFilters, stokFields, sections).
-// opts.reorder -> tampilkan tombol ▲▼. opts.editLabel -> label jadi input teks (bisa diganti).
-function renderCfgList(containerId, listKey, opts){
-  const list = draftBundle[listKey];
-  const wrap = document.getElementById(containerId);
-  wrap.innerHTML = list.map(function(f, i){
-    const labelHtml = opts.editLabel
-      ? '<input type="text" class="cfg-label-input" data-list="'+listKey+'" data-idx="'+i+'" value="'+f.label.replace(/"/g,'&quot;')+'">'
-      : '<span class="cfg-row-label">'+f.label+'</span>';
-    const moveHtml = opts.reorder
-      ? '<div class="cfg-move">' +
-          '<button type="button" data-list="'+listKey+'" data-move="up" data-idx="'+i+'"'+(i===0?' disabled':'')+'>▲</button>' +
-          '<button type="button" data-list="'+listKey+'" data-move="down" data-idx="'+i+'"'+(i===list.length-1?' disabled':'')+'>▼</button>' +
-        '</div>'
-      : '';
-    return '<div class="cfg-row'+(f.show?'':' off')+'">' +
-        '<input type="checkbox" class="cfg-chk" data-list="'+listKey+'" data-idx="'+i+'"'+(f.show?' checked':'')+'>' +
-        labelHtml + moveHtml +
-      '</div>';
-  }).join("");
-
-  wrap.querySelectorAll(".cfg-chk").forEach(function(cb){
-    cb.addEventListener("change", function(){
-      draftBundle[cb.dataset.list][parseInt(cb.dataset.idx,10)].show = cb.checked;
-      renderCfgList(containerId, listKey, opts);
-    });
-  });
-  wrap.querySelectorAll(".cfg-label-input").forEach(function(inp){
-    inp.addEventListener("input", function(){
-      draftBundle[inp.dataset.list][parseInt(inp.dataset.idx,10)].label = inp.value;
-    });
-  });
-  wrap.querySelectorAll("button[data-move]").forEach(function(btn){
-    btn.addEventListener("click", function(){
-      const list2 = draftBundle[btn.dataset.list];
-      const i = parseInt(btn.dataset.idx, 10);
-      const j = btn.dataset.move === "up" ? i-1 : i+1;
-      if (j < 0 || j >= list2.length) return;
-      const tmp = list2[i]; list2[i] = list2[j]; list2[j] = tmp;
-      renderCfgList(containerId, listKey, opts);
-    });
-  });
+function setupRealtime() {
+  if (!window.supabase) { console.warn('Supabase JS client gagal dimuat - auto-update nonaktif, tetap bisa refresh manual.'); return; }
+  const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  client.channel('dashboard-live')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'tim_potong' }, jadwalkanMuatUlang)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'log_qc' }, jadwalkanMuatUlang)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'stok_kain' }, jadwalkanMuatUlang)
+    .subscribe();
 }
 
-function renderCfgSwatches(){
-  const row = document.getElementById("cfgSwatchRow");
-  row.innerHTML = Object.keys(ACCENT_PRESETS).map(function(key){
-    const p = ACCENT_PRESETS[key];
-    const active = draftBundle.general.accent === key;
-    return '<button type="button" class="cfg-swatch'+(active?' active':'')+'" data-accent="'+key+'" style="background:'+p.accent+';" title="'+key+'"></button>';
-  }).join("");
-  row.querySelectorAll(".cfg-swatch").forEach(function(btn){
-    btn.addEventListener("click", function(){
-      draftBundle.general.accent = btn.dataset.accent;
-      applyAccent(btn.dataset.accent); // live preview - dibatalin lagi kalau modal ditutup pakai Batal
-      renderCfgSwatches();
-      const isHex = /^#/.test(draftBundle.general.accent);
-      document.getElementById("cfgAccentPicker").value = isHex ? draftBundle.general.accent : (ACCENT_PRESETS[draftBundle.general.accent]||ACCENT_PRESETS.teal).accent;
-    });
-  });
-  const picker = document.getElementById("cfgAccentPicker");
-  const isHexNow = /^#/.test(draftBundle.general.accent);
-  picker.value = isHexNow ? draftBundle.general.accent : (ACCENT_PRESETS[draftBundle.general.accent]||ACCENT_PRESETS.teal).accent;
-}
-document.getElementById("cfgAccentPicker").addEventListener("input", function(ev){
-  draftBundle.general.accent = ev.target.value;
-  applyAccent(ev.target.value); // live preview - dibatalin lagi kalau modal ditutup pakai Batal
-  renderCfgSwatches();
-});
-
-function bukaPanelAturTampilan(){
-  draftBundle = {
-    qcFields: cloneList(qcCardConfig),
-    qcFilters: cloneList(qcFilterConfig),
-    stokFields: cloneList(stokFieldConfig),
-    sections: cloneList(sectionConfig),
-    qcLayout: cloneList(qcLayoutConfig),
-    general: Object.assign({}, generalConfig)
-  };
-  renderCfgList("cfgRowsQCLayout", "qcLayout", { reorder:true, editLabel:false });
-  renderCfgList("cfgRowsQCFields", "qcFields", { reorder:true, editLabel:true });
-  renderCfgList("cfgRowsQCFilters", "qcFilters", { reorder:true, editLabel:true });
-  renderCfgList("cfgRowsStokFields", "stokFields", { reorder:false, editLabel:true });
-  renderCfgList("cfgRowsSections", "sections", { reorder:false, editLabel:false });
-
-  const optsFont = FONT_SCALE_PRESETS.map(function(f){ return '<option value="'+f.key+'">'+f.label+'</option>'; }).join("");
-  ["cfgFontCard","cfgFontAntrian","cfgFontPreview"].forEach(function(id){ document.getElementById(id).innerHTML = optsFont; });
-  document.getElementById("cfgFontCard").value = draftBundle.general.cardFontScale;
-  document.getElementById("cfgFontAntrian").value = draftBundle.general.antrianFontScale;
-  document.getElementById("cfgFontPreview").value = draftBundle.general.previewFontScale;
-
-  const selTab = document.getElementById("cfgDefaultTab");
-  selTab.value = draftBundle.general.defaultTab;
-  const selFilter = document.getElementById("cfgDefaultFilter");
-  selFilter.innerHTML = draftBundle.qcFilters.map(function(f){ return '<option value="'+f.key+'">'+f.label+'</option>'; }).join("");
-  selFilter.value = draftBundle.general.defaultFilterQC;
-  document.getElementById("cfgStaleDays").value = draftBundle.general.staleDays;
-  renderCfgSwatches();
-
-  document.getElementById("cfgOverlay").style.display = "flex";
-}
-
-document.getElementById("btnAturTampilan").addEventListener("click", bukaPanelAturTampilan);
-document.getElementById("cfgFontCard").addEventListener("change", function(ev){ draftBundle.general.cardFontScale = ev.target.value; document.documentElement.style.setProperty("--scale-card", fontScaleValue(ev.target.value)); });
-document.getElementById("cfgFontAntrian").addEventListener("change", function(ev){ draftBundle.general.antrianFontScale = ev.target.value; document.documentElement.style.setProperty("--scale-antrian", fontScaleValue(ev.target.value)); });
-document.getElementById("cfgFontPreview").addEventListener("change", function(ev){ draftBundle.general.previewFontScale = ev.target.value; document.documentElement.style.setProperty("--scale-preview", fontScaleValue(ev.target.value)); });
-
-document.getElementById("cfgDefaultTab").addEventListener("change", function(ev){ draftBundle.general.defaultTab = ev.target.value; });
-document.getElementById("cfgDefaultFilter").addEventListener("change", function(ev){ draftBundle.general.defaultFilterQC = ev.target.value; });
-document.getElementById("cfgStaleDays").addEventListener("input", function(ev){
-  const v = parseInt(ev.target.value, 10);
-  draftBundle.general.staleDays = isNaN(v) ? 3 : Math.max(1, Math.min(30, v));
-});
-
-document.getElementById("cfgOverlay").addEventListener("click", function(ev){
-  if (ev.target.id === "cfgOverlay") { applyAccent(generalConfig.accent); applyFontScales(); document.getElementById("cfgOverlay").style.display = "none"; }
-});
-document.getElementById("cfgBatal").addEventListener("click", function(){
-  applyAccent(generalConfig.accent); // balikin warna aksen ke yang beneran tersimpan (batal preview)
-  applyFontScales(); // sama, balikin ukuran font (batal preview)
-  document.getElementById("cfgOverlay").style.display = "none";
-});
-document.getElementById("cfgSimpan").addEventListener("click", function(){
-  const visibleFilters = draftBundle.qcFilters.filter(function(f){ return f.show; });
-  if (!visibleFilters.length) { tampilkanToast("Minimal 1 filter urutan harus tetap aktif."); return; }
-
-  const btn = document.getElementById("cfgSimpan");
-  btn.disabled = true; btn.textContent = "Menyimpan…";
-  const body = new URLSearchParams();
-  body.set("action", "saveDashCfg");
-  body.set("data", JSON.stringify(draftBundle));
-  fetch(WEBAPP_URL, { method:"POST", body: body })
-    .then(function(res){ return res.json(); })
-    .then(function(hasil){
-      btn.disabled = false; btn.textContent = "Simpan";
-      if (hasil && hasil.ok) {
-        terapkanConfigBundle(hasil.config || draftBundle, false);
-        document.getElementById("cfgOverlay").style.display = "none";
-        tampilkanToast("✓ Tampilan disimpan - berlaku buat semua yang buka dashboard ini");
-      } else {
-        tampilkanToast("Gagal simpan: " + ((hasil && hasil.error) || "tidak diketahui"));
-      }
-    })
-    .catch(function(err){
-      btn.disabled = false; btn.textContent = "Simpan";
-      tampilkanToast("Gagal simpan: " + err.message);
-    });
-});
-
-// ============ v.10: DAFTAR ANTRIAN + PREVIEW TELEGRAM GABUNGAN ============
-function renderDaftarAntrian(){
-  const wrap = document.getElementById("antrian-wrap");
-  if (!qcAntrian.length) {
-    wrap.innerHTML = '<div class="antrian-empty">Belum ada laporan di daftar antrian. Isi form di kartu QC, lalu tekan "+ Tambah ke Daftar".</div>';
-  } else {
-    wrap.innerHTML =
-      '<p class="antrian-count"><span>'+qcAntrian.length+'</span> laporan menunggu dikirim</p>' +
-      '<div class="antrian-list">' + qcAntrian.map(function(a){
-        return '<div class="antrian-item" data-temp="'+a.tempId+'">' +
-          '<div class="a-info"><p class="a-name">'+a.item+' · Roll '+a.roll+'</p>' +
-          '<p class="a-detail">Selesai <b>+'+a.totSel+'</b> · Reject <b class="rej">+'+a.totRej+'</b></p></div>' +
-          '<button class="antrian-del" data-temp="'+a.tempId+'" title="Hapus dari daftar">✕</button>' +
-        '</div>';
-      }).join("") + '</div>';
-  }
-  renderTelegramPreview();
-  updateFloatingRekapBtn();
-
-  // cermin isi antrian ke box floating (Daftar Antrian)
-  const floatWrap = document.getElementById("antrian-wrap-float");
-  floatWrap.innerHTML = wrap.innerHTML;
-  document.getElementById("antrianFloatCount").textContent = qcAntrian.length;
-  const floatBody = document.getElementById("antrianFloatBody");
-  if (document.getElementById("antrianFloatHead").classList.contains("open")) floatBody.style.maxHeight = floatBody.scrollHeight + "px";
-  updateAntrianFloatVisibility();
-
-  function pasangHapusAntrian(container){
-    container.querySelectorAll(".antrian-del").forEach(function(btn){
-      btn.addEventListener("click", function(){
-        const tempId = parseInt(btn.dataset.temp, 10);
-        qcAntrian = qcAntrian.filter(function(a){ return a.tempId !== tempId; });
-        renderQCCards();
-        renderDaftarAntrian();
-        tampilkanToast("✕ Dihapus dari daftar");
-      });
-    });
-  }
-  pasangHapusAntrian(wrap);
-  pasangHapusAntrian(floatWrap);
-}
-
-// Bangun teks rekap gabungan dari SEMUA isi qcAntrian saat ini - murni di browser, gak perlu
-// tanya ke server dulu (beda dari v.09 yang fetch preview ke WEBAPP_URL).
-function generateTeksRekapGabungan(){
-  if (!qcAntrian.length) return null;
-  const baris = qcAntrian.map(function(a){
-    return a.item + " · Roll " + a.roll + "\n" +
-      "Selesai: " + a.totSel + " pcs · Reject: " + a.totRej + " pcs";
-  });
-  return "📋 <b>REKAP UPDATE QC</b> (" + qcAntrian.length + " laporan)\n\n" + baris.join("\n\n");
-}
-
-function renderTelegramPreview(){
-  const previewEl = document.getElementById("telegramPreview");
-  const teks = generateTeksRekapGabungan();
-  if (!teks) {
-    previewEl.innerHTML = "Belum ada laporan di daftar antrian.";
-    return;
-  }
-  previewEl.innerHTML = teks + "<span class='waktu'>preview - klik \"Kirim Rekap\" utk kirim beneran</span>";
-}
-
-// Kirim SELURUH isi qcAntrian sebagai 1 payload ke ?action=kirimRekapQCBatch - server yang
-// nulis semuanya ke Sheet + kirim 1 pesan Telegram gabungan. Balikannya { ok, terkirim,
-// gagal:[{index,error}], teks } - "index" itu posisi di array `payload` (SAMA urutan qcAntrian
-// saat payload dibuat), dipakai buat nyisain cuma item yg gagal di antrian.
-// v.10 (fix): dikirim lewat POST (body form-urlencoded), BUKAN ditaruh di query string GET -
-// payload-nya (semua laporan yang di-antre) bisa bikin URL kepanjangan & gagal "Failed to fetch"
-// kalau dipaksa lewat GET. Backend (routeAksiDashboard, dipanggil dari doPost) sudah disesuaikan
-// buat nerima ini.
-function kirimRekapBeneranPayload(antrianList){
-  const payload = antrianList.map(function(a){
-    const item = { baris: a.baris, mode: a.mode, totalSelesai: a.totSel, totalReject: a.totRej };
-    if (a.mode === "detail") item.ukuran = a.perUkuran;
-    return item;
-  });
-  const body = new URLSearchParams();
-  body.set("action", "kirimRekapQCBatch");
-  body.set("data", JSON.stringify(payload));
-  return fetch(WEBAPP_URL, { method: "POST", body: body })
-    .then(function(res){ return res.json(); });
-}
-
-// v.19: klik "Kirim Rekap" gak nunggu server lagi - antrian langsung dikosongin & toast sukses
-// langsung tampil (efek realtime), request beneran jalan di background. Kalau ternyata ada yang
-// gagal/network error, item terkait dikembalikan lagi ke antrian begitu balesan server datang
-// (digabung sama item baru yang mungkin sempat ditambahkan user selagi nunggu).
-function kirimRekapHandler(){
-  if (!qcAntrian.length) { tampilkanToast("Daftar antrian masih kosong."); return; }
-  const antrianSaatKirim = qcAntrian.slice();
-
-  qcAntrian = [];
-  renderQCCards();
-  renderDaftarAntrian();
-  tampilkanToast("✓ Rekap "+antrianSaatKirim.length+" laporan dikirim ke Telegram");
-
-  kirimRekapBeneranPayload(antrianSaatKirim).then(function(hasil){
-    if (hasil && hasil.ok) {
-      const gagalIdx = (hasil.gagal || []).map(function(g){ return g.index; });
-      if (gagalIdx.length) {
-        const gagalItems = antrianSaatKirim.filter(function(_, i){ return gagalIdx.indexOf(i) !== -1; });
-        qcAntrian = gagalItems.concat(qcAntrian);
-        const pesanGagal = hasil.gagal.map(function(g){ return "· " + g.error; }).join(" ");
-        tampilkanToast((hasil.terkirim||0)+" terkirim, "+gagalIdx.length+" gagal - dikembalikan ke antrian: "+pesanGagal);
-      }
-      muatDashboardQC(true);
-      renderQCCards();
-      renderDaftarAntrian();
-    } else {
-      qcAntrian = antrianSaatKirim.concat(qcAntrian);
-      renderQCCards();
-      renderDaftarAntrian();
-      tampilkanToast("Gagal kirim, dikembalikan ke antrian: " + ((hasil && hasil.error) || "tidak diketahui"));
-    }
-  }).catch(function(err){
-    qcAntrian = antrianSaatKirim.concat(qcAntrian);
-    renderQCCards();
-    renderDaftarAntrian();
-    tampilkanToast("Gagal kirim, dikembalikan ke antrian: " + err.message);
-  });
-}
-document.getElementById("btnKirimRekap").addEventListener("click", kirimRekapHandler);
-document.getElementById("btnKirimRekapFloat").addEventListener("click", kirimRekapHandler);
-
-// v.19: tombol "Kirim Rekap" floating - muncul nempel pojok layar begitu tombol aslinya (di
-// bawah Preview Telegram) keluar dari viewport pas scroll, biar gak perlu balik ke
-// atas/bawah pas lagi input list yang panjang.
-let btnRekapAsliVisible = true;
-new IntersectionObserver(function(entries){
-  btnRekapAsliVisible = entries[0].isIntersecting;
-  updateFloatingRekapBtn();
-}, { threshold: 0 }).observe(document.getElementById("btnKirimRekap"));
-
-// box "Daftar Antrian" floating - muncul begitu blok aslinya keluar viewport pas scroll.
-let blockAntrianVisible = true;
-new IntersectionObserver(function(entries){
-  blockAntrianVisible = entries[0].isIntersecting;
-  updateAntrianFloatVisibility();
-}, { threshold: 0 }).observe(document.getElementById("blockAntrian"));
-function updateAntrianFloatVisibility(){
-  const el = document.getElementById("antrianFloat");
-  const panelQCVisible = document.getElementById("panel-qc").style.display !== "none";
-  const show = panelQCVisible && !blockAntrianVisible;
-  el.classList.toggle("show", show);
-}
-document.getElementById("antrianFloatHead").addEventListener("click", function(){
-  const body = document.getElementById("antrianFloatBody");
-  const isOpen = this.classList.contains("open");
-  this.classList.toggle("open", !isOpen);
-  body.style.maxHeight = !isOpen ? body.scrollHeight + "px" : null;
-});
-function updateFloatingRekapBtn(){
-  const floatBtn = document.getElementById("btnKirimRekapFloat");
-  const panelQCVisible = document.getElementById("panel-qc").style.display !== "none";
-  const show = panelQCVisible && !btnRekapAsliVisible;
-  floatBtn.classList.toggle("show", show);
-  document.getElementById("btnKirimRekapFloatCnt").textContent = qcAntrian.length;
-}
-
-renderDaftarAntrian();
-
-// ============ ARSIP SELESAI (3 hari terakhir, dipakai bareng di 2 tab) ============
-let arsipItemsRaw = null; // null = belum pernah dimuat
-let arsipSudahDimuat = false;
-
-function muatArsipSelesai(){
-  if (arsipSudahDimuat) { renderArsip(); return; }
-  fetch(WEBAPP_URL + "?action=arsipSelesai", { cache: "no-store" })
-    .then(function(res){ return res.json(); })
-    .then(function(data){
-      arsipItemsRaw = data.items || [];
-      arsipSudahDimuat = true;
-      renderArsip();
-    })
-    .catch(function(err){
-      ["arsipGrid-qc"].forEach(function(id){
-        const el = document.getElementById(id);
-        if (el) el.innerHTML = '<div class="error-state">Gagal memuat arsip: '+err.message+'</div>';
-      });
-      perbaruiTinggiArsipTerbuka();
-    });
-}
-
-function perbaruiTinggiArsipTerbuka(){
-  document.querySelectorAll(".arsip-toggle.open").forEach(function(toggle){
-    const body = document.getElementById("arsipBody-" + toggle.dataset.arsip);
-    body.style.maxHeight = body.scrollHeight + "px";
-  });
-}
-
-function renderArsip(){
-  const items = arsipItemsRaw || [];
-  const ringkasan = items.length ? (items.length + " laporan selesai") : "Belum ada yang selesai 3 hari terakhir";
-  ["qc"].forEach(function(tab){
-    const summaryEl = document.getElementById("arsipSummary-"+tab);
-    const grid = document.getElementById("arsipGrid-"+tab);
-    if (!summaryEl || !grid) return; // jaga2 kalau markup section ini disembunyikan/dipindah
-    summaryEl.textContent = ringkasan;
-    if (!items.length) { grid.innerHTML = '<div class="empty-state">Belum ada laporan yang selesai dalam 3 hari terakhir.</div>'; return; }
-    grid.innerHTML = items.map(function(a){
-      const sizeChips = Object.keys(a.sizes||{}).map(function(k){ return '<span class="size-chip">'+k+' <b>'+a.sizes[k]+'</b></span>'; }).join("");
-      const waktu = new Date(a.waktuSelesai);
-      const waktuLabel = waktu.toLocaleDateString("id-ID",{day:"numeric",month:"short"}) + ", " + waktu.toLocaleTimeString("id-ID",{hour:"2-digit",minute:"2-digit"});
-      return '<div class="acard">' +
-        '<p class="a-title">'+a.item+'</p>' +
-        '<div class="a-meta"><span>'+(a.tanggal||'-')+'</span><span class="dot">·</span><span class="roll">Roll '+a.roll+'</span><span class="dot">·</span><span class="kg">'+fmtKg(a.kg)+' kg</span></div>' +
-        '<div class="p-sizes">'+sizeChips+'<span class="size-chip">Jml <b>'+(a.jumlah||0)+'</b></span></div>' +
-        '<div class="a-when">✅ Selesai ' + waktuLabel + '</div>' +
-      '</div>';
-    }).join("");
-  });
-  perbaruiTinggiArsipTerbuka();
-}
-
-document.querySelectorAll(".arsip-toggle").forEach(function(toggle){
-  toggle.addEventListener("click", function(){
-    const body = document.getElementById("arsipBody-" + toggle.dataset.arsip);
-    const isOpen = toggle.classList.contains("open");
-    toggle.classList.toggle("open", !isOpen);
-    if (!isOpen) {
-      body.style.maxHeight = body.scrollHeight + "px"; // langsung buka duluan (walau masih "Memuat...")
-      muatArsipSelesai();
-    } else {
-      body.style.maxHeight = null;
-    }
-  });
-});
-
-// v.16: OPTIMASI LOADING - v.15 kemarin selalu muat Stok DAN QC bareng-bareng pas dashboard
-// dibuka (biar "tab default"/"filter default" bisa langsung diterapkan), padahal salah satunya
-// pasti gak kepake sampai orangnya pindah tab sendiri. Sekarang dipecah jadi 2 tahap:
-//  1) ?action=dashboardCfg - CUMA baca config dari Script Properties (gak nyentuh Sheet TIM
-//     POTONG/STOK KAIN sama sekali) - jauh lebih cepat dibanding dashboard/dashboardQC biasa.
-//  2) Begitu tau "tab default"-nya apa, CUMA tab itu yang langsung dimuat datanya. Tab
-//     satunya tetap lazy - baru dimuat kalau orangnya beneran klik ke situ (gate
-//     qcSudahDimuat/stokSudahDimuat di listener .main-tab-btn di atas).
-// Kalau fetch config gagal (jaringan dsb), fallback aman: anggap default "Stok" & tetap jalan.
-fetch(WEBAPP_URL + "?action=dashboardCfg", { cache: "no-store" })
-  .then(function(res){ return res.json(); })
-  .then(function(data){
-    terapkanConfigBundle(data.config || {}, true); // ini juga yang mindahin tab kalau defaultnya "qc"
-    configPertamaKaliDimuat = true;
-    if (generalConfig.defaultTab === "qc") {
-      // .click() di terapkanConfigBundle() sudah mindahin tampilan + motret muatDashboardQC()
-      // lewat gate qcSudahDimuat - gak perlu panggil manual di sini lagi.
-    } else {
-      muatDashboard(false);
-    }
-  })
-  .catch(function(){
-    configPertamaKaliDimuat = true;
-    muatDashboard(false); // fallback: config gagal kebaca, buka Stok seperti biasa
-  });
-
+// ------------------------------------------------------------
+// BOOTSTRAP
+// ------------------------------------------------------------
+muatDaftarLaporan();
+setupRealtime();
 </script>
 </body>
 </html>
