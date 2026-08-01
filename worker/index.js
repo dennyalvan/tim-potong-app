@@ -1,4 +1,19 @@
 // ============================================================
+// CODE WORKER PRODUKSI ver.24
+// ============================================================
+// PERUBAHAN ver.24: `arsip_selesai` sekarang disimpan DETAIL (format terinspirasi LOG QC -
+// Tanggal, Warna, Kode Roll, Varian, breakdown ukuran XS-6XL, Total Reject) bukan cuma
+// (tim_potong_id, waktu) doang lagi - permintaan Denny biar gampang diidentifikasi langsung
+// di Supabase Table Editor. Ditulis di handleSubmitQC_ pas laporan jadi SELESAI.
+// SEKALIGUS: REVERSE CASCADE dipasang di database (trigger
+// trg_hapus_tim_potong_saat_arsip_selesai_dihapus) - begitu 1 baris arsip_selesai dihapus,
+// baris tim_potong induknya OTOMATIS ikut terhapus juga, yang lalu men-trigger cascade yang
+// sudah ada (log_pemakaian_kain -> stok kain balik otomatis, log_qc ikut kehapus). Efeknya:
+// hapus 1 baris arsip_selesai = UNDO TOTAL 1 pekerjaan produksi, seolah-olah gak pernah
+// dipotong & gak pernah di-QC sama sekali. Baris arsip_selesai yang SUDAH ADA sebelum versi
+// ini juga sudah di-backfill kolom detailnya lewat migrasi SQL langsung (bukan lewat kode ini).
+//
+// ============================================================
 // CODE WORKER PRODUKSI ver.23
 // ============================================================
 // PERUBAHAN ver.23: BUG NYATA ditemukan Denny - kolom `tanggal` di tim_potong (diisi otomatis
@@ -862,10 +877,26 @@ async function handleSubmitQC_(body, env) {
     });
 
     if (sudahSelesaiSemua) {
+      // v.24: arsip_selesai sekarang disimpan DETAIL (format terinspirasi LOG QC - Warna,
+      // Varian, breakdown ukuran, Total Reject) bukan cuma (tim_potong_id, waktu) doang -
+      // biar gampang diidentifikasi langsung di Supabase Table Editor tanpa perlu buka
+      // tim_potong terpisah. Breakdown ukuran diambil APA ADANYA dari tim_potong (qty ASLI
+      // yang dipotong), bukan dari log_qc (yang isinya per-submit, bisa banyak baris).
+      const kolomUkuranAsli = {};
+      DAFTAR_UKURAN_TIMPOTONG.forEach(function (u) { kolomUkuranAsli[KOLOM_UKURAN_MAP[u]] = tp[KOLOM_UKURAN_MAP[u]]; });
       await fetch(env.SUPABASE_URL + '/rest/v1/arsip_selesai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', apikey: env.SUPABASE_SECRET_KEY, Authorization: 'Bearer ' + env.SUPABASE_SECRET_KEY, Prefer: 'return=minimal' },
-        body: JSON.stringify([{ tim_potong_id: timPotongId, waktu: waktu }])
+        body: JSON.stringify([Object.assign({
+          tim_potong_id: timPotongId,
+          waktu: waktu,
+          tanggal: tp.tanggal,
+          warna: tp.jenis_warna_baju,
+          kode_roll: tp.kode_roll,
+          varian: varianQC || null,
+          jumlah: tp.jumlah,
+          total_reject: totalRejectBaru
+        }, kolomUkuranAsli)])
       });
     }
 
