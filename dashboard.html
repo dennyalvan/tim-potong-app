@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.19
+DASHBOARD ver.20
 ============================================================
-PERUBAHAN ver.19: teks "Terakhir dimuat..."/"Update HH:MM" yang sebelumnya nempel permanen di
-atas judul (elemen #lastUpdate) DIHAPUS dari canvas - sekarang jadi toast juga (fade sebentar,
-hilang otomatis), konsisten sama indikator loading di ver.18. Riwayat lengkap: git log.
+PERUBAHAN ver.20: toast "✓ Update HH:MM" sekarang CUMA muncul buat update manual (buka tab
+pertama/tap Refresh/abis kirim rekap) - update otomatis diam-diam dari Realtime & jaring
+pengaman visibilitychange/focus TETAP jalan tapi TANPA toast (gak berisik muncul sendiri).
+Riwayat lengkap: git log.
 ============================================================
 -->
 <html lang="id">
@@ -400,7 +401,12 @@ function tampilkanLabelCache_(namaTab, waktuCache) {
   tampilkanToast('Nampilin data cache (' + namaTab + ') dari ' + formatWaktuLalu_(waktuCache) + ' - lagi muat ulang...');
 }
 
-function updateJamRefresh() {
+// v.20: toast "✓ Update HH:MM" sekarang CUMA muncul buat update MANUAL (buka tab pertama kali/
+// tap tombol Refresh/abis kirim rekap) - update otomatis diam-diam dari Realtime (postgres
+// changes) atau jaring pengaman visibilitychange/focus TETAP jalan di background tapi TANPA
+// toast, biar gak berisik muncul sendiri tiap ada perubahan data dari tempat lain.
+function updateJamRefresh(manual) {
+  if (!manual) return;
   const now = new Date();
   const jam = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) + ', ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
   tampilkanToast('✓ Update ' + jam);
@@ -421,8 +427,9 @@ function updateJamRefresh() {
 // (2) ada penjaga (sedangMuatX) biar gak nembak request dobel kalau tab/checkbox dipencet
 // berkali-kali pas masih proses loading.
 let sedangMuatLaporan = false;
-function muatDaftarLaporan(percobaan) {
+function muatDaftarLaporan(percobaan, manual) {
   percobaan = percobaan || 0;
+  manual = manual !== false; // default true (manual) kalau gak disebutkan eksplisit
   if (percobaan === 0) {
     if (sedangMuatLaporan) return;
     sedangMuatLaporan = true;
@@ -431,7 +438,7 @@ function muatDaftarLaporan(percobaan) {
       const cache = ambilCacheDashboard_('laporan_qc');
       if (cache) {
         daftarLaporanData = cache.data || [];
-        tampilkanLabelCache_('Proses & QC', cache.waktu);
+        if (manual) tampilkanLabelCache_('Proses & QC', cache.waktu);
         renderDaftarLaporan();
       }
     }
@@ -441,13 +448,13 @@ function muatDaftarLaporan(percobaan) {
     .then(function (data) {
       daftarLaporanData = Array.isArray(data) ? data : [];
       simpanCacheDashboard_('laporan_qc', daftarLaporanData);
-      updateJamRefresh();
+      updateJamRefresh(manual);
       renderDaftarLaporan();
       sedangMuatLaporan = false;
       tampilkanLoading(false);
     })
     .catch(function (e) {
-      if (percobaan < 1) { setTimeout(function () { muatDaftarLaporan(percobaan + 1); }, 1500); return; }
+      if (percobaan < 1) { setTimeout(function () { muatDaftarLaporan(percobaan + 1, manual); }, 1500); return; }
       sedangMuatLaporan = false;
       tampilkanLoading(false);
       tampilkanToast('Gagal memuat laporan: ' + e.message);
@@ -860,8 +867,9 @@ function muatArsip() {
 // TAB STOK KAIN
 // ------------------------------------------------------------
 let sedangMuatStok = false;
-function muatStokUtuh(percobaan) {
+function muatStokUtuh(percobaan, manual) {
   percobaan = percobaan || 0;
+  manual = manual !== false;
   if (percobaan === 0) {
     if (sedangMuatStok) return;
     sedangMuatStok = true;
@@ -870,7 +878,7 @@ function muatStokUtuh(percobaan) {
       const cache = ambilCacheDashboard_('stok_utuh');
       if (cache && cache.data) {
         stokUtuhData = cache.data;
-        tampilkanLabelCache_('Stok Kain', cache.waktu);
+        if (manual) tampilkanLabelCache_('Stok Kain', cache.waktu);
         document.getElementById('totalKgTersisa').innerHTML = formatAngka(stokUtuhData.totalKg) + ' <span class="unit">kg</span>';
         document.getElementById('totalKgSub').textContent = 'di ' + stokUtuhData.totalRoll + ' roll · ' + stokUtuhData.totalWarna + ' warna';
         renderWarnaGrid();
@@ -882,7 +890,7 @@ function muatStokUtuh(percobaan) {
     .then(function (data) {
       stokUtuhData = data;
       simpanCacheDashboard_('stok_utuh', data);
-      updateJamRefresh();
+      updateJamRefresh(manual);
       document.getElementById('totalKgTersisa').innerHTML = formatAngka(data.totalKg) + ' <span class="unit">kg</span>';
       document.getElementById('totalKgSub').textContent = 'di ' + data.totalRoll + ' roll · ' + data.totalWarna + ' warna';
       renderWarnaGrid();
@@ -890,7 +898,7 @@ function muatStokUtuh(percobaan) {
       tampilkanLoading(false);
     })
     .catch(function (e) {
-      if (percobaan < 1) { setTimeout(function () { muatStokUtuh(percobaan + 1); }, 1500); return; }
+      if (percobaan < 1) { setTimeout(function () { muatStokUtuh(percobaan + 1, manual); }, 1500); return; }
       sedangMuatStok = false;
       tampilkanLoading(false);
       tampilkanToast('Gagal memuat stok: ' + e.message);
@@ -951,8 +959,9 @@ document.querySelectorAll('.chip[data-sortwarna]').forEach(function (el) {
 let rekapItemsRaw = [];
 
 let sedangMuatRekap = false;
-function muatRekapQC(percobaan) {
+function muatRekapQC(percobaan, manual) {
   percobaan = percobaan || 0;
+  manual = manual !== false;
   let munculDariCache = false;
   if (percobaan === 0) {
     if (sedangMuatRekap) return;
@@ -962,7 +971,7 @@ function muatRekapQC(percobaan) {
       const cache = ambilCacheDashboard_('rekap_qc');
       if (cache && cache.data) {
         rekapItemsRaw = cache.data;
-        tampilkanLabelCache_('Rekap QC', cache.waktu);
+        if (manual) tampilkanLabelCache_('Rekap QC', cache.waktu);
         renderRekapQC();
         munculDariCache = true;
       }
@@ -974,13 +983,13 @@ function muatRekapQC(percobaan) {
     .then(function (data) {
       rekapItemsRaw = Array.isArray(data) ? data : [];
       simpanCacheDashboard_('rekap_qc', rekapItemsRaw);
-      updateJamRefresh();
+      updateJamRefresh(manual);
       renderRekapQC();
       sedangMuatRekap = false;
       tampilkanLoading(false);
     })
     .catch(function (e) {
-      if (percobaan < 1) { setTimeout(function () { muatRekapQC(percobaan + 1); }, 1500); return; }
+      if (percobaan < 1) { setTimeout(function () { muatRekapQC(percobaan + 1, manual); }, 1500); return; }
       sedangMuatRekap = false;
       tampilkanLoading(false);
       if (rekapItemsRaw.length > 0) {
@@ -1077,10 +1086,13 @@ function tampilkanToast(msg) {
 // ------------------------------------------------------------
 // v.08: helper terpusat - refresh tab yang LAGI KELIATAN aja (bukan semua tab sekaligus,
 // biar gak boros request buat tab yang gak lagi dilihat).
+// v.20: muatTabAktif_() dipakai buat auto-sync Realtime + jaring pengaman visibilitychange/
+// focus (ver.08) - keduanya SILENT/otomatis, jadi semua panggilan di sini eksplisit manual=false
+// biar gak nembak toast "✓ Update ..." sendiri di background.
 function muatTabAktif_() {
-  muatDaftarLaporan();
-  if (document.getElementById('tabStok').style.display !== 'none') muatStokUtuh();
-  if (document.getElementById('tabRekap').style.display !== 'none') muatRekapQC();
+  muatDaftarLaporan(0, false);
+  if (document.getElementById('tabStok').style.display !== 'none') muatStokUtuh(0, false);
+  if (document.getElementById('tabRekap').style.display !== 'none') muatRekapQC(0, false);
 }
 
 let timerDebounceRealtime = null;
