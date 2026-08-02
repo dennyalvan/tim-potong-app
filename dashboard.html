@@ -1,6 +1,18 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+DASHBOARD ver.17
+============================================================
+PERUBAHAN ver.17: kartu warna di tab Stok Kain sekarang beneran berwarna (sebelumnya peta
+WARNA_KE_HEX kosong, semua kartu default abu-abu). Diisi palet ~35 nama warna umum di industri
+garmen (Indonesia & Inggris, termasuk istilah dari KAMUS SINONIM WARNA & KAMUS TIM POTONG -
+mis. DUSTY, MUSTARD, TERRACOTTA, SAGE, ONYX, STEEL BLUE). Nama warna yang GABUNGAN kata (mis.
+"STEEL NAVY", "HITAM ONYX") dicocokkan otomatis lewat warnaKeHex_() - exact match dulu, baru
+fallback cari kata kunci paling spesifik. Swatch bulat + aksen garis kiri kartu sekarang ikut
+warna aslinya; warna terang (putih/krim) dikasih border tipis biar tetap kelihatan di atas
+kartu putih. Kalau nama warnanya gak dikenali sama sekali, tetap fallback abu-abu netral
+seperti sebelumnya (gak ada yang error/kosong).
+
 DASHBOARD ver.16
 ============================================================
 PERUBAHAN ver.16: fix presisi angka kg di tab Stok Kain - formatAngka() sebelumnya dibatasi
@@ -342,7 +354,7 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
   .warna-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .warna-card { background: #fff; border-radius: 14px; padding: 12px 14px; cursor: pointer; }
   .warna-card-top { display: flex; align-items: center; gap: 8px; }
-  .warna-card .swatch { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+  .warna-card .swatch { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.1); }
   .warna-card .nama { font-weight: 700; font-size: 13px; flex: 1; }
   .warna-card .kg { font-weight: 800; font-size: 13px; }
   .warna-card .roll-count { font-size: 11px; color: var(--gray-text); margin-top: 2px; }
@@ -478,7 +490,45 @@ function formatTanggalPendek(tanggalStr) {
 function formatKg(n) {
   return Number(n || 0).toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 2 }) + ' kg';
 }
-const WARNA_KE_HEX = {}; // opsional, kalau mau dipetakan ke warna asli - default abu-abu
+// v.16: peta nama warna -> hex, buat kasih warna beneran di swatch & aksen kartu Stok Kain
+// (sebelumnya kosong, semua kartu default abu-abu). Mencakup nama dasar Indonesia & Inggris,
+// plus istilah tekstil/fashion yang muncul di KAMUS SINONIM WARNA & contoh nota supplier.
+// Nama warna di data sering GABUNGAN 2+ kata (mis. "STEEL NAVY", "HITAM ONYX", "DUSTY PINK") -
+// warnaKeHex_() di bawah nyoba exact match dulu, baru fallback cari kata kunci yang paling
+// SPESIFIK (istilah 2 kata diprioritaskan sebelum 1 kata, biar "DUSTY PINK" gak kepotong jadi
+// cuma cocok ke "PINK" doang).
+const WARNA_KE_HEX = {
+  // dasar Indonesia & Inggris
+  'HITAM': '#1C1C1E', 'BLACK': '#1C1C1E', 'ONYX': '#1C1C1E',
+  'PUTIH': '#F4F4F0', 'WHITE': '#F4F4F0', 'IVORY': '#FFFFF0',
+  'MERAH': '#DC2626', 'RED': '#DC2626',
+  'MARUN': '#7B241C', 'MAROON': '#7B241C', 'MERAH HATI': '#7B241C',
+  'HIJAU': '#16A34A', 'GREEN': '#16A34A', 'HIJAU TUA': '#14532D', 'HIJAU BOTOL': '#14532D',
+  'BIRU': '#2563EB', 'BLUE': '#2563EB',
+  'NAVY': '#1E3A5F', 'DONGKER': '#1E3A5F', 'BIRU DONGKER': '#1E3A5F', 'BIRU TUA': '#1E3A5F',
+  'STEEL BLUE': '#4A6FA5', 'ST. BLUE': '#4A6FA5', 'ST BLUE': '#4A6FA5', 'DENIM': '#4A5D75',
+  'KUNING': '#EAB308', 'YELLOW': '#EAB308',
+  'MUSTARD': '#C89B3C', 'KUNING BUSUK': '#C89B3C', 'KUBUS': '#C89B3C',
+  'ABU': '#9CA3AF', 'ABU-ABU': '#9CA3AF', 'GREY': '#9CA3AF', 'GRAY': '#9CA3AF', 'MISTY': '#B0B7C0',
+  'COKLAT': '#78502E', 'COKELAT': '#78502E', 'BROWN': '#78502E', 'MOCHA': '#8A6E5A', 'MILO': '#6B4A2F',
+  'UNGU': '#7C3AED', 'PURPLE': '#7C3AED', 'VIOLET': '#7C3AED',
+  'ORANGE': '#EA580C', 'ORANYE': '#EA580C', 'FANTA': '#F97316',
+  'CREAM': '#F5E6C8', 'KRIM': '#F5E6C8', 'CREAM SUSU': '#F5E6C8', 'COKSU': '#F5E6C8',
+  'PINK': '#EC4899', 'MERAH MUDA': '#EC4899',
+  'DUSTY PINK': '#C98E9B', 'DUSTY': '#C98E9B',
+  'TERRACOTTA': '#B5573B', 'TERACOTA': '#B5573B', 'BATA': '#B5573B', 'MERAH BATA': '#B5573B',
+  'SAGE': '#9CAF88', 'TOSCA': '#2C9A9E', 'TOSCA MUDA': '#5FC2C5', 'KHAKI': '#BFB08F',
+  'SILVER': '#C7CCD6', 'GOLD': '#C6A15B', 'BEIGE': '#D8CBB4', 'TAN': '#C8A876'
+};
+function warnaKeHex_(namaWarna) {
+  const w = String(namaWarna || '').toUpperCase().trim();
+  if (WARNA_KE_HEX[w]) return WARNA_KE_HEX[w];
+  const kunciTerurut = Object.keys(WARNA_KE_HEX).sort(function (a, b) { return b.length - a.length; });
+  for (let i = 0; i < kunciTerurut.length; i++) {
+    if (w.indexOf(kunciTerurut[i]) !== -1) return WARNA_KE_HEX[kunciTerurut[i]];
+  }
+  return '#9aa3b2'; // gak ketemu sama sekali - default abu-abu netral
+}
 
 const tg = window.Telegram ? window.Telegram.WebApp : null;
 if (tg) { tg.ready(); tg.expand(); }
@@ -1057,8 +1107,9 @@ function renderWarnaGrid() {
 
   document.getElementById('warnaGrid').innerHTML = list.map(function (w, i) {
     const terbuka = !!warnaTerbuka[w.warna];
-    let html = '<div class="warna-card" data-warnatoggle="' + escapeAttr(w.warna) + '">' +
-      '<div class="warna-card-top"><span class="swatch" style="background:' + (WARNA_KE_HEX[w.warna] || '#9aa3b2') + '"></span>' +
+    const hexWarna = warnaKeHex_(w.warna);
+    let html = '<div class="warna-card" style="border-left:4px solid ' + hexWarna + '" data-warnatoggle="' + escapeAttr(w.warna) + '">' +
+      '<div class="warna-card-top"><span class="swatch" style="background:' + hexWarna + '"></span>' +
       '<span class="nama">' + (i + 1) + '. ' + escapeHtml(w.warna) + '</span></div>' +
       '<div style="display:flex;justify-content:space-between;margin-top:4px"><span class="roll-count">' + w.jumlahRoll + ' roll</span><span class="kg">' + formatAngka(w.totalKg) + ' kg</span></div>';
     if (terbuka) {
