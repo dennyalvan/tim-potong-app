@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+DASHBOARD ver.14
+============================================================
+PERUBAHAN ver.14: fix presisi angka kg di tab Stok Kain - formatAngka() sebelumnya dibatasi
+maksimal 1 desimal (maximumFractionDigits:1), jadi kg 24.85 di Supabase tampil "24,9" di
+dashboard (dibulatkan, ketauan Denny dari roll MERAH/0132). Sekarang dinaikkan ke 2 desimal,
+sesuai presisi kg yang beneran disimpan di Supabase - total kg & kg per-roll sekarang tampil
+PERSIS sama kayak sumber datanya, gak dibulatkan lagi.
+
 DASHBOARD ver.13
 ============================================================
 PERUBAHAN ver.13: 2 penyesuaian teks header.
@@ -1122,7 +1130,11 @@ function renderRekapQC() {
 // ------------------------------------------------------------
 function escapeHtml(t) { return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 function escapeAttr(t) { return escapeHtml(t).replace(/"/g, '&quot;'); }
-function formatAngka(n) { return Number(n).toLocaleString('id-ID', { maximumFractionDigits: 1 }); }
+// v.14: SEBELUMNYA maximumFractionDigits:1 - bikin angka kg kepotong presisinya (mis. 24.85kg
+// di Supabase tampil "24,9" di sini, ketauan Denny). Kg disimpan sampai 2 desimal di Supabase,
+// jadi format tampilan disamain ke 2 desimal biar PERSIS sama kayak sumber datanya, bukan
+// dibulatkan.
+function formatAngka(n) { return Number(n).toLocaleString('id-ID', { maximumFractionDigits: 2 }); }
 function tampilkanToast(msg) {
   const el = document.getElementById('toast');
   el.textContent = msg;
