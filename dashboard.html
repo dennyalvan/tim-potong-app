@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.18
+DASHBOARD ver.19
 ============================================================
-PERUBAHAN ver.18: indikator "Memuat..." diganti jadi popup melayang yang fade in/out otomatis
-(sebelumnya <p> biasa yang toggle display:none/block dan bikin tinggi header berubah tiap
-loading nyala/mati, jadi UI kelihatan "loncat-loncat"). Riwayat lengkap: git log.
+PERUBAHAN ver.19: teks "Terakhir dimuat..."/"Update HH:MM" yang sebelumnya nempel permanen di
+atas judul (elemen #lastUpdate) DIHAPUS dari canvas - sekarang jadi toast juga (fade sebentar,
+hilang otomatis), konsisten sama indikator loading di ver.18. Riwayat lengkap: git log.
 ============================================================
 -->
 <html lang="id">
@@ -42,8 +42,6 @@ loading nyala/mati, jadi UI kelihatan "loncat-loncat"). Riwayat lengkap: git log
   #app { max-width: 520px; margin: 0 auto; padding: 16px; }
 
   .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
-  .header .brand { font-size: 12px; color: var(--blue-link); font-weight: 700; margin: 0 0 2px; }
-  .last-update-inline { font-size: 10.5px; color: var(--gray-text); font-weight: 600; text-transform: none; letter-spacing: 0; margin-left: 4px; }
   .header h1 { font-size: 20px; margin: 0; }
   .header-right { text-align: right; position: relative; }
   .btn-refresh { background: #fff; border: 1.5px solid var(--indigo); border-radius: 20px; padding: 8px 16px; font-weight: 700; font-size: 13px; cursor: pointer; color: var(--indigo); box-shadow: 0 1px 4px rgba(41,43,49,0.10); }
@@ -188,7 +186,6 @@ loading nyala/mati, jadi UI kelihatan "loncat-loncat"). Riwayat lengkap: git log
 <div id="app">
   <div class="header">
     <div>
-      <p class="brand"><span class="last-update-inline" id="lastUpdate"></span></p>
       <h1 id="pageTitle">Dashboard Produksi & QC</h1>
     </div>
     <div class="header-right">
@@ -396,13 +393,17 @@ function formatWaktuLalu_(waktuMs) {
   const jam = Math.round(menit / 60);
   return jam + ' jam lalu';
 }
+// v.19: "Terakhir dimuat..." dan "Update HH:MM" sebelumnya nempel permanen sebagai teks di
+// atas judul (elemen #lastUpdate) - sekarang gak ada lagi teks yang nongkrong di canvas sama
+// sekali, keduanya jadi toast yang muncul sebentar terus otomatis hilang.
 function tampilkanLabelCache_(namaTab, waktuCache) {
-  document.getElementById('lastUpdate').textContent = 'Terakhir dimuat ' + formatWaktuLalu_(waktuCache) + ' (' + namaTab + ') - memuat ulang...';
+  tampilkanToast('Nampilin data cache (' + namaTab + ') dari ' + formatWaktuLalu_(waktuCache) + ' - lagi muat ulang...');
 }
 
 function updateJamRefresh() {
   const now = new Date();
-  document.getElementById('lastUpdate').textContent = 'Update ' + now.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) + ', ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  const jam = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) + ', ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  tampilkanToast('✓ Update ' + jam);
 }
 
 // ------------------------------------------------------------
