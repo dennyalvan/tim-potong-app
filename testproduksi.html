@@ -1,6 +1,16 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+HTML PRODUKSI (Supabase/testproduksi) - ver.08
+============================================================
+PERUBAHAN ver.08: FIX bug laporan Denny - mini app gak keload data pas launch, harus tap
+Refresh manual dulu. Akar masalah: muatDataReferensi() nembak 5 request PARALEL (Promise.all)
+ke Worker yang sama - kalau MINIMAL 1 dari 5 gagal/timeout (lebih rawan pas Worker/koneksi
+belum "anget" di launch pertama), seluruh proses langsung nyerah tanpa coba lagi, jadi Varian/
+Warna/dst kosong sampai di-refresh manual. Sekarang otomatis coba ULANG SEKALI (jeda 1.5 detik)
+sebelum benar-benar nampilin pesan gagal.
+============================================================
+
 HTML PRODUKSI (Supabase/testproduksi) - ver.07
 ============================================================
 PERUBAHAN ver.07 (revert sebagian ver.05/06): sumber saran Warna dibalikin murni ke
@@ -448,7 +458,13 @@ function simpanCacheRefData_(data) {
   }
 }
 
-function muatDataReferensi() {
+// v.12: auto-retry SEKALI kalau gagal di percobaan pertama - Promise.all di bawah nembak 5
+// request PARALEL ke Worker yang sama, jadi peluang minimal 1 dari 5 gagal/timeout pas Worker
+// baru "bangun" dari idle lebih besar dibanding 1 request tunggal. Sebelumnya kalau ini gagal
+// dan belum ada cache sama sekali (buka pertama kali), layar produksi jadi kosong sampai Denny
+// tap Refresh manual - sekarang dicoba ulang otomatis sekali dulu sebelum nyerah.
+function muatDataReferensi(percobaan) {
+  percobaan = percobaan || 0;
   const cache = ambilCacheRefData_();
   if (cache) {
     kategoriVarianData = cache.kategoriVarianData || [];
@@ -480,6 +496,7 @@ function muatDataReferensi() {
     renderDetailCard();
     renderQtyGrid();
   }).catch(function (err) {
+    if (percobaan < 1) { setTimeout(function () { muatDataReferensi(percobaan + 1); }, 1500); return; }
     if (!cache) tampilkanToast('Gagal memuat data referensi: ' + err.message);
   });
 }
