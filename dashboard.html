@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+DASHBOARD ver.15
+============================================================
+PERUBAHAN ver.15: fitur baru dari request Denny - checkbox "tandai selesai" sekarang 2 arah.
+Sebelumnya kalau item udah ada di antrian, klik checkbox lagi (uncek) cuma nampilin toast
+"sudah ada di antrian" tanpa efek apa-apa - satu-satunya cara hapus dari antrian adalah buka
+kotak preview "REKAP UPDATE QC" terus tap tombol ✕ di baris yang bersangkutan. Sekarang uncek
+checkbox-nya LANGSUNG hapus item itu dari antrian (gak perlu buka preview & cari barisnya lagi).
+
 DASHBOARD ver.14
 ============================================================
 PERUBAHAN ver.14: perbaikan bug + 1 penyesuaian visual dari laporan Denny.
@@ -758,7 +766,20 @@ function pasangEventLaporanCard() {
       const r = daftarLaporanData.find(function (x) { return x.id === id; });
       if (!r || r.sisa <= 0) { el.checked = false; tampilkanToast('Item ini sudah gak ada sisa.'); return; }
       const sudahDiAntrian = antrianQC.some(function (a) { return a.timPotongId === id; });
-      if (sudahDiAntrian) { el.checked = true; tampilkanToast('Item ini sudah ada di antrian.'); return; }
+      if (sudahDiAntrian) {
+        // v.15: uncek checkbox = otomatis hapus SEMUA entri laporan ini dari antrian, gak
+        // perlu lagi buka kotak preview terus tap tombol ✕ satu-satu.
+        antrianQC = antrianQC.filter(function (a) { return a.timPotongId !== id; });
+        laporanTerbuka = {};
+        renderDaftarLaporan();
+        renderAntrian();
+        requestAnimationFrame(function () {
+          const kartuBaru = document.querySelector('.laporan-card[data-id="' + id + '"]');
+          if (kartuBaru) kartuBaru.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+        tampilkanToast('✕ "' + r.jenisWarnaBaju + '" dihapus dari antrian.');
+        return;
+      }
       antrianQC.push({
         timPotongId: id, mode: 'ringkas', ringkas: { selesai: r.sisa, reject: 0 },
         preview: r.jenisWarnaBaju + ' - Selesaikan sisa ' + r.sisa + ' pcs'
