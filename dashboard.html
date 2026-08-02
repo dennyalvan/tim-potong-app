@@ -1,16 +1,11 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.17
+DASHBOARD ver.18
 ============================================================
-PERUBAHAN ver.17: kartu warna di tab Stok Kain sekarang beneran berwarna (WARNA_KE_HEX diisi
-~35 nama warna umum garmen, exact-match dulu baru fallback kata kunci; warna gak dikenal tetap
-fallback abu-abu netral).
-
-Riwayat versi lengkap (ver.01-ver.16) ada di git log - mulai ver.17 ini, changelog di header
-file HANYA nyimpen versi SEKARANG + ringkasan perubahan terakhir (bukan numpuk semua riwayat),
-biar gak gampang tabrakan pas 2 sesi Claude edit file yang sama bersamaan. Detail teknis tiap
-perubahan tetap lengkap di commit message masing-masing.
+PERUBAHAN ver.18: indikator "Memuat..." diganti jadi popup melayang yang fade in/out otomatis
+(sebelumnya <p> biasa yang toggle display:none/block dan bikin tinggi header berubah tiap
+loading nyala/mati, jadi UI kelihatan "loncat-loncat"). Riwayat lengkap: git log.
 ============================================================
 -->
 <html lang="id">
@@ -50,9 +45,10 @@ perubahan tetap lengkap di commit message masing-masing.
   .header .brand { font-size: 12px; color: var(--blue-link); font-weight: 700; margin: 0 0 2px; }
   .last-update-inline { font-size: 10.5px; color: var(--gray-text); font-weight: 600; text-transform: none; letter-spacing: 0; margin-left: 4px; }
   .header h1 { font-size: 20px; margin: 0; }
-  .header-right { text-align: right; }
+  .header-right { text-align: right; position: relative; }
   .btn-refresh { background: #fff; border: 1.5px solid var(--indigo); border-radius: 20px; padding: 8px 16px; font-weight: 700; font-size: 13px; cursor: pointer; color: var(--indigo); box-shadow: 0 1px 4px rgba(41,43,49,0.10); }
-  .loading-indicator { font-size: 11px; color: var(--gray-text); margin-top: 4px; }
+  .loading-popup { position: absolute; top: calc(100% + 6px); right: 0; background: #1c1c1e; color: #fff; padding: 6px 13px; border-radius: 20px; font-size: 11.5px; font-weight: 600; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 50; }
+  .loading-popup.show { opacity: 1; }
 
   .tab-toggle { display: flex; gap: 10px; margin-bottom: 12px; }
   .tab-btn { flex: 1; padding: 11px 6px; border-radius: 12px; border: none; background: #fff; font-weight: 700; font-size: 12.5px; cursor: pointer; color: #374151; display: flex; align-items: center; justify-content: center; gap: 4px; }
@@ -197,7 +193,7 @@ perubahan tetap lengkap di commit message masing-masing.
     </div>
     <div class="header-right">
       <button class="btn-refresh" id="btnRefresh">🔄 Refresh</button>
-      <p class="loading-indicator" id="loadingIndicator" style="display:none">Memuat...</p>
+      <p class="loading-popup" id="loadingIndicator">⏳ Memuat...</p>
     </div>
   </div>
 
@@ -457,8 +453,11 @@ function muatDaftarLaporan(percobaan) {
     });
 }
 
+// v.18: indikator "Memuat..." sekarang popup melayang (position:absolute, gak makan ruang di
+// flex header) yang muncul/hilang dengan fade halus - sebelumnya <p> biasa yang toggle
+// display:none/block, bikin tinggi header berubah tiap loading nyala/mati (UI "loncat-loncat").
 function tampilkanLoading(tampil) {
-  document.getElementById('loadingIndicator').style.display = tampil ? 'block' : 'none';
+  document.getElementById('loadingIndicator').classList.toggle('show', !!tampil);
 }
 
 // v.11: ketebalan teks "X hari lalu" bertingkat 3 level (usia-baru/sedang/lama) - semakin lama

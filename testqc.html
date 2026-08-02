@@ -1,214 +1,11 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.17
+DASHBOARD ver.18
 ============================================================
-PERUBAHAN ver.17: kartu warna di tab Stok Kain sekarang beneran berwarna (sebelumnya peta
-WARNA_KE_HEX kosong, semua kartu default abu-abu). Diisi palet ~35 nama warna umum di industri
-garmen (Indonesia & Inggris, termasuk istilah dari KAMUS SINONIM WARNA & KAMUS TIM POTONG -
-mis. DUSTY, MUSTARD, TERRACOTTA, SAGE, ONYX, STEEL BLUE). Nama warna yang GABUNGAN kata (mis.
-"STEEL NAVY", "HITAM ONYX") dicocokkan otomatis lewat warnaKeHex_() - exact match dulu, baru
-fallback cari kata kunci paling spesifik. Swatch bulat + aksen garis kiri kartu sekarang ikut
-warna aslinya; warna terang (putih/krim) dikasih border tipis biar tetap kelihatan di atas
-kartu putih. Kalau nama warnanya gak dikenali sama sekali, tetap fallback abu-abu netral
-seperti sebelumnya (gak ada yang error/kosong).
-
-DASHBOARD ver.16
-============================================================
-PERUBAHAN ver.16: fix presisi angka kg di tab Stok Kain - formatAngka() sebelumnya dibatasi
-maksimal 1 desimal (maximumFractionDigits:1), jadi kg 24.85 di Supabase tampil "24,9" di
-dashboard (dibulatkan, ketauan Denny dari roll MERAH/0132). Sekarang dinaikkan ke 2 desimal,
-sesuai presisi kg yang beneran disimpan di Supabase - total kg & kg per-roll sekarang tampil
-PERSIS sama kayak sumber datanya, gak dibulatkan lagi.
-
-DASHBOARD ver.15
-============================================================
-PERUBAHAN ver.15: fitur baru dari request Denny - checkbox "tandai selesai" sekarang 2 arah.
-Sebelumnya kalau item udah ada di antrian, klik checkbox lagi (uncek) cuma nampilin toast
-"sudah ada di antrian" tanpa efek apa-apa - satu-satunya cara hapus dari antrian adalah buka
-kotak preview "REKAP UPDATE QC" terus tap tombol ✕ di baris yang bersangkutan. Sekarang uncek
-checkbox-nya LANGSUNG hapus item itu dari antrian (gak perlu buka preview & cari barisnya lagi).
-
-DASHBOARD ver.14
-============================================================
-PERUBAHAN ver.14: perbaikan bug + 1 penyesuaian visual dari laporan Denny.
-  1. FIX: ganti tab Stok Kain/Rekap QC kayak "ngedip doang, gak kejadian apa2" di klik pertama,
-     baru jalan normal di klik kedua - simtomnya sama kayak bug checkbox kemarin, tapi
-     penyebabnya beda. Akar masalah: fix auto-retry di ver.12 itu SILENT (gak ada indikasi
-     visual apapun) selama nunggu 1.5 detik buat nyoba ulang - muatStokUtuh() malah dari
-     awal emang gak pernah punya indikator loading sama sekali, dan muatRekapQC() nulis ulang
-     teks "Memuat..." yang KEBETULAN sama persis sama teks awal di HTML, jadi gak ada
-     perubahan yang keliatan pas diklik. Sekarang ketiga fungsi (laporan/stok/rekap) pakai
-     indikator "Memuat..." yang sama di header, NYALA TERUS dari percobaan pertama sampai
-     retry-nya kelar (gak kedip mati-nyala di antaranya), plus dikasih penjaga biar gak
-     nembak request dobel kalau tab/tombol dipencet berkali-kali pas masih proses.
-  2. Teks umur laporan ("X hari lalu") buat yang udah 3+ hari sekarang MERAH (sebelumnya cuma
-     tebal & abu-abu gelap) - 3-5 hari merah sedang, 6+ hari merah lebih gelap/tua - biar
-     kelihatan urgent, gradasinya tetap konsisten sama tingkat ketebalan tulisannya.
-
-DASHBOARD ver.13
-============================================================
-PERUBAHAN ver.13: 2 penyesuaian teks header.
-  1. Teks "TIM POTONG · REKAP MAKLOON" dihapus dari baris kecil di atas judul - sekarang cuma
-     nyisain jam update-nya aja ("Update 2 Agu, 11:10").
-  2. Judul "Dashboard Stok Kain" (muncul sama di ketiga tab) diganti jadi "Dashboard Produksi
-     & QC" - lebih mewakili isinya (bukan cuma soal stok kain). Judul tab browser (<title>)
-     ikut disamakan.
-
-DASHBOARD ver.12
-============================================================
-PERUBAHAN ver.12: perbaikan 2 bug dari laporan Denny.
-  1. FIX: mini app gak keload data pas launch, harus tap Refresh manual dulu. Akar masalah:
-     kalau fetch pertama gagal (transient - Worker/koneksi belum "anget" pas Mini App baru
-     kebuka), sebelumnya langsung nyerah tanpa coba lagi. Sekarang muatDaftarLaporan/
-     muatStokUtuh/muatRekapQC otomatis coba ULANG SEKALI (jeda 1.5 detik) sebelum benar-benar
-     nampilin pesan gagal - jadi kasus transient sembuh sendiri tanpa perlu tap manual.
-  2. FIX: checkbox "tandai selesai" di tab Proses & QC - klik pertama kayak "ngedip" doang,
-     harus klik kedua baru kerasa jalan. Akar masalah BUKAN bug logic (aksinya sebenarnya
-     SUKSES di klik pertama), tapi soal tata letak: begitu kotak "DAFTAR ANTRIAN" pertama kali
-     muncul (dari tersembunyi) BARENGAN semua card lain ikut kolaps (fitur baru ver.11), seluruh
-     daftar laporan geser mendadak, jadi checkbox yang barusan dipencet "kabur" dari pandangan
-     mata - kesannya kayak gak kejadian apa2. Sekarang card yang bersangkutan di-scroll balik
-     ke pandangan otomatis begitu render selesai. Checkbox-nya juga dibikin sedikit lebih besar
-     (15px->19px) buat target ketuk yang lebih pas di layar HP.
-
-DASHBOARD ver.11
-============================================================
-PERUBAHAN ver.11: 7 penyesuaian dari review UI Denny (dikerjakan di thread lain, DITERAPKAN DI
-ATAS ver.10 yang beneran live - bukan dari cabang lama, biar fitur Realtime/cache/roll-fix di
-ver.08-10 gak kehapus):
-  1. "Diperbarui" -> "Update", ditambah tanda "-" setelah "TIM POTONG · REKAP MAKLOON".
-  2. Tombol Refresh: border+teks pakai warna indigo (bukan abu-abu) + shadow tipis biar lebih
-     kontras dari background. Tombol & fitur "Atur Tampilan" DIHAPUS bersih (bukan cuma
-     disembunyikan) - sebelumnya memang belum ada fungsinya sama sekali.
-  3. Default urutan laporan sekarang "Tanggal terbaru" (bukan "Paling lama" lagi). Chip
-     "Tanggal terbaru" dihapus (karena itu udah jadi default), chip "Paling lama" yang tersisa
-     sekarang berfungsi TOGGLE: tap buat urut dari yang paling lama, tap lagi balik ke default.
-  4. Kartu putih daftar-antrian di atas kotak preview DIHAPUS - hapus item sekarang langsung
-     dari kotak preview gelap "REKAP UPDATE QC", tiap baris dikasih tombol ✕ sendiri.
-  5. Checkbox "tandai selesai" sekarang mencerminkan status NYATA (tetap tercentang selama
-     item itu masih ada di antrian, bukan lagi tombol sekali-tap yang auto-reset), warna
-     centang dibikin hijau biar jelas kelihatan. Card yang lagi ada di antrian juga berubah
-     kontras (background abu muda) sebagai penanda visual.
-  6. Nambah 1 item ke antrian (baik lewat checkbox atau tombol "+ Tambah ke Daftar") sekarang
-     auto-collapse SEMUA card yang lagi terbuka, bukan cuma card yang barusan diisi.
-  7. Teks "X hari lalu" sekarang bertingkat ketebalannya: 0-2 hari normal, 3-5 hari lebih
-     tebal, 6+ hari paling tebal - jadi laporan yang paling lama nunggu langsung kelihatan
-     dari mana tulisannya paling tebal, tanpa perlu baca angkanya satu-satu.
-
-DASHBOARD ver.10
-============================================================
-PERUBAHAN ver.10: perbaikan kecil di tab Stok Kain - kode roll kosong/null sekarang tampil "-"
-(bukan literal "null"), konsisten sama perbaikan serupa di testproduksi.html. Perbaikan
-UTAMA-nya sendiri ada di Worker (CODE WORKER PRODUKSI ver.17) - sebelumnya baris stok yang
-kode_roll-nya kosong gak pernah nyampe sama sekali ke endpoint /data/stok-utuh yang dipakai
-tab ini, jadi sebagian stok yang beneran ada bisa jadi gak kelihatan di sini juga.
-
-DASHBOARD ver.09
-============================================================
-PERUBAHAN ver.09: cache instan (stale-while-revalidate) buat paint pertama di 3 tab (Proses &
-QC, Stok Kain, Rekap QC) - begitu dibuka, kalau ada data dari sesi sebelumnya di HP, LANGSUNG
-ditampilkan (bukan layar kosong nunggu network) TAPI label header jelas-jelas bilang "Terakhir
-dimuat X lalu - memuat ulang...", biar Denny/tim QC gak salah ambil keputusan dari angka basi.
-Begitu data asli selesai ditarik dari server, otomatis diganti + label balik normal. Dipicu
-CUMA di paint pertama (state masih kosong) - realtime/refresh manual sesudahnya tetap selalu
-langsung ke server seperti biasa, gak lewat cache lagi.
-
-DASHBOARD ver.08
-============================================================
-PERUBAHAN ver.08: jaring pengaman Realtime - kalau koneksi WebSocket putus diam-diam (tab lama
-di background), begitu Mini App ini balik fokus/keliatan lagi, data ditarik ulang paksa
-(visibilitychange + window focus listener), gak nunggu event Realtime yang mungkin udah gak
-nyambung. Sekalian dibenerin: tab Rekap QC sebelumnya gak ikut ke-refresh otomatis waktu ada
-perubahan Realtime (cuma Proses & QC dan Stok Kain) - sekarang ikut lewat helper muatTabAktif_().
-
-DASHBOARD ver.07
-============================================================
-Dashboard Stok Kain + QC - connect ke Cloudflare Worker (tim-potong-api) + Supabase.
-
-PERUBAHAN ver.07 (compact pass ke-2, cross-check langsung ke CSS asli HTML QC ver.04.html
-biar presisi, bukan tebak dari screenshot):
-  1. Spacing di bagian expand (badge ukuran, progress bar, baris Sel/Rej/Sisa, toggle
-     Ringkas/Rincian, tabel rincian) dirapatkan - margin-bottom & padding diturunkan di semua
-     elemen tsb, nilai disamakan sedekat mungkin ke qc-sizes/qc-progress/qc-progress-label/
-     qc-mode-switch/qc-tabel di versi Apps Script.
-  2. Tombol "Ringkas"/"Rincian": TIDAK lagi stretch penuh (flex:1 dihapus) - sekarang pill
-     kecil nempel konten kayak qc-mode-btn asli (padding 4px 12px, radius 999px), dan
-     font-weight dinaikkan ke 800 (dari 700) di kedua state biar keliatan bold jelas -
-     sebelumnya 700 tapi keliatan tipis di font Inter ukuran kecil.
-  3. Tabel rincian (UK/QTY/SEL/REJ/SISA): padding sel & lebar input kotak angka dikecilkan
-     mendekati qc-tabel asli (input 42px, radius 8px).
-
-PERUBAHAN ver.06 (3 penyesuaian ke tampilan card yang lagi diinput, sesuai versi Apps Script):
-  1. Tombol "Ringkas"/"Rincian" dibikin lebih kecil & compact (padding & font-size diturunkan),
-     tetap bold semua (aktif maupun tidak).
-  2. Angka Sel/Rej/Sisa di baris ringkasan card utama (sebelum di-expand) sekarang dibungkus
-     roundbox (pill) berwarna sesuai konteksnya - hijau muda buat Sel, merah muda buat Rej,
-     abu-abu buat Sisa.
-  3. Blok "DAFTAR ANTRIAN" (label + kotak kosong + tombol Kirim Rekap + preview gelap) di
-     paling atas sekarang disembunyikan SELURUHNYA kalau antrian masih kosong - baru muncul
-     begitu ada minimal 1 laporan ditambahkan. Menghemat tampilan pas dashboard awal loading.
-
-PERUBAHAN ver.05 (5 temuan dari perbandingan screenshot lagi):
-  1. Preview "Daftar Antrian" dirombak: kartu putih per-item (nama, "Selesai +N · Reject +N",
-     tombol hapus ✕) + kotak gelap terpisah "📋 REKAP UPDATE QC (N laporan)" di bawahnya,
-     format sama persis kayak versi Apps Script.
-  2. "Diperbarui ..." dipindah jadi 1 baris sama "TIM POTONG · REKAP MAKLOON" (hemat baris).
-  3. "Atur Tampilan" jadi tombol roundbox (bg abu muda + border), bukan cuma teks link oranye.
-  4. Kotak Selesai/Reject sekarang KOSONG dengan "0" cuma placeholder (bayangan) - kursor
-     langsung siap ketik angka beneran, gak perlu hapus "0" dulu.
-  5. Live preview: begitu ada laporan yang masuk antrian, baris itu LANGSUNG nampilin angka
-     hasil akhirnya (lingkaran + progress bar + Sel/Rej/Sisa keupdate seolah sudah terkirim),
-     ditandai ikon jam kecil, sekalian ada pill "🕓 N di antrian (+X sel/+Y rej)" pas
-     di-expand. Setelah "+ Tambah ke Daftar" ditekan, baris otomatis nutup balik
-     (fitur ini sebenarnya SUDAH ada dari ver.02, dipastikan lagi masih jalan benar).
-  Dicegah juga: 1 laporan cuma boleh 1 entri aktif di antrian dalam satu waktu (coba tambah
-  lagi sebelum yang lama dikirim/dihapus akan ditolak) - biar gak dobel-booking sisa qty.
-
-PERUBAHAN ver.04: samain tampilan visual ke versi Apps Script asli (HTML QC ver.04.html),
-hasil cross-check CSS langsung (bukan tebak dari screenshot) - 8 temuan dikonfirmasi Denny:
-  1. Font "Inter" ditambahkan (Google Fonts) - sebelumnya cuma font sistem.
-  2-3. Palet warna disamakan ke nilai default tema asli (indigo #5D5294, hijau #3F7A5C redup,
-     merah #A64236 redup - bukan warna Tailwind terang).
-  4. Badge kategori: logika DIBALIK - DEWASA (default) = badge TERANG (bg abu muda, teks
-     ungu, border tipis), ANAK = badge GELAP (bg nyaris hitam, teks putih). Sebelumnya
-     kebalik (Anak hijau, Dewasa navy).
-  5. Nomor urut (1,2,3...) dikembalikan di kiri tiap baris (sebelumnya cuma checkbox).
-  6. Chevron (▶ berputar pas expand) ditambahkan di ujung kanan tiap baris.
-  7. Ikon tab "Stok Kain" dikoreksi dari 🧵 jadi 📦 (sesuai kode asli).
-  8. Struktur baris laporan diubah dari "kartu terpisah berjarak" jadi "list menyatu
-     dipisah garis tipis" (1 wadah putih membungkus semua baris) - sesuai versi asli.
-CATATAN: warna di atas pakai nilai DEFAULT tema Apps Script - kalau Denny sempat kustomisasi
-lewat "Atur Tampilan" dan hasilnya masih beda dikit, kasih tau detail warnanya biar dipas-in
-lagi (fitur "Atur Tampilan" itu sendiri BELUM dibangun di versi ini - tombolnya ada tapi
-belum ada aksi apapun kalau ditekan).
-
-PERUBAHAN ver.03: ADOPSI fitur dari thread Apps Script terpisah - tab BARU "📊 Rekap QC"
-(histori submit QC apa adanya, 1 baris = 1x submit, urut waktu terbaru dulu, 14 hari
-terakhir). PENTING: dirender pakai CSS Grid (div-based), BUKAN <table> - porting persis dari
-HTML QC ver.04.html (Apps Script), yang punya catatan eksplisit <table>+colgroup PERNAH
-kebukti rusak di webview Telegram (kolom collapse). Kolom Harga Jait/Total Bayar SENGAJA
-TIDAK ditampilkan di tab ini (itu info akunting, bukan buat tim potong/QC).
-
-PERUBAHAN ver.02 (dari ver.01, disesuaikan persis ke tampilan pembanding Apps Script lama):
-- AUTO-UPDATE tanpa refresh manual - pakai Supabase Realtime beneran (bukan polling), lewat
-  kunci PUBLIK (anon/publishable, aman di client) yang cuma bisa BACA tabel yang diizinkan RLS.
-  Ada indikator "Memuat..." pas lagi ambil data.
-- Tampilan dirapatkan/compact (padding & margin dikecilkan) biar lebih mirip versi lama.
-- Format tanggal jadi "Selasa, 21/07/26" (bukan ISO "2026-07-21").
-- Format kg jadi "24,95 kg" (koma Indonesia + spasi), bukan "24.95kg".
-- Checkbox di tiap baris jadi SHORTCUT FUNGSIONAL: tap = otomatis isi "Selesai = sisa saat
-  ini, Reject = 0" lalu langsung masuk ke Daftar Antrian - TETAP harus di-konfirmasi lewat
-  "Kirim Rekap" (belum langsung terkirim ke server saat itu juga).
-- Angka progress (mis. "92/108") - angka SELESAI-nya dibungkus lingkaran hitam CUMA kalau
-  progressnya udah lebih dari 0. Kalau masih 0, ditulis "-/108" polos tanpa lingkaran.
-- Badge ukuran (S 13, M 30, dst) dirapatkan, gak pakai kotak background lagi.
-
-2 tab: "Proses & QC" (daftar laporan belum SELESAI, expand per baris buat input QC mode
-Ringkas/Rincian, antrian multi-laporan, Arsip Selesai N hari terakhir) dan "Stok Kain"
-(ringkasan total + detail per warna, expand buat lihat per-roll). 1 tab baru "Rekap QC".
-
-BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
+PERUBAHAN ver.18: indikator "Memuat..." diganti jadi popup melayang yang fade in/out otomatis
+(sebelumnya <p> biasa yang toggle display:none/block dan bikin tinggi header berubah tiap
+loading nyala/mati, jadi UI kelihatan "loncat-loncat"). Riwayat lengkap: git log.
 ============================================================
 -->
 <html lang="id">
@@ -248,9 +45,10 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
   .header .brand { font-size: 12px; color: var(--blue-link); font-weight: 700; margin: 0 0 2px; }
   .last-update-inline { font-size: 10.5px; color: var(--gray-text); font-weight: 600; text-transform: none; letter-spacing: 0; margin-left: 4px; }
   .header h1 { font-size: 20px; margin: 0; }
-  .header-right { text-align: right; }
+  .header-right { text-align: right; position: relative; }
   .btn-refresh { background: #fff; border: 1.5px solid var(--indigo); border-radius: 20px; padding: 8px 16px; font-weight: 700; font-size: 13px; cursor: pointer; color: var(--indigo); box-shadow: 0 1px 4px rgba(41,43,49,0.10); }
-  .loading-indicator { font-size: 11px; color: var(--gray-text); margin-top: 4px; }
+  .loading-popup { position: absolute; top: calc(100% + 6px); right: 0; background: #1c1c1e; color: #fff; padding: 6px 13px; border-radius: 20px; font-size: 11.5px; font-weight: 600; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 50; }
+  .loading-popup.show { opacity: 1; }
 
   .tab-toggle { display: flex; gap: 10px; margin-bottom: 12px; }
   .tab-btn { flex: 1; padding: 11px 6px; border-radius: 12px; border: none; background: #fff; font-weight: 700; font-size: 12.5px; cursor: pointer; color: #374151; display: flex; align-items: center; justify-content: center; gap: 4px; }
@@ -395,7 +193,7 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
     </div>
     <div class="header-right">
       <button class="btn-refresh" id="btnRefresh">🔄 Refresh</button>
-      <p class="loading-indicator" id="loadingIndicator" style="display:none">Memuat...</p>
+      <p class="loading-popup" id="loadingIndicator">⏳ Memuat...</p>
     </div>
   </div>
 
@@ -655,8 +453,11 @@ function muatDaftarLaporan(percobaan) {
     });
 }
 
+// v.18: indikator "Memuat..." sekarang popup melayang (position:absolute, gak makan ruang di
+// flex header) yang muncul/hilang dengan fade halus - sebelumnya <p> biasa yang toggle
+// display:none/block, bikin tinggi header berubah tiap loading nyala/mati (UI "loncat-loncat").
 function tampilkanLoading(tampil) {
-  document.getElementById('loadingIndicator').style.display = tampil ? 'block' : 'none';
+  document.getElementById('loadingIndicator').classList.toggle('show', !!tampil);
 }
 
 // v.11: ketebalan teks "X hari lalu" bertingkat 3 level (usia-baru/sedang/lama) - semakin lama
