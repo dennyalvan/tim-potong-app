@@ -1,6 +1,15 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+DASHBOARD ver.13
+============================================================
+PERUBAHAN ver.13: 2 penyesuaian teks header.
+  1. Teks "TIM POTONG · REKAP MAKLOON" dihapus dari baris kecil di atas judul - sekarang cuma
+     nyisain jam update-nya aja ("Update 2 Agu, 11:10").
+  2. Judul "Dashboard Stok Kain" (muncul sama di ketiga tab) diganti jadi "Dashboard Produksi
+     & QC" - lebih mewakili isinya (bukan cuma soal stok kain). Judul tab browser (<title>)
+     ikut disamakan.
+
 DASHBOARD ver.12
 ============================================================
 PERUBAHAN ver.12: perbaikan 2 bug dari laporan Denny.
@@ -161,7 +170,7 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Dashboard Stok Kain + QC</title>
+<title>Dashboard Produksi & QC</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -336,8 +345,8 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
 <div id="app">
   <div class="header">
     <div>
-      <p class="brand">TIM POTONG · REKAP MAKLOON - <span class="last-update-inline" id="lastUpdate"></span></p>
-      <h1 id="pageTitle">Dashboard Stok Kain</h1>
+      <p class="brand"><span class="last-update-inline" id="lastUpdate"></span></p>
+      <h1 id="pageTitle">Dashboard Produksi & QC</h1>
     </div>
     <div class="header-right">
       <button class="btn-refresh" id="btnRefresh">🔄 Refresh</button>
@@ -465,7 +474,7 @@ document.querySelectorAll('.tab-btn').forEach(function (btn) {
     document.getElementById('tabQC').style.display = tab === 'qc' ? 'block' : 'none';
     document.getElementById('tabStok').style.display = tab === 'stok' ? 'block' : 'none';
     document.getElementById('tabRekap').style.display = tab === 'rekap' ? 'block' : 'none';
-    document.getElementById('pageTitle').textContent = 'Dashboard Stok Kain';
+    document.getElementById('pageTitle').textContent = 'Dashboard Produksi & QC';
     if (tab === 'stok' && !stokUtuhData) muatStokUtuh();
     if (tab === 'rekap') muatRekapQC();
   });
