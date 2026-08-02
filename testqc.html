@@ -1,6 +1,56 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+DASHBOARD ver.13
+============================================================
+PERUBAHAN ver.13: 2 penyesuaian teks header.
+  1. Teks "TIM POTONG · REKAP MAKLOON" dihapus dari baris kecil di atas judul - sekarang cuma
+     nyisain jam update-nya aja ("Update 2 Agu, 11:10").
+  2. Judul "Dashboard Stok Kain" (muncul sama di ketiga tab) diganti jadi "Dashboard Produksi
+     & QC" - lebih mewakili isinya (bukan cuma soal stok kain). Judul tab browser (<title>)
+     ikut disamakan.
+
+DASHBOARD ver.12
+============================================================
+PERUBAHAN ver.12: perbaikan 2 bug dari laporan Denny.
+  1. FIX: mini app gak keload data pas launch, harus tap Refresh manual dulu. Akar masalah:
+     kalau fetch pertama gagal (transient - Worker/koneksi belum "anget" pas Mini App baru
+     kebuka), sebelumnya langsung nyerah tanpa coba lagi. Sekarang muatDaftarLaporan/
+     muatStokUtuh/muatRekapQC otomatis coba ULANG SEKALI (jeda 1.5 detik) sebelum benar-benar
+     nampilin pesan gagal - jadi kasus transient sembuh sendiri tanpa perlu tap manual.
+  2. FIX: checkbox "tandai selesai" di tab Proses & QC - klik pertama kayak "ngedip" doang,
+     harus klik kedua baru kerasa jalan. Akar masalah BUKAN bug logic (aksinya sebenarnya
+     SUKSES di klik pertama), tapi soal tata letak: begitu kotak "DAFTAR ANTRIAN" pertama kali
+     muncul (dari tersembunyi) BARENGAN semua card lain ikut kolaps (fitur baru ver.11), seluruh
+     daftar laporan geser mendadak, jadi checkbox yang barusan dipencet "kabur" dari pandangan
+     mata - kesannya kayak gak kejadian apa2. Sekarang card yang bersangkutan di-scroll balik
+     ke pandangan otomatis begitu render selesai. Checkbox-nya juga dibikin sedikit lebih besar
+     (15px->19px) buat target ketuk yang lebih pas di layar HP.
+
+DASHBOARD ver.11
+============================================================
+PERUBAHAN ver.11: 7 penyesuaian dari review UI Denny (dikerjakan di thread lain, DITERAPKAN DI
+ATAS ver.10 yang beneran live - bukan dari cabang lama, biar fitur Realtime/cache/roll-fix di
+ver.08-10 gak kehapus):
+  1. "Diperbarui" -> "Update", ditambah tanda "-" setelah "TIM POTONG · REKAP MAKLOON".
+  2. Tombol Refresh: border+teks pakai warna indigo (bukan abu-abu) + shadow tipis biar lebih
+     kontras dari background. Tombol & fitur "Atur Tampilan" DIHAPUS bersih (bukan cuma
+     disembunyikan) - sebelumnya memang belum ada fungsinya sama sekali.
+  3. Default urutan laporan sekarang "Tanggal terbaru" (bukan "Paling lama" lagi). Chip
+     "Tanggal terbaru" dihapus (karena itu udah jadi default), chip "Paling lama" yang tersisa
+     sekarang berfungsi TOGGLE: tap buat urut dari yang paling lama, tap lagi balik ke default.
+  4. Kartu putih daftar-antrian di atas kotak preview DIHAPUS - hapus item sekarang langsung
+     dari kotak preview gelap "REKAP UPDATE QC", tiap baris dikasih tombol ✕ sendiri.
+  5. Checkbox "tandai selesai" sekarang mencerminkan status NYATA (tetap tercentang selama
+     item itu masih ada di antrian, bukan lagi tombol sekali-tap yang auto-reset), warna
+     centang dibikin hijau biar jelas kelihatan. Card yang lagi ada di antrian juga berubah
+     kontras (background abu muda) sebagai penanda visual.
+  6. Nambah 1 item ke antrian (baik lewat checkbox atau tombol "+ Tambah ke Daftar") sekarang
+     auto-collapse SEMUA card yang lagi terbuka, bukan cuma card yang barusan diisi.
+  7. Teks "X hari lalu" sekarang bertingkat ketebalannya: 0-2 hari normal, 3-5 hari lebih
+     tebal, 6+ hari paling tebal - jadi laporan yang paling lama nunggu langsung kelihatan
+     dari mana tulisannya paling tebal, tanpa perlu baca angkanya satu-satu.
+
 DASHBOARD ver.10
 ============================================================
 PERUBAHAN ver.10: perbaikan kecil di tab Stok Kain - kode roll kosong/null sekarang tampil "-"
@@ -120,7 +170,7 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Dashboard Stok Kain + QC</title>
+<title>Dashboard Produksi & QC</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -154,14 +204,13 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
   .last-update-inline { font-size: 10.5px; color: var(--gray-text); font-weight: 600; text-transform: none; letter-spacing: 0; margin-left: 4px; }
   .header h1 { font-size: 20px; margin: 0; }
   .header-right { text-align: right; }
-  .btn-refresh { background: #fff; border: 1px solid var(--border); border-radius: 20px; padding: 8px 16px; font-weight: 700; font-size: 13px; cursor: pointer; color: #374151; }
+  .btn-refresh { background: #fff; border: 1.5px solid var(--indigo); border-radius: 20px; padding: 8px 16px; font-weight: 700; font-size: 13px; cursor: pointer; color: var(--indigo); box-shadow: 0 1px 4px rgba(41,43,49,0.10); }
   .loading-indicator { font-size: 11px; color: var(--gray-text); margin-top: 4px; }
 
   .tab-toggle { display: flex; gap: 10px; margin-bottom: 12px; }
   .tab-btn { flex: 1; padding: 11px 6px; border-radius: 12px; border: none; background: #fff; font-weight: 700; font-size: 12.5px; cursor: pointer; color: #374151; display: flex; align-items: center; justify-content: center; gap: 4px; }
   .tab-btn.active { background: var(--indigo); color: #fff; }
 
-  .btn-atur-tampilan { display: block; margin-left: auto; margin-bottom: 14px; background: var(--surface-2); color: var(--navy-dark); border: 1px solid var(--border); border-radius: 8px; font-size: 11px; font-weight: 700; padding: 6px 10px; cursor: pointer; white-space: nowrap; }
 
   .card { background: var(--card-bg); border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
   .section-label { font-size: 12px; color: var(--gray-label); font-weight: 700; letter-spacing: 0.5px; margin: 14px 0 8px; }
@@ -172,16 +221,14 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
   .status-bar { background: var(--navy-dark); color: #fff; border-radius: 12px; padding: 14px 16px; font-size: 13px; margin-bottom: 14px; }
 
   .antrian-caption { font-size: 12px; color: var(--gray-text); margin-bottom: 8px; }
-  .antrian-kartu { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-  .antrian-kartu .info { flex: 1; min-width: 0; }
-  .antrian-kartu .nama { font-weight: 700; font-size: 13px; }
-  .antrian-kartu .detail { font-size: 12px; color: var(--gray-text); margin-top: 2px; }
-  .antrian-kartu .btn-hapus { background: var(--surface-2); color: var(--danger); border: none; border-radius: 50%; width: 24px; height: 24px; flex-shrink: 0; cursor: pointer; font-weight: 700; font-size: 13px; }
   .preview-rekap-box { background: var(--navy-dark); color: #fff; border-radius: 12px; padding: 14px 16px; font-size: 13px; margin-bottom: 14px; }
   .preview-rekap-box .judul { font-weight: 700; margin-bottom: 10px; }
-  .preview-rekap-box .item { margin-bottom: 8px; }
+  .preview-rekap-box .item { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .preview-rekap-box .item:last-child { margin-bottom: 0; }
+  .preview-rekap-box .item .itext { flex: 1; min-width: 0; }
   .preview-rekap-box .item .inama { font-weight: 700; }
   .preview-rekap-box .item .iangka { color: #c8cce0; font-size: 12px; margin-top: 1px; }
+  .preview-rekap-box .item .item-hapus { background: rgba(255,255,255,.1); color: #FF6B60; border: none; border-radius: 50%; width: 24px; height: 24px; flex-shrink: 0; cursor: pointer; font-weight: 700; font-size: 13px; }
   .preview-rekap-box .hint { font-size: 11px; font-style: italic; color: #9aa3c0; margin-top: 4px; }
 
   .pending-badge { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; background: var(--indigo); color: #fff; border-radius: 50%; font-size: 9px; margin-left: 4px; vertical-align: middle; }
@@ -198,7 +245,8 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
   .laporan-card:first-child { border-top: none; }
   .laporan-top { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; padding: 10px 12px; }
   .laporan-top .idx { color: var(--gray-label); font-size: 11px; font-weight: 700; padding-top: 3px; width: 12px; flex-shrink: 0; }
-  .chk-selesai { margin-top: 3px; width: 15px; height: 15px; flex-shrink: 0; cursor: pointer; }
+  .chk-selesai { margin-top: 2px; width: 19px; height: 19px; flex-shrink: 0; cursor: pointer; accent-color: var(--green); }
+  .laporan-card.ada-antrian { background: var(--surface-2); }
   .row-chevron { width: 12px; color: var(--gray-label); flex-shrink: 0; align-self: center; margin-left: 2px; transition: transform 0.15s ease; font-size: 11px; }
   .row-chevron.open { transform: rotate(90deg); }
   .laporan-info { flex: 1; min-width: 0; }
@@ -207,6 +255,9 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
   .badge-kat.anak { background: var(--navy-dark); color: #fff; border-color: var(--navy-dark); }
   .laporan-meta { font-size: 11px; color: var(--gray-text); margin-top: 2px; }
   .laporan-meta .roll { color: var(--orange-link); font-weight: 600; }
+  .laporan-meta .usia-baru { font-weight: 600; }
+  .laporan-meta .usia-sedang { font-weight: 700; color: #4b5262; }
+  .laporan-meta .usia-lama { font-weight: 800; color: #1c1c1e; }
   .progress-circle { text-align: right; flex-shrink: 0; }
   .progress-circle .fraction-circle { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 22px; padding: 0 6px; background: var(--navy-dark); color: #fff; border-radius: 50px; font-weight: 800; font-size: 13px; }
   .progress-circle .fraction-total { font-weight: 700; font-size: 13px; color: #1c1c1e; }
@@ -294,8 +345,8 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
 <div id="app">
   <div class="header">
     <div>
-      <p class="brand">TIM POTONG · REKAP MAKLOON <span class="last-update-inline" id="lastUpdate"></span></p>
-      <h1 id="pageTitle">Dashboard Stok Kain</h1>
+      <p class="brand"><span class="last-update-inline" id="lastUpdate"></span></p>
+      <h1 id="pageTitle">Dashboard Produksi & QC</h1>
     </div>
     <div class="header-right">
       <button class="btn-refresh" id="btnRefresh">🔄 Refresh</button>
@@ -308,7 +359,6 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
     <button class="tab-btn" data-tab="stok">📦 Stok Kain</button>
     <button class="tab-btn" data-tab="rekap">📊 Rekap QC</button>
   </div>
-  <button class="btn-atur-tampilan" id="btnAturTampilan">✏️ Atur Tampilan</button>
 
   <!-- ============ TAB: PROSES & QC ============ -->
   <div id="tabQC">
@@ -316,7 +366,6 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
       <div class="section-label">DAFTAR ANTRIAN</div>
       <div id="antrianIsiWrap">
         <p class="antrian-caption" id="antrianCaption"></p>
-        <div id="antrianKartuList"></div>
       </div>
       <button class="btn-kirim-rekap" id="btnKirimRekap" disabled>🚀 Kirim Rekap (0)</button>
       <div class="preview-rekap-box" id="antrianPreviewBox" style="display:none"></div>
@@ -328,8 +377,7 @@ BELUM ADA: tombol "Atur Tampilan" belum ada fungsinya.
       <div class="chip active" data-filter="semua">Semua</div>
       <div class="chip" data-filter="anak">Anak</div>
       <div class="chip" data-filter="dewasa">Dewasa</div>
-      <div class="chip active" data-sort="lama">Paling lama</div>
-      <div class="chip" data-sort="baru">Tanggal terbaru</div>
+      <div class="chip" data-sort="lama">Paling lama</div>
     </div>
 
     <div class="laporan-wrap"><div id="daftarLaporan"></div></div>
@@ -405,7 +453,7 @@ if (tg) { tg.ready(); tg.expand(); }
 let daftarLaporanData = [];
 let antrianQC = []; // [{timPotongId, mode, ringkas, rincian, preview}]
 let filterKategori = 'semua';
-let sortLaporan = 'lama';
+let sortLaporan = 'baru'; // v.11: default sekarang tanggal terbaru dulu, "Paling lama" jadi opsi toggle
 let searchQuery = '';
 let laporanTerbuka = {}; // { [id]: true } - state expand per baris
 let modePerLaporan = {}; // { [id]: 'ringkas'|'rincian' }
@@ -426,7 +474,7 @@ document.querySelectorAll('.tab-btn').forEach(function (btn) {
     document.getElementById('tabQC').style.display = tab === 'qc' ? 'block' : 'none';
     document.getElementById('tabStok').style.display = tab === 'stok' ? 'block' : 'none';
     document.getElementById('tabRekap').style.display = tab === 'rekap' ? 'block' : 'none';
-    document.getElementById('pageTitle').textContent = 'Dashboard Stok Kain';
+    document.getElementById('pageTitle').textContent = 'Dashboard Produksi & QC';
     if (tab === 'stok' && !stokUtuhData) muatStokUtuh();
     if (tab === 'rekap') muatRekapQC();
   });
@@ -473,13 +521,17 @@ function tampilkanLabelCache_(namaTab, waktuCache) {
 
 function updateJamRefresh() {
   const now = new Date();
-  document.getElementById('lastUpdate').textContent = 'Diperbarui ' + now.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) + ', ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  document.getElementById('lastUpdate').textContent = 'Update ' + now.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) + ', ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 }
 
 // ------------------------------------------------------------
 // MUAT DAFTAR LAPORAN
 // ------------------------------------------------------------
-function muatDaftarLaporan() {
+// v.12: auto-retry SEKALI kalau fetch pertama gagal (biasanya transient - Worker baru "bangun"
+// dari idle, atau koneksi WebView Telegram belum settle pas Mini App baru kebuka) - biar gak
+// perlu tap Refresh manual buat kasus yang harusnya sembuh sendiri dalam ~1.5 detik.
+function muatDaftarLaporan(percobaan) {
+  percobaan = percobaan || 0;
   if (daftarLaporanData.length === 0) {
     const cache = ambilCacheDashboard_('laporan_qc');
     if (cache) {
@@ -497,7 +549,10 @@ function muatDaftarLaporan() {
       updateJamRefresh();
       renderDaftarLaporan();
     })
-    .catch(function (e) { tampilkanToast('Gagal memuat laporan: ' + e.message); })
+    .catch(function (e) {
+      if (percobaan < 1) { setTimeout(function () { muatDaftarLaporan(percobaan + 1); }, 1500); return; }
+      tampilkanToast('Gagal memuat laporan: ' + e.message);
+    })
     .finally(function () { tampilkanLoading(false); });
 }
 
@@ -505,14 +560,22 @@ function tampilkanLoading(tampil) {
   document.getElementById('loadingIndicator').style.display = tampil ? 'block' : 'none';
 }
 
+// v.11: ketebalan teks "X hari lalu" bertingkat 3 level (usia-baru/sedang/lama) - semakin lama
+// belum diproses, semakin TEBAL tulisannya, jadi Denny bisa langsung lihat prioritas dari mana
+// yang tulisannya paling tebal tanpa perlu baca angkanya satu-satu.
 function hariLaluTeks(tanggalStr) {
   if (!tanggalStr) return '';
   const tgl = new Date(tanggalStr + 'T00:00:00');
   const now = new Date();
   const diffHari = Math.floor((now - tgl) / (1000 * 60 * 60 * 24));
-  if (diffHari <= 0) return 'hari ini';
-  if (diffHari === 1) return '1 hari lalu';
-  return diffHari + ' hari lalu';
+  let teks;
+  if (diffHari <= 0) teks = 'hari ini';
+  else if (diffHari === 1) teks = '1 hari lalu';
+  else teks = diffHari + ' hari lalu';
+  let kelas = 'usia-baru'; // 0-2 hari
+  if (diffHari >= 6) kelas = 'usia-lama'; // 6+ hari - paling tebal
+  else if (diffHari >= 3) kelas = 'usia-sedang'; // 3-5 hari - lebih tebal dari baru
+  return '<span class="' + kelas + '">' + teks + '</span>';
 }
 
 function renderDaftarLaporan() {
@@ -544,6 +607,7 @@ function renderLaporanCard(r, nomor) {
   const terbuka = !!laporanTerbuka[r.id];
   const badgeClass = String(r.kategoriBadge || '').toLowerCase() === 'anak' ? 'anak' : '';
   const badgeJam = pending.jumlahEntri > 0 ? '<span class="pending-badge">🕓</span>' : '';
+  const sudahDiAntrian = pending.jumlahEntri > 0;
 
   // v.02: lingkaran cuma muncul kalau UDAH ADA progress (totalSelesai > 0) - biar mata
   // langsung fokus ke angka yang lagi dikerjakan. Kalau masih 0, tampil "-/jumlah" polos
@@ -554,10 +618,10 @@ function renderLaporanCard(r, nomor) {
     ? '<span class="fraction-circle">' + selesaiTampil + '</span><span class="fraction-total">/' + r.jumlah + '</span>' + badgeJam
     : '<span class="fraction-total">-/' + r.jumlah + '</span>' + badgeJam;
 
-  let html = '<div class="laporan-card" data-id="' + r.id + '">' +
+  let html = '<div class="laporan-card' + (sudahDiAntrian ? ' ada-antrian' : '') + '" data-id="' + r.id + '">' +
     '<div class="laporan-top">' +
     '<span class="idx">' + nomor + '</span>' +
-    '<input type="checkbox" class="chk-selesai" data-quickdone="' + r.id + '" title="Tandai selesai semua sisa">' +
+    '<input type="checkbox" class="chk-selesai" data-quickdone="' + r.id + '"' + (sudahDiAntrian ? ' checked' : '') + ' title="Tandai selesai semua sisa">' +
     '<div class="laporan-info" data-toggle="' + r.id + '">' +
     '<span class="nama">' + escapeHtml(r.jenisWarnaBaju) + '</span>' +
     (r.kategoriBadge ? '<span class="badge-kat ' + badgeClass + '">' + escapeHtml(r.kategoriBadge) + '</span>' : '') +
@@ -646,20 +710,33 @@ function pasangEventLaporanCard() {
   // Selesai = sisa saat ini, Reject 0), TAPI tetap harus lewat "Kirim Rekap" buat beneran
   // terkirim - jadi tetap ada jeda konfirmasi (antrian ringkasan-nya berfungsi sebagai preview),
   // bukan langsung submit ke server saat itu juga.
+  // v.11: checkbox sekarang mencerminkan status NYATA (ada/gaknya entri di antrian utk item
+  // ini) - dicentang & TETAP centang selama masih di antrian (gak lagi dipaksa balik kosong),
+  // dan card-nya ikut berubah kontras (lihat .ada-antrian) sebagai penanda baru dipilih.
+  // v.12: penyebab "kayak ngedip doang, gak kejadian apa2" ketemu - begitu antrianSection
+  // baru pertama kali muncul (dari display:none) DAN semua card lain ikut kolaps bersamaan,
+  // seluruh daftar laporan geser turun/naik SEKETIKA, jadi checkbox yang barusan dipencet
+  // "kabur" dari posisi yang lagi dilihat mata (padahal aksinya sendiri sukses). Fix: scroll
+  // card yang bersangkutan balik ke pandangan begitu render selesai.
   document.querySelectorAll('[data-quickdone]').forEach(function (el) {
     el.addEventListener('click', function (e) {
       e.stopPropagation();
       const id = parseInt(el.dataset.quickdone, 10);
       const r = daftarLaporanData.find(function (x) { return x.id === id; });
-      el.checked = false; // checkbox ini cuma "tombol sekali tap", bukan status permanen
-      if (!r || r.sisa <= 0) { tampilkanToast('Item ini sudah gak ada sisa.'); return; }
+      if (!r || r.sisa <= 0) { el.checked = false; tampilkanToast('Item ini sudah gak ada sisa.'); return; }
       const sudahDiAntrian = antrianQC.some(function (a) { return a.timPotongId === id; });
-      if (sudahDiAntrian) { tampilkanToast('Item ini sudah ada di antrian.'); return; }
+      if (sudahDiAntrian) { el.checked = true; tampilkanToast('Item ini sudah ada di antrian.'); return; }
       antrianQC.push({
         timPotongId: id, mode: 'ringkas', ringkas: { selesai: r.sisa, reject: 0 },
         preview: r.jenisWarnaBaju + ' - Selesaikan sisa ' + r.sisa + ' pcs'
       });
+      laporanTerbuka = {}; // v.11: auto-collapse semua card begitu ada item baru masuk antrian
+      renderDaftarLaporan(); // refresh badge/pill/checklist/highlight kartu
       renderAntrian();
+      requestAnimationFrame(function () {
+        const kartuBaru = document.querySelector('.laporan-card[data-id="' + id + '"]');
+        if (kartuBaru) kartuBaru.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
       tampilkanToast('✓ "' + r.jenisWarnaBaju + '" ditambahkan ke antrian (selesaikan semua sisa) - cek dulu di daftar antrian sebelum Kirim Rekap.');
     });
   });
@@ -695,9 +772,13 @@ function tambahKeAntrian(id) {
   }
 
   antrianQC.push(entry);
-  laporanTerbuka[id] = false;
+  laporanTerbuka = {}; // v.11: auto-collapse SEMUA card, bukan cuma yang barusan diisi
   renderDaftarLaporan();
   renderAntrian();
+  requestAnimationFrame(function () {
+    const kartuBaru = document.querySelector('.laporan-card[data-id="' + id + '"]');
+    if (kartuBaru) kartuBaru.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
   tampilkanToast('✓ Ditambahkan ke antrian');
 }
 
@@ -726,7 +807,6 @@ function hapusDariAntrian(index) {
 function renderAntrian() {
   const section = document.getElementById('antrianSection');
   const caption = document.getElementById('antrianCaption');
-  const kartuList = document.getElementById('antrianKartuList');
   const btnKirim = document.getElementById('btnKirimRekap');
   const previewBox = document.getElementById('antrianPreviewBox');
 
@@ -741,37 +821,28 @@ function renderAntrian() {
   section.style.display = 'block';
   caption.textContent = antrianQC.length + ' laporan menunggu dikirim';
 
-  // Kartu putih per-item, ada tombol hapus (X)
-  kartuList.innerHTML = antrianQC.map(function (a, i) {
-    const angka = a.mode === 'ringkas' ? a.ringkas : null;
-    const detailTeks = angka
-      ? ('Selesai +' + angka.selesai + ' · Reject +' + angka.reject)
-      : a.rincian.map(function (r2) { return r2.ukuran + ' +' + r2.selesai + '/' + r2.reject; }).join(', ');
-    return '<div class="antrian-kartu">' +
-      '<div class="info"><div class="nama">' + escapeHtml(a.preview.split(' - ')[0]) + '</div>' +
-      '<div class="detail">' + escapeHtml(detailTeks) + '</div></div>' +
-      '<button class="btn-hapus" data-hapusantrian="' + i + '">✕</button>' +
-      '</div>';
-  }).join('');
-  kartuList.querySelectorAll('[data-hapusantrian]').forEach(function (el) {
-    el.addEventListener('click', function () { hapusDariAntrian(parseInt(el.dataset.hapusantrian, 10)); });
-  });
-
   btnKirim.textContent = '🚀 Kirim Rekap (' + antrianQC.length + ')';
   btnKirim.disabled = false;
 
-  // Kotak preview gelap - format "REKAP UPDATE QC", sama kayak versi Apps Script
+  // v.11: gak ada lagi kartu putih terpisah di atas - hapus item sekarang langsung dari box
+  // preview gelap ini, tiap baris dikasih tombol ✕ sendiri.
   previewBox.style.display = 'block';
   previewBox.innerHTML = '<div class="judul">📋 REKAP UPDATE QC (' + antrianQC.length + ' laporan)</div>' +
-    antrianQC.map(function (a) {
+    antrianQC.map(function (a, i) {
       const angka = a.mode === 'ringkas' ? a.ringkas : null;
       const angkaTeks = angka
         ? ('Selesai: ' + angka.selesai + ' pcs · Reject: ' + angka.reject + ' pcs')
         : a.rincian.map(function (r2) { return r2.ukuran + ': ' + r2.selesai + ' sel / ' + r2.reject + ' rej'; }).join(', ');
-      return '<div class="item"><div class="inama">' + escapeHtml(a.preview.split(' - ')[0]) + '</div>' +
-        '<div class="iangka">' + escapeHtml(angkaTeks) + '</div></div>';
+      return '<div class="item">' +
+        '<div class="itext"><div class="inama">' + escapeHtml(a.preview.split(' - ')[0]) + '</div>' +
+        '<div class="iangka">' + escapeHtml(angkaTeks) + '</div></div>' +
+        '<button class="item-hapus" data-hapusantrian="' + i + '">✕</button>' +
+        '</div>';
     }).join('') +
     '<div class="hint">preview - klik "Kirim Rekap" utk kirim beneran</div>';
+  previewBox.querySelectorAll('[data-hapusantrian]').forEach(function (el) {
+    el.addEventListener('click', function () { hapusDariAntrian(parseInt(el.dataset.hapusantrian, 10)); });
+  });
 }
 
 document.getElementById('btnKirimRekap').addEventListener('click', function () {
@@ -834,9 +905,12 @@ document.querySelectorAll('.chip[data-filter]').forEach(function (el) {
 });
 document.querySelectorAll('.chip[data-sort]').forEach(function (el) {
   el.addEventListener('click', function () {
-    document.querySelectorAll('.chip[data-sort]').forEach(function (c) { c.classList.remove('active'); });
-    el.classList.add('active');
-    sortLaporan = el.dataset.sort;
+    // v.11: cuma 1 chip sort ("Paling lama") - tanggal terbaru sekarang default bawaan, jadi
+    // chip ini berfungsi TOGGLE: tap buat urut dari yang paling lama, tap lagi buat balik ke
+    // default (tanggal terbaru).
+    const aktifSebelumnya = el.classList.contains('active');
+    el.classList.toggle('active');
+    sortLaporan = aktifSebelumnya ? 'baru' : el.dataset.sort;
     renderDaftarLaporan();
   });
 });
@@ -871,7 +945,8 @@ function muatArsip() {
 // ------------------------------------------------------------
 // TAB STOK KAIN
 // ------------------------------------------------------------
-function muatStokUtuh() {
+function muatStokUtuh(percobaan) {
+  percobaan = percobaan || 0;
   if (!stokUtuhData) {
     const cache = ambilCacheDashboard_('stok_utuh');
     if (cache && cache.data) {
@@ -892,7 +967,10 @@ function muatStokUtuh() {
       document.getElementById('totalKgSub').textContent = 'di ' + data.totalRoll + ' roll · ' + data.totalWarna + ' warna';
       renderWarnaGrid();
     })
-    .catch(function (e) { tampilkanToast('Gagal memuat stok: ' + e.message); });
+    .catch(function (e) {
+      if (percobaan < 1) { setTimeout(function () { muatStokUtuh(percobaan + 1); }, 1500); return; }
+      tampilkanToast('Gagal memuat stok: ' + e.message);
+    });
 }
 function renderWarnaGrid() {
   if (!stokUtuhData) return;
@@ -947,7 +1025,8 @@ document.querySelectorAll('.chip[data-sortwarna]').forEach(function (el) {
 // ------------------------------------------------------------
 let rekapItemsRaw = [];
 
-function muatRekapQC() {
+function muatRekapQC(percobaan) {
+  percobaan = percobaan || 0;
   let munculDariCache = false;
   if (rekapItemsRaw.length === 0) {
     const cache = ambilCacheDashboard_('rekap_qc');
@@ -968,6 +1047,7 @@ function muatRekapQC() {
       renderRekapQC();
     })
     .catch(function (e) {
+      if (percobaan < 1) { setTimeout(function () { muatRekapQC(percobaan + 1); }, 1500); return; }
       if (munculDariCache) {
         tampilkanToast('Gagal refresh Rekap QC: ' + e.message);
       } else {
