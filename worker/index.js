@@ -1,17 +1,28 @@
 // ============================================================
+// CODE WORKER PRODUKSI ver.25
+// ============================================================
+// PERUBAHAN ver.25: KOREKSI PENTING dari ver.24 - trigger reverse-cascade di database (BUKAN
+// di kode ini, murni SQL/trigger Supabase) diperbaiki. Semantik yang BENAR: hapus 1 baris
+// arsip_selesai = "UNDO QC" doang (tim_potong TETAP ADA, status dihitung ulang balik ke
+// "PROSES x/y (z reject)" dari log_qc yang masih ada, stok kain SAMA SEKALI TIDAK berubah -
+// karena stok dipotong pas tahap CUTTING, bukan pas QC selesai). "Undo produksi total" (stok
+// balik) HANYA terjadi kalau tim_potong-nya SENDIRI yang dihapus (lewat cascade yang sudah ada
+// dari sebelumnya). Ver.24 SALAH mengira "hapus arsip_selesai" harus ikut menghapus
+// tim_potong+stok balik juga - itu keliru, sudah diperbaiki via migrasi SQL terpisah (trigger
+// lama trg_hapus_tim_potong_saat_arsip_selesai_dihapus dibuang, diganti
+// trg_undo_qc_saat_arsip_selesai_dihapus). TIDAK ADA perubahan kode JS di file ini untuk
+// ver.25 - versi dinaikkan murni buat sinkronkan penjelasan/dokumentasi dengan kondisi
+// database yang sebenarnya, biar sesi berikutnya gak salah paham baca komentar ver.24 di bawah.
+//
+// ============================================================
 // CODE WORKER PRODUKSI ver.24
 // ============================================================
 // PERUBAHAN ver.24: `arsip_selesai` sekarang disimpan DETAIL (format terinspirasi LOG QC -
 // Tanggal, Warna, Kode Roll, Varian, breakdown ukuran XS-6XL, Total Reject) bukan cuma
 // (tim_potong_id, waktu) doang lagi - permintaan Denny biar gampang diidentifikasi langsung
-// di Supabase Table Editor. Ditulis di handleSubmitQC_ pas laporan jadi SELESAI.
-// SEKALIGUS: REVERSE CASCADE dipasang di database (trigger
-// trg_hapus_tim_potong_saat_arsip_selesai_dihapus) - begitu 1 baris arsip_selesai dihapus,
-// baris tim_potong induknya OTOMATIS ikut terhapus juga, yang lalu men-trigger cascade yang
-// sudah ada (log_pemakaian_kain -> stok kain balik otomatis, log_qc ikut kehapus). Efeknya:
-// hapus 1 baris arsip_selesai = UNDO TOTAL 1 pekerjaan produksi, seolah-olah gak pernah
-// dipotong & gak pernah di-QC sama sekali. Baris arsip_selesai yang SUDAH ADA sebelum versi
-// ini juga sudah di-backfill kolom detailnya lewat migrasi SQL langsung (bukan lewat kode ini).
+// di Supabase Table Editor. Ditulis di handleSubmitQC_ pas laporan jadi SELESAI. Bagian ini
+// (kolom detail) MASIH BERLAKU dan benar. [CATATAN ver.25: bagian di bawah soal "reverse
+// cascade menghapus tim_potong" SALAH, sudah dikoreksi - baca banner ver.25 di atas]
 //
 // ============================================================
 // CODE WORKER PRODUKSI ver.23
