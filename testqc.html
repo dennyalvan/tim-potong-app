@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.16
+DASHBOARD ver.17
 ============================================================
-PERUBAHAN ver.16: kartu warna di tab Stok Kain sekarang beneran berwarna (sebelumnya peta
+PERUBAHAN ver.17: kartu warna di tab Stok Kain sekarang beneran berwarna (sebelumnya peta
 WARNA_KE_HEX kosong, semua kartu default abu-abu). Diisi palet ~35 nama warna umum di industri
 garmen (Indonesia & Inggris, termasuk istilah dari KAMUS SINONIM WARNA & KAMUS TIM POTONG -
 mis. DUSTY, MUSTARD, TERRACOTTA, SAGE, ONYX, STEEL BLUE). Nama warna yang GABUNGAN kata (mis.
@@ -12,6 +12,14 @@ fallback cari kata kunci paling spesifik. Swatch bulat + aksen garis kiri kartu 
 warna aslinya; warna terang (putih/krim) dikasih border tipis biar tetap kelihatan di atas
 kartu putih. Kalau nama warnanya gak dikenali sama sekali, tetap fallback abu-abu netral
 seperti sebelumnya (gak ada yang error/kosong).
+
+DASHBOARD ver.16
+============================================================
+PERUBAHAN ver.16: fix presisi angka kg di tab Stok Kain - formatAngka() sebelumnya dibatasi
+maksimal 1 desimal (maximumFractionDigits:1), jadi kg 24.85 di Supabase tampil "24,9" di
+dashboard (dibulatkan, ketauan Denny dari roll MERAH/0132). Sekarang dinaikkan ke 2 desimal,
+sesuai presisi kg yang beneran disimpan di Supabase - total kg & kg per-roll sekarang tampil
+PERSIS sama kayak sumber datanya, gak dibulatkan lagi.
 
 DASHBOARD ver.15
 ============================================================
@@ -1247,7 +1255,11 @@ function renderRekapQC() {
 // ------------------------------------------------------------
 function escapeHtml(t) { return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 function escapeAttr(t) { return escapeHtml(t).replace(/"/g, '&quot;'); }
-function formatAngka(n) { return Number(n).toLocaleString('id-ID', { maximumFractionDigits: 1 }); }
+// v.14: SEBELUMNYA maximumFractionDigits:1 - bikin angka kg kepotong presisinya (mis. 24.85kg
+// di Supabase tampil "24,9" di sini, ketauan Denny). Kg disimpan sampai 2 desimal di Supabase,
+// jadi format tampilan disamain ke 2 desimal biar PERSIS sama kayak sumber datanya, bukan
+// dibulatkan.
+function formatAngka(n) { return Number(n).toLocaleString('id-ID', { maximumFractionDigits: 2 }); }
 function tampilkanToast(msg) {
   const el = document.getElementById('toast');
   el.textContent = msg;
