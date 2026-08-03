@@ -1,9 +1,12 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.27
+// CODE WORKER PRODUKSI ver.28
 // ============================================================
-// PERUBAHAN ver.27: endpoint baru GET /data/export-stok-kain - export stok_kain yang masih
-// ada sisa (kg_sisa > 0), dipakai CODE SYNC AKUNTANSI.js (fungsi sinkronKeSheetStokKain) buat
-// sinkron sheet "STOK KAIN" otomatis tiap jam, pola sama kayak /data/export-akuntansi.
+// PERUBAHAN ver.28: 2 endpoint baru buat CODE SYNC AKUNTANSI.js sinkron sheet TIM POTONG &
+// LOG QC (append-only, LOG QC WAJIB lewatin baris 1-2 karena ada formula SUBTOTAL manual):
+//   - GET /data/export-tim-potong?bulan=N - tim_potong MENTAH (breakdown ukuran, ref_stok,
+//     id_pesan_qc, dst), beda dari /data/export-akuntansi yang formatnya sudah diringkas.
+//   - GET /data/export-log-qc?bulan=N - log_qc MENTAH TERMASUK harga_jait/total_bayar (beda
+//     dari /data/rekap-qc yang sengaja gak nyertain info uang itu ke Mini App/dashboard).
 //
 // Riwayat versi lengkap: git log.
 //
@@ -112,6 +115,21 @@ export default {
     // terpisah (CODE SYNC AKUNTANSI.js) buat sinkron sheet STOK KAIN tiap jam.
     if (url.pathname === '/data/export-stok-kain' && request.method === 'GET') {
       return await handleExportStokKain_(env);
+    }
+
+    // v.28 - export tim_potong MENTAH (semua kolom, bukan versi ringkas kayak
+    // export-akuntansi), dipakai CODE SYNC AKUNTANSI.js buat sinkron sheet TIM POTONG asli.
+    if (url.pathname === '/data/export-tim-potong' && request.method === 'GET') {
+      const bulan = parseInt(url.searchParams.get('bulan'), 10) || 6;
+      return await handleExportTimPotongMentah_(env, bulan);
+    }
+
+    // v.28 - export log_qc MENTAH TERMASUK harga_jait/total_bayar (beda dari /data/rekap-qc
+    // yang sengaja gak nyertain info uang itu buat tim potong/QC) - KHUSUS dipakai CODE SYNC
+    // AKUNTANSI.js buat sinkron sheet LOG QC, bukan buat dashboard/Mini App.
+    if (url.pathname === '/data/export-log-qc' && request.method === 'GET') {
+      const bulan = parseInt(url.searchParams.get('bulan'), 10) || 6;
+      return await handleExportLogQCMentah_(env, bulan);
     }
 
     return jsonResponse({ ok: false, error: 'Endpoint tidak ditemukan: ' + url.pathname }, 404);
@@ -468,6 +486,68 @@ async function handleExportStokKain_(env) {
         diskonRpKg: r.diskon_rp_kg,
         kgTerpakai: r.kg_terpakai,
         kgSisa: r.kg_sisa
+      };
+    });
+    return jsonResponse(hasil);
+  } catch (e) {
+    return jsonResponse({ ok: false, error: e.message }, 500);
+  }
+}
+
+// ============================================================
+// v.28 - EXPORT TIM POTONG MENTAH (semua kolom asli, breakdown ukuran per XS-6XL) - dipakai
+// CODE SYNC AKUNTANSI.js buat sinkron sheet "TIM POTONG" (append-only, beda dari
+// export-akuntansi yang formatnya sudah diringkas buat CERMIN AKUNTANSI).
+// ============================================================
+async function handleExportTimPotongMentah_(env, bulan) {
+  try {
+    const batasTanggal = new Date();
+    batasTanggal.setMonth(batasTanggal.getMonth() - bulan);
+    const batasStr = batasTanggal.toISOString().slice(0, 10);
+    const rows = await ambilDariSupabase_(env, '/rest/v1/tim_potong?select=*&tanggal=gte.' + batasStr + '&order=tanggal.asc,id.asc');
+    const hasil = rows.map(function (r) {
+      return {
+        id: r.id,
+        tanggal: r.tanggal,
+        pemakaianKainKg: r.pemakaian_kain_kg,
+        kodeRoll: r.kode_roll,
+        jenisWarnaBaju: r.jenis_warna_baju,
+        ukuran: kolomKeUkuran_(r),
+        jumlah: r.jumlah,
+        refStok: r.ref_stok,
+        status: r.status,
+        idPesanQc: r.id_pesan_qc
+      };
+    });
+    return jsonResponse(hasil);
+  } catch (e) {
+    return jsonResponse({ ok: false, error: e.message }, 500);
+  }
+}
+
+// ============================================================
+// v.28 - EXPORT LOG QC MENTAH TERMASUK harga_jait/total_bayar - dipakai CODE SYNC
+// AKUNTANSI.js buat sinkron sheet "LOG QC" (append-only, HARUS lewatin baris 1-2 karena baris
+// 2 punya formula SUBTOTAL yang dikelola manual Denny - JANGAN PERNAH ditulis ulang otomatis).
+// ============================================================
+async function handleExportLogQCMentah_(env, bulan) {
+  try {
+    const batasWaktu = new Date();
+    batasWaktu.setMonth(batasWaktu.getMonth() - bulan);
+    const rows = await ambilDariSupabase_(env, '/rest/v1/log_qc?select=*&waktu=gte.' + encodeURIComponent(batasWaktu.toISOString()) + '&order=waktu.asc,id.asc');
+    const hasil = rows.map(function (r) {
+      return {
+        id: r.id,
+        waktu: r.waktu,
+        timPotongId: r.tim_potong_id,
+        varian: r.varian,
+        warna: r.warna,
+        ukuran: kolomKeUkuran_(r),
+        reject: r.reject,
+        total: r.total,
+        hargaJait: r.harga_jait,
+        totalBayar: r.total_bayar,
+        status: r.status
       };
     });
     return jsonResponse(hasil);
