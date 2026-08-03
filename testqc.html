@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.20
+DASHBOARD ver.21
 ============================================================
-PERUBAHAN ver.20: toast "✓ Update HH:MM" sekarang CUMA muncul buat update manual (buka tab
-pertama/tap Refresh/abis kirim rekap) - update otomatis diam-diam dari Realtime & jaring
-pengaman visibilitychange/focus TETAP jalan tapi TANPA toast (gak berisik muncul sendiri).
-Riwayat lengkap: git log.
+PERUBAHAN ver.21: tab Rekap QC dapat 2 fitur - (1) search box di atas tabel (filter warna/
+varian), (2) header tabel (Waktu/Warna/Varian/dst) di-freeze (position:sticky) pas scroll ke
+bawah, tabel dibatasi max-height 62vh + scroll internal biar header selalu kelihatan. Riwayat
+lengkap: git log.
 ============================================================
 -->
 <html lang="id">
@@ -164,10 +164,10 @@ Riwayat lengkap: git log.
      dipasang SAMA PERSIS di setiap baris (header & data) lewat inline style, jadi kolom
      dijamin selalu selebar itu & align sempurna antar baris. */
   .rekap-summary { font-size: 12px; color: var(--gray-text); margin-bottom: 8px; }
-  .rekap-wrap { background: #fff; border-radius: 14px; overflow-x: auto; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+  .rekap-wrap { background: #fff; border-radius: 14px; overflow: auto; max-height: 62vh; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
   .rekap-row { display: grid; align-items: center; }
   .rekap-row > div { padding: 8px 6px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .rekap-head { border-bottom: 1.4px solid var(--border); }
+  .rekap-head { border-bottom: 1.4px solid var(--border); position: sticky; top: 0; z-index: 2; background: #fff; }
   .rekap-head > div { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--gray-label); }
   .rekap-row:not(.rekap-head) { border-bottom: 1px solid var(--border); }
   .rekap-row:last-child { border-bottom: none; }
@@ -250,6 +250,7 @@ Riwayat lengkap: git log.
   <!-- ============ TAB: REKAP QC ============ -->
   <div id="tabRekap" style="display:none">
     <div class="section-label">REKAP QC</div>
+    <input type="text" class="search-box" id="searchRekap" placeholder="Cari warna/varian...">
     <p class="rekap-summary" id="rekapSummary">Memuat...</p>
     <div class="rekap-wrap">
       <div id="rekapList"></div>
@@ -340,6 +341,7 @@ let modePerLaporan = {}; // { [id]: 'ringkas'|'rincian' }
 let stokUtuhData = null;
 let sortWarna = 'kg';
 let searchWarnaQuery = '';
+let searchRekapQuery = '';
 let warnaTerbuka = {};
 
 // ------------------------------------------------------------
@@ -943,6 +945,10 @@ document.getElementById('searchWarna').addEventListener('input', function () {
   searchWarnaQuery = this.value;
   renderWarnaGrid();
 });
+document.getElementById('searchRekap').addEventListener('input', function () {
+  searchRekapQuery = this.value;
+  renderRekapQC();
+});
 document.querySelectorAll('.chip[data-sortwarna]').forEach(function (el) {
   el.addEventListener('click', function () {
     document.querySelectorAll('.chip[data-sortwarna]').forEach(function (c) { c.classList.remove('active'); });
@@ -1012,7 +1018,14 @@ function formatWaktuRekap(waktuIso) {
 // per-ukurannya tetap ada di database (notasi ringkas), cuma gak ditampilkan di sini biar
 // tabel gak penuh. Harga Jait/Total Bayar SENGAJA TIDAK ditampilkan (itu info akunting).
 function renderRekapQC() {
-  const items = rekapItemsRaw;
+  let items = rekapItemsRaw;
+  if (searchRekapQuery) {
+    const q = searchRekapQuery.toLowerCase();
+    items = items.filter(function (it) {
+      return String(it.warna || '').toLowerCase().indexOf(q) !== -1 ||
+        String(it.varian || '').toLowerCase().indexOf(q) !== -1;
+    });
+  }
   const semuaUkuranDipakai = {};
   items.forEach(function (it) { it.perUkuran.forEach(function (u) { semuaUkuranDipakai[u.ukuran] = true; }); });
   const ukuranDipakai = DAFTAR_UKURAN_URUT.filter(function (u) { return semuaUkuranDipakai[u]; });
@@ -1033,12 +1046,12 @@ function renderRekapQC() {
     '<div class="rekap-num">Selesai</div><div class="rekap-num">Reject</div></div>';
 
   if (items.length === 0) {
-    summary.textContent = 'Belum ada submit QC dalam 14 hari terakhir.';
-    list.innerHTML = headHtml + '<div class="rekap-row" style="grid-template-columns:1fr"><div class="rekap-muted">Belum ada submit QC.</div></div>';
+    summary.textContent = searchRekapQuery ? 'Gak ada hasil buat "' + searchRekapQuery + '".' : 'Belum ada submit QC dalam 14 hari terakhir.';
+    list.innerHTML = headHtml + '<div class="rekap-row" style="grid-template-columns:1fr"><div class="rekap-muted">' + (searchRekapQuery ? 'Gak ada hasil pencarian.' : 'Belum ada submit QC.') + '</div></div>';
     document.getElementById('rekapFoot').innerHTML = '';
     return;
   }
-  summary.textContent = items.length + ' submit (14 hari terakhir)';
+  summary.textContent = items.length + ' submit' + (searchRekapQuery ? ' (hasil pencarian)' : ' (14 hari terakhir)');
 
   const barisHtml = items.map(function (it) {
     const petaUkuran = {};
