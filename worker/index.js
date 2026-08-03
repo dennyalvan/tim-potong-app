@@ -1,18 +1,20 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.28
+// CODE WORKER PRODUKSI ver.29
 // ============================================================
-// PERUBAHAN ver.28: 2 endpoint baru buat CODE SYNC AKUNTANSI.js sinkron sheet TIM POTONG &
-// LOG QC (append-only, LOG QC WAJIB lewatin baris 1-2 karena ada formula SUBTOTAL manual):
-//   - GET /data/export-tim-potong?bulan=N - tim_potong MENTAH (breakdown ukuran, ref_stok,
-//     id_pesan_qc, dst), beda dari /data/export-akuntansi yang formatnya sudah diringkas.
-//   - GET /data/export-log-qc?bulan=N - log_qc MENTAH TERMASUK harga_jait/total_bayar (beda
-//     dari /data/rekap-qc yang sengaja gak nyertain info uang itu ke Mini App/dashboard).
+// PERUBAHAN ver.29: endpoint baru POST /internal/stok-masuk - proxy INSERT stok_kain buat
+// CODE TIM POTONG.js (Apps Script), gantiin panggilan langsung Apps Script -> Supabase yang
+// SELALU gagal (Supabase nolak "Forbidden use of secret API key in browser" - UrlFetchApp
+// Apps Script gak bisa override User-Agent, keterbatasan Google yang gak ada solusinya dari
+// sisi kode Apps Script). Proteksi pakai header X-Internal-Token dicocokkan ke secret BARU
+// env.INTERNAL_SYNC_TOKEN (beda dari SUPABASE_SECRET_KEY) - WAJIB di-set dulu sebagai
+// Cloudflare secret sebelum endpoint ini bisa dipakai.
 //
 // Riwayat versi lengkap: git log.
 //
 // SETUP AWAL (referensi kalau perlu deploy ulang dari nol): Cloudflare Worker "tim-potong-api"
 // + Supabase (SUPABASE_URL, SUPABASE_SECRET_KEY sebagai secret) + Telegram
-// (TELEGRAM_BOT_TOKEN, TELEGRAM_GROUP_CHAT_ID, TELEGRAM_QC_CHAT_ID, ALLOWED_USER_ID opsional).
+// (TELEGRAM_BOT_TOKEN, TELEGRAM_GROUP_CHAT_ID, TELEGRAM_QC_CHAT_ID, ALLOWED_USER_ID opsional)
+// + INTERNAL_SYNC_TOKEN (secret baru ver.29, buat proxy Apps Script -> Supabase).
 // ============================================================
 
 export default {
@@ -130,6 +132,18 @@ export default {
     if (url.pathname === '/data/export-log-qc' && request.method === 'GET') {
       const bulan = parseInt(url.searchParams.get('bulan'), 10) || 6;
       return await handleExportLogQCMentah_(env, bulan);
+    }
+
+    // v.29 - proxy INSERT stok_kain buat CODE TIM POTONG.js (Apps Script) - dipakai KHUSUS
+    // buat fitur "kain masuk" (command teks & konfirmasi baca nota foto), karena UrlFetchApp
+    // Apps Script gak bisa dipakai langsung ke Supabase (ke-block "Forbidden use of secret API
+    // key in browser" - Apps Script gak bisa override User-Agent, keterbatasan Google, bukan
+    // bug kita). Jadi Apps Script kirim ke SINI (bukan ke Supabase langsung), Worker yang
+    // terusin pakai SUPABASE_SECRET_KEY (sudah kesimpen aman sebagai Cloudflare secret, gak
+    // perlu lagi nempel di kode Apps Script). Proteksi: header X-Internal-Token harus cocok
+    // env.INTERNAL_SYNC_TOKEN (secret baru, beda dari SUPABASE_SECRET_KEY).
+    if (url.pathname === '/internal/stok-masuk' && request.method === 'POST') {
+      return await handleInternalStokMasuk_(request, env);
     }
 
     return jsonResponse({ ok: false, error: 'Endpoint tidak ditemukan: ' + url.pathname }, 404);
@@ -551,6 +565,54 @@ async function handleExportLogQCMentah_(env, bulan) {
       };
     });
     return jsonResponse(hasil);
+  } catch (e) {
+    return jsonResponse({ ok: false, error: e.message }, 500);
+  }
+}
+
+// ============================================================
+// v.29 - INSERT stok_kain, dipanggil CODE TIM POTONG.js (Apps Script) lewat proxy ini (bukan
+// ke Supabase langsung - lihat komentar di routing di atas buat alasannya).
+// ============================================================
+async function handleInternalStokMasuk_(request, env) {
+  try {
+    const token = request.headers.get('X-Internal-Token');
+    if (!token || token !== env.INTERNAL_SYNC_TOKEN) {
+      return jsonResponse({ ok: false, error: 'Token tidak valid' }, 401);
+    }
+
+    const body = await request.json();
+    if (!body.warna || body.kg === undefined || body.kg === null) {
+      return jsonResponse({ ok: false, error: 'warna dan kg wajib diisi' }, 400);
+    }
+
+    const payload = {
+      tgl_beli: body.tglBeli || new Date().toISOString().slice(0, 10),
+      supplier: body.supplier || null,
+      warna: body.warna,
+      kg: body.kg,
+      kode_roll: body.kodeRoll || null,
+      kg_terpakai: 0
+    };
+    if (body.harga !== undefined && body.harga !== null && body.harga !== '') payload.harga_rp_kg = body.harga;
+    if (body.diskon) payload.diskon_rp_kg = body.diskon;
+
+    const res = await fetch(env.SUPABASE_URL + '/rest/v1/stok_kain', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: env.SUPABASE_SECRET_KEY,
+        Authorization: 'Bearer ' + env.SUPABASE_SECRET_KEY,
+        Prefer: 'return=minimal'
+      },
+      body: JSON.stringify([payload])
+    });
+
+    if (res.status >= 300) {
+      return jsonResponse({ ok: false, error: 'HTTP ' + res.status + ': ' + (await res.text()).substring(0, 300) }, 500);
+    }
+
+    return jsonResponse({ ok: true });
   } catch (e) {
     return jsonResponse({ ok: false, error: e.message }, 500);
   }
