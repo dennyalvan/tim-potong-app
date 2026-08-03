@@ -1,9 +1,9 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.26
+// CODE WORKER PRODUKSI ver.27
 // ============================================================
-// PERUBAHAN ver.26: format notifikasi Telegram "Hasil Cutting" direvisi (contoh Denny) - kg
-// sekarang nempel langsung setelah nama warna, kode roll dipisah "/" (bukan lagi "(Roll ...)"),
-// baris ukuran dikasih prefix emoji 📎.
+// PERUBAHAN ver.27: endpoint baru GET /data/export-stok-kain - export stok_kain yang masih
+// ada sisa (kg_sisa > 0), dipakai CODE SYNC AKUNTANSI.js (fungsi sinkronKeSheetStokKain) buat
+// sinkron sheet "STOK KAIN" otomatis tiap jam, pola sama kayak /data/export-akuntansi.
 //
 // Riwayat versi lengkap: git log.
 //
@@ -106,6 +106,12 @@ export default {
     if (url.pathname === '/data/rekap-qc' && request.method === 'GET') {
       const hari = parseInt(url.searchParams.get('hari'), 10) || 14;
       return await handleRekapQC_(env, hari);
+    }
+
+    // v.27 - export stok_kain yang MASIH ADA SISA (kg_sisa > 0), dipakai skrip Apps Script
+    // terpisah (CODE SYNC AKUNTANSI.js) buat sinkron sheet STOK KAIN tiap jam.
+    if (url.pathname === '/data/export-stok-kain' && request.method === 'GET') {
+      return await handleExportStokKain_(env);
     }
 
     return jsonResponse({ ok: false, error: 'Endpoint tidak ditemukan: ' + url.pathname }, 404);
@@ -436,6 +442,34 @@ async function handleExportAkuntansi_(env, bulan) {
       };
     });
 
+    return jsonResponse(hasil);
+  } catch (e) {
+    return jsonResponse({ ok: false, error: e.message }, 500);
+  }
+}
+
+// ============================================================
+// v.27 - EXPORT STOK KAIN yang masih ada sisa (kg_sisa > 0), dipakai CODE SYNC AKUNTANSI.js
+// (fungsi sinkronKeSheetStokKain) buat sinkron sheet "STOK KAIN" tiap jam. Field camelCase
+// biar konsisten sama handleExportAkuntansi_ di atas.
+// ============================================================
+async function handleExportStokKain_(env) {
+  try {
+    const rows = await ambilDariSupabase_(env, '/rest/v1/stok_kain?select=*&kg_sisa=gt.0&order=tgl_beli.asc,id.asc');
+    const hasil = rows.map(function (r) {
+      return {
+        id: r.id,
+        tglBeli: r.tgl_beli,
+        supplier: r.supplier,
+        warna: r.warna,
+        kg: r.kg,
+        kodeRoll: r.kode_roll,
+        hargaRpKg: r.harga_rp_kg,
+        diskonRpKg: r.diskon_rp_kg,
+        kgTerpakai: r.kg_terpakai,
+        kgSisa: r.kg_sisa
+      };
+    });
     return jsonResponse(hasil);
   } catch (e) {
     return jsonResponse({ ok: false, error: e.message }, 500);
