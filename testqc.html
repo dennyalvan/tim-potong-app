@@ -1,12 +1,19 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.21
+DASHBOARD ver.23
 ============================================================
-PERUBAHAN ver.21: tab Rekap QC dapat 2 fitur - (1) search box di atas tabel (filter warna/
-varian), (2) header tabel (Waktu/Warna/Varian/dst) di-freeze (position:sticky) pas scroll ke
-bawah, tabel dibatasi max-height 62vh + scroll internal biar header selalu kelihatan. Riwayat
-lengkap: git log.
+PERUBAHAN ver.23: tombol "Sinkron" & "Refresh" di header dibedain (request Denny - keduanya
+sebelumnya sama persis bentuknya cuma beda warna outline, rawan salah tekan). Sinkron sekarang
+solid hijau + radius kotak (bukan pill) + ikon 📤 (beda dari 🔄 Refresh) - 3 lapis pembeda
+sekaligus (isi, bentuk, ikon). Riwayat lengkap: git log.
+
+CATATAN KEAMANAN (tetap berlaku, bukan cuma soal 1 versi): token di URL SYNC_AKUNTANSI_URL di
+bawah ini KELIHATAN oleh siapapun yang buka "view source" halaman ini (file statis publik di
+GitHub Pages) - beda dari token/kunci yang cuma dipakai server-ke-server. Risikonya rendah
+(sinkron aman diulang-ulang, gak merusak data), tapi kalau suatu saat kerasa perlu diganti/
+dicabut, tinggal ganti value Script Property WEBAPP_SYNC_TOKEN di project CODE SYNC AKUNTANSI,
+terus update juga string di bawah ini + deploy ulang halaman ini.
 ============================================================
 -->
 <html lang="id">
@@ -44,8 +51,10 @@ lengkap: git log.
 
   .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
   .header h1 { font-size: 20px; margin: 0; }
-  .header-right { text-align: right; position: relative; }
+  .header-right { text-align: right; position: relative; display: flex; gap: 8px; align-items: flex-start; justify-content: flex-end; flex-wrap: wrap; }
   .btn-refresh { background: #fff; border: 1.5px solid var(--indigo); border-radius: 20px; padding: 8px 16px; font-weight: 700; font-size: 13px; cursor: pointer; color: var(--indigo); box-shadow: 0 1px 4px rgba(41,43,49,0.10); }
+  .btn-sinkron { background: var(--green); border: 1.5px solid var(--green); border-radius: 10px; padding: 8px 16px; font-weight: 700; font-size: 13px; cursor: pointer; color: #fff; box-shadow: 0 1px 4px rgba(41,43,49,0.10); }
+  .btn-sinkron:disabled { opacity: 0.6; cursor: default; }
   .loading-popup { position: absolute; top: calc(100% + 6px); right: 0; background: #1c1c1e; color: #fff; padding: 6px 13px; border-radius: 20px; font-size: 11.5px; font-weight: 600; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 50; }
   .loading-popup.show { opacity: 1; }
 
@@ -190,6 +199,7 @@ lengkap: git log.
       <h1 id="pageTitle">Dashboard Produksi & QC</h1>
     </div>
     <div class="header-right">
+      <button class="btn-sinkron" id="btnSinkronAkuntansi">📤 Sinkron</button>
       <button class="btn-refresh" id="btnRefresh">🔄 Refresh</button>
       <p class="loading-popup" id="loadingIndicator">⏳ Memuat...</p>
     </div>
@@ -272,6 +282,9 @@ const WORKER_URL = 'https://tim-potong-api.dennyalvan.workers.dev';
 // lewat RLS policy (tim_potong, log_qc, stok_kain) - gak bisa dipakai buat nulis/ubah data.
 const SUPABASE_URL = 'https://upszwynqszlbnwlsutds.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_ryWCacc05wyW7KQK_kEVQQ_AGrJ8998';
+// v.22: URL Web App CODE SYNC AKUNTANSI (Apps Script TERPISAH, gak terafiliasi dengan
+// Worker/Supabase - lihat catatan banner atas file soal token yang kelihatan di "view source").
+const SYNC_AKUNTANSI_URL = 'https://script.google.com/macros/s/AKfycbxq6tZ6oT8mSJd9FIK1SfFyzELDvh0WbRMTcUWiCrGSV80N603T6F14cVricks_410W0g/exec?token=rafkids2026sinkron';
 const DAFTAR_UKURAN_URUT = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL', '5XL', '6XL'];
 const HARI_ID = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 
@@ -365,6 +378,37 @@ document.getElementById('btnRefresh').addEventListener('click', function () {
   tampilkanToast('Memuat ulang...');
   muatDaftarLaporan();
   if (stokUtuhData) muatStokUtuh();
+});
+
+// v.22: tombol sinkron manual ke AUTOREKAP (Cermin Akuntansi/Stok Kain/Tim Potong/Log QC) -
+// panggil Web App CODE SYNC AKUNTANSI langsung dari browser (cross-origin fetch ke Apps
+// Script, sama seperti pola lama dashboard ini sebelum migrasi Supabase). Aman diklik
+// berkali-kali (fungsi sinkron di sisi Apps Script memang didesain idempotent).
+document.getElementById('btnSinkronAkuntansi').addEventListener('click', function () {
+  const btn = this;
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.textContent = '⏳ Sinkron...';
+  fetch(SYNC_AKUNTANSI_URL + '&action=sinkron')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      btn.disabled = false;
+      btn.textContent = '📤 Sinkron';
+      const ringkasan = (data.hasil || []).map(function (h) { return h.nama + ': ' + h.ringkas; }).join('\n');
+      if (data.adaError) {
+        tampilkanToast('Sinkron selesai, ada yang gagal - cek detail.');
+        alert((data.judul || 'Sinkron selesai') + '\n\n' + ringkasan);
+      } else {
+        const now = new Date();
+        const jam = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) + ', ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+        tampilkanToast('✓ Sinkron selesai ' + jam);
+      }
+    })
+    .catch(function (e) {
+      btn.disabled = false;
+      btn.textContent = '📤 Sinkron';
+      tampilkanToast('Gagal sinkron: ' + e.message);
+    });
 });
 
 // v.09: cache instan (stale-while-revalidate) khusus buat PAINT PERTAMA - data yang tampil
