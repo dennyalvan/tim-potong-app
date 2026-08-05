@@ -1,25 +1,12 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.12
+HTML PRODUKSI (Supabase/testproduksi) - ver.13
 ============================================================
-PERUBAHAN ver.12: tombol Refresh diubah dari teks polos jadi roundbox (putih solid + border/
-teks biru) - request Denny, biar tetap kontras jelas di kedua background halaman (terang mode
-Anak, agak gelap mode Dewasa). Riwayat lengkap: git log.
-============================================================
-PERUBAHAN ver.11: 2 koreksi dari review Denny atas ver.10.
-  1. Fix ver.10 KELIRU - Denny konfirmasi format "Roll <kode> / <kg>kg" di kotak Kode Roll
-     kombinasi warna MEMANG HARUS tetap tampil (bukan cuma kode doang) - dikembalikan, dan
-     solusi overflow-nya benar-benar cuma soal LEBAR kolom: kg-mini sekarang lebar tetap kecil
-     (70px), roll-mini-input dapat sisa ruang (flex:1) buat nampung teks yang lebih panjang.
-     Ketahuan juga efek samping renderDetailCard() dari fix ver.10 kemarin: box saran roll
-     re-muncul sendiri gara-gara event focus ke-trigger ulang - sekarang set .value langsung,
-     gak render ulang.
-  2. Kontras tombol "+ Tambah ke Daftar"/"Buat Teks" kurang pas di mode Dewasa (warnanya
-     dirancang buat background terang) - ditambah override khusus mode Dewasa + --page-bg
-     digelapin 1 tingkat lagi (dde3ec -> c7d0dc).
-Riwayat lengkap: git log.
-============================================================
+PERUBAHAN ver.13: tombol Refresh dikecilin/dibikin compact (padding & font diturunkan), dan
+warnanya sekarang ikut var(--mode-accent) - teal pas mode Anak, abu slate pas mode Dewasa
+(sebelumnya biru tetap di kedua mode). Background tetap putih solid biar kontras tetap
+terjamin. Riwayat lengkap: git log.
 ============================================================
 
 HTML PRODUKSI (Supabase/testproduksi) - ver.07
@@ -145,13 +132,15 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
   .header-right { text-align: right; }
   .ver-badge { display: inline-block; background: var(--navy); color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; margin-bottom: 6px; }
   .link-btn { display: block; background: none; border: none; font-size: 13px; cursor: pointer; padding: 2px 0; text-align: right; width: 100%; }
-  /* v.12: tombol Refresh dibikin roundbox (bukan cuma teks polos) - putih solid + border/teks
-     biru, biar tetap kontras jelas di kedua background halaman (terang mode Anak, agak gelap
-     mode Dewasa) - putih selalu lebih terang dari keduanya jadi amanuntuk dua-duanya. */
+  /* v.13: 2 penyesuaian request Denny - (1) dikecilin/dibikin lebih compact (padding & font
+     diturunkan), (2) warnanya sekarang ikut var(--mode-accent) - jadi teal pas mode Anak, abu
+     slate pas mode Dewasa - bukan biru tetap kayak sebelumnya. Background tetap putih solid
+     (bukan ikut warna aksen juga) biar kontrasnya tetap terjamin di kedua background halaman,
+     cuma border+teksnya yang ikut berubah sesuai mode aktif. */
   .link-btn.refresh {
-    display: inline-block; width: auto; background: #fff; color: var(--blue-link);
-    border: 1.5px solid var(--blue-link); border-radius: 20px; padding: 6px 14px;
-    font-weight: 700; box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+    display: inline-block; width: auto; background: #fff; color: var(--mode-accent-dark);
+    border: 1.5px solid var(--mode-accent); border-radius: 16px; padding: 4px 10px;
+    font-size: 12px; font-weight: 700; box-shadow: 0 1px 4px rgba(0,0,0,0.12);
   }
   .link-btn.atur { color: var(--orange-link); }
 
