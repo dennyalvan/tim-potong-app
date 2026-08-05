@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Rekap Order Shopee</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ── iOS DESIGN TOKENS ── */
 :root {
@@ -70,7 +73,7 @@
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif;
+  font-family: "Space Grotesk", -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif;
   background: var(--ios-bg);
   color: var(--ios-label);
   min-height: 100vh;
@@ -164,8 +167,14 @@ body {
 .modal-btn.cancel { background: var(--ios-surface2); color: var(--blue); }
 .modal-btn.danger { background: var(--red); color: #fff; }
 
-/* ── SEGMENT CONTROL (tabs) ── */
-.segment-wrap { margin: 14px 0 0; }
+/* ── SEGMENT CONTROL (tabs) — dibungkus roundbox biar gak nyatu ke background ── */
+.segment-wrap {
+  margin: 14px 0 0;
+  background: var(--ios-surface);
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding: 10px 10px 8px;
+  box-shadow: var(--shadow);
+}
 .segment {
   display: flex; background: var(--ios-surface2);
   border-radius: 9px; padding: 2px; gap: 2px;
@@ -183,8 +192,15 @@ body {
   box-shadow: var(--shadow);
 }
 
-/* ── FILTER PILLS ── */
-.filter-row { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0; }
+/* ── FILTER PILLS — bagian bawah dari box yang sama dgn segment control ── */
+.filter-row {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  background: var(--ios-surface);
+  border-top: 1px solid var(--ios-border);
+  border-radius: 0 0 var(--radius) var(--radius);
+  box-shadow: var(--shadow);
+  margin: 0 0 14px; padding: 10px 10px 12px;
+}
 .pill {
   padding: 5px 13px; font-size: 12px; font-weight: 500; font-family: inherit;
   border: none; border-radius: 20px; cursor: pointer;
@@ -473,9 +489,9 @@ body {
   <div class="zone-spinner"></div>
   <div class="upload-icon">📊</div>
   <div class="upload-label" id="uploadLabel">Klik atau seret file Excel</div>
-  <div class="upload-hint" id="uploadHint">Format .xlsx · Export Shopee "Perlu Dikirim"</div>
+  <div class="upload-hint" id="uploadHint">Format .xlsx · Bisa pilih beberapa file sekaligus, otomatis digabung</div>
 </div>
-<input type="file" id="fileInput" accept=".xlsx" onchange="handleFiles(this.files)">
+<input type="file" id="fileInput" accept=".xlsx" multiple onchange="handleFiles(this.files)">
 
 <!-- MODAL -->
 <div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)closeModal()">
@@ -569,39 +585,59 @@ function toggleTheme() { isDark = !isDark; applyTheme(); }
 let varianData = [], karakterData = [];
 let resiData = { totalResi: 0, totalPcs: 0, breakdown: [], pcsDetails: {} };
 let excludedInfo = { count: 0, qty: 0 };
+let duplicateInfo = { count: 0 };
 let varianMode = 'default', karMode = 'az', resiMode = 'default';
 const GROUP_COLORS = ['tag-0','tag-1','tag-2','tag-3','tag-4','tag-5','tag-6','tag-7','tag-8'];
 
-// ── UPLOAD (always standby) ──
-function handleFiles(files) {
-  if (!files || !files[0]) return;
-  const file = files[0];
-  if (!file.name.endsWith('.xlsx')) { showError('File harus berformat .xlsx'); return; }
+// ── UPLOAD (always standby, support banyak file sekaligus — digabung berurutan) ──
+function handleFiles(fileList) {
+  if (!fileList || !fileList.length) return;
+  const files = Array.from(fileList); // urutan sesuai pemilihan/drop, JANGAN diacak/sort
+
+  const invalid = files.find(f => !f.name.endsWith('.xlsx'));
+  if (invalid) { showError(`"${invalid.name}" bukan file .xlsx`); return; }
+
   hideError();
-  setUploadProcessing(true);
-  const reader = new FileReader();
-  reader.onload = e => {
-    try { processExcel(e.target.result, file.name); }
-    catch(err) { showError('Gagal: ' + err.message); }
-    finally { setUploadProcessing(false); document.getElementById('fileInput').value = ''; }
-  };
-  reader.onerror = () => { showError('Gagal membaca file'); setUploadProcessing(false); };
-  reader.readAsArrayBuffer(file);
+  setUploadProcessing(true, files.length);
+
+  const readAsBuffer = file => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => resolve({ buffer: e.target.result, filename: file.name });
+    reader.onerror = () => reject(new Error(`Gagal membaca "${file.name}"`));
+    reader.readAsArrayBuffer(file);
+  });
+
+  Promise.all(files.map(readAsBuffer))
+    .then(fileBuffers => {
+      const results = [];
+      const failedFiles = [];
+      fileBuffers.forEach(({ buffer, filename }) => {
+        try { results.push(extractFileData(buffer, filename)); }
+        catch (err) { failedFiles.push(`${filename}: ${err.message}`); }
+      });
+      if (!results.length) throw new Error('Semua file gagal diproses:\n' + failedFiles.join('\n'));
+      buildRekap(results);
+      if (failedFiles.length) showError(`${failedFiles.length} file dilewati (gagal parse): ` + failedFiles.join(' | '));
+    })
+    .catch(err => showError('Gagal: ' + err.message))
+    .finally(() => { setUploadProcessing(false); document.getElementById('fileInput').value = ''; });
 }
 
-function setUploadProcessing(on) {
+function setUploadProcessing(on, count) {
   const zone = document.getElementById('uploadZone');
   zone.classList.toggle('processing-state', on);
-  document.getElementById('uploadLabel').textContent = on ? 'Memproses file...' : 'Klik atau seret file Excel';
-  document.getElementById('uploadHint').textContent = on ? 'Mohon tunggu sebentar' : 'Format .xlsx · Export Shopee "Perlu Dikirim"';
+  document.getElementById('uploadLabel').textContent = on ? `Memproses ${count > 1 ? count + ' file' : 'file'}...` : 'Klik atau seret file Excel';
+  document.getElementById('uploadHint').textContent = on ? 'Mohon tunggu sebentar' : 'Format .xlsx · Bisa pilih beberapa file sekaligus, otomatis digabung';
 }
 
-function processExcel(buffer, filename) {
+// ── Baca 1 file Excel -> baris ternormalisasi (independen dari posisi kolom file itu sendiri,
+// karena posisi kolom bisa beda antar-export, mis. ada/tidaknya kolom "Tipe Pesanan") ──
+function extractFileData(buffer, filename) {
   const wb = XLSX.read(buffer, { type: 'arraybuffer' });
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
-  let headerRow = -1, colN = -1, colO = -1, colR = -1, colStatus = -1;
+  let headerRow = -1, colN = -1, colO = -1, colR = -1, colStatus = -1, colResi = -1, colPesanan = -1;
   for (let i = 0; i < Math.min(10, rows.length); i++) {
     const r = rows[i];
     for (let j = 0; j < r.length; j++) {
@@ -610,45 +646,58 @@ function processExcel(buffer, filename) {
       if (v.includes('Nama Variasi')) colO = j;
       if (v === 'Jumlah') colR = j;
       if (v === 'Status Pesanan') colStatus = j;
+      if (v.includes('No. Resi')) colResi = j;
+      if (v === 'No. Pesanan') colPesanan = j;
     }
     if (colN >= 0 && colO >= 0 && colR >= 0) { headerRow = i; break; }
   }
-  if (headerRow < 0) throw new Error('Kolom header tidak ditemukan');
-  let data = rows.slice(headerRow + 1).filter(r => r[colN] || r[colO]);
+  if (headerRow < 0) throw new Error('kolom header tidak ditemukan');
 
-  // Buang baris yang bukan "Perlu Dikirim" (misal: Pembatalan diajukan) — jangan ikut dihitung
+  const rawRows = rows.slice(headerRow + 1).filter(r => r[colN] || r[colO]);
   let excludedCount = 0, excludedQty = 0;
-  if (colStatus >= 0) {
-    data = data.filter(r => {
+  const normalized = [];
+  rawRows.forEach(r => {
+    const qty = parseFloat(r[colR]) || 0;
+    if (colStatus >= 0) {
       const st = String(r[colStatus] || '').trim();
-      if (st && st !== 'Perlu Dikirim') {
-        excludedCount++;
-        excludedQty += parseFloat(r[colR]) || 0;
-        return false;
-      }
-      return true;
+      if (st && st !== 'Perlu Dikirim') { excludedCount++; excludedQty += qty; return; }
+    }
+    if (!qty) return;
+    normalized.push({
+      sku: String(r[colN] || '').trim(),
+      variasi: String(r[colO] || '').trim(),
+      qty,
+      pesanan: colPesanan >= 0 ? String(r[colPesanan] || '').trim() : '',
+      resi: colResi >= 0 ? String(r[colResi] || '').trim() : '',
     });
-  }
-  if (excludedCount > 0) {
-    console.warn(`Dikecualikan ${excludedCount} baris (${excludedQty} pcs) berstatus bukan "Perlu Dikirim"`);
-  }
-  excludedInfo = { count: excludedCount, qty: excludedQty };
+  });
+
+  return { filename, normalized, excludedCount, excludedQty };
+}
+
+// ── Gabungkan hasil dari semua file (berurutan sesuai file), lalu hitung rekap sekali ──
+function buildRekap(fileResults) {
+  const allRows = [];
+  let totalExcludedCount = 0, totalExcludedQty = 0;
+  fileResults.forEach(f => {
+    allRows.push(...f.normalized);
+    totalExcludedCount += f.excludedCount;
+    totalExcludedQty += f.excludedQty;
+  });
+  excludedInfo = { count: totalExcludedCount, qty: totalExcludedQty };
 
   const REG_PREFIXES = ['RFL ','ONESET ','SPEN.','PJ ','SET.','CP ','LT ','CRG-PJG','CARGO','LS24','TS24','TS ','CUSTOM'];
   const SIZE_ORDER = ['S','M','L','XL','XXL'];
 
-  // VARIAN — bangun langsung per baris (bukan pre-sum per SKU) supaya item
-  // tanpa pola "- UKURAN" (mis. produk custom/sablon) tidak hilang begitu saja,
-  // dan variasi berbeda di bawah SKU yang sama tidak tercampur.
+  // VARIAN
   const groupMap = {}, groupOrder = [];
   const labelMap = {'RFL':'RFL','ONESET':'ONESET','SPEN':'SPEN','PJ':'PJ','SET':'SET','CP':'CP','LT':'LT','CRGPJG':'CRG-PJG','CARGO':'CARGO','LS24':'LS24','TS24':'TS24','TS':'TS','CUSTOM':'CUSTOM'};
-  data.forEach(r => {
-    const sku = String(r[colN] || '').trim();
-    const qty = parseFloat(r[colR]) || 0;
+  allRows.forEach(row => {
+    const sku = row.sku;
+    const qty = row.qty;
     if (!sku || qty === 0) return;
     const prefix = REG_PREFIXES.find(p => sku.startsWith(p));
     const m = sku.match(/ - (.+)$/);
-
     let label, warna, ukuran;
     if (m) {
       ukuran = m[1].replace(/[()]/g,'').trim();
@@ -656,14 +705,10 @@ function processExcel(buffer, filename) {
       const groupKey = prefix ? prefix.trim().replace('.','').replace('-','') : 'ANAK POLOS';
       label = labelMap[groupKey] || groupKey || 'ANAK POLOS';
     } else {
-      // Tidak match pola ukuran (mis. "SABLON CUSTOM") — jangan dibuang,
-      // masukkan ke grup LAINNYA, pakai Nama Variasi sbg label detail.
       label = 'LAINNYA';
       warna = sku;
-      const varRaw = String(r[colO] || '').trim();
-      ukuran = varRaw || 'Item';
+      ukuran = row.variasi || 'Item';
     }
-
     if (!groupMap[label]) { groupMap[label] = {}; groupOrder.push(label); }
     if (!groupMap[label][warna]) groupMap[label][warna] = {};
     groupMap[label][warna][ukuran] = (groupMap[label][warna][ukuran] || 0) + qty;
@@ -682,9 +727,9 @@ function processExcel(buffer, filename) {
   // KARAKTER
   const WARNA_PLAIN = new Set(['HITAM','NAVY','MERAH','CREAM','PINK','MUSTARD','ST. BLUE','STEEL NAVY','BIRU','HIJAU TUA','ALMOND','UNGU','TERRACOTTA','TERACOTA','SAGE','PUTIH','WHITE','BLACK','MUSTARD NAVY','NAVY CREAM','CREAM SAGE','NAVY WHITE','DUSTY','MIX']);
   const karMap = {};
-  data.forEach(r => {
-    const varRaw = String(r[colO] || '').trim();
-    const qty = parseFloat(r[colR]) || 0;
+  allRows.forEach(row => {
+    const varRaw = row.variasi;
+    const qty = row.qty;
     if (!varRaw || qty === 0) return;
     const lastComma = varRaw.lastIndexOf(',');
     if (lastComma < 0) return;
@@ -703,23 +748,24 @@ function processExcel(buffer, filename) {
     return {name, qty, detail: parts.join(' ')};
   }).sort((a,b)=>a.name.localeCompare(b.name));
 
-  // RESI
-  let colResi = -1, colPesanan = -1;
-  const hRow = rows[headerRow];
-  for (let j = 0; j < hRow.length; j++) {
-    const v = String(hRow[j] || '');
-    if (v.includes('No. Resi')) colResi = j;
-    if (v === 'No. Pesanan') colPesanan = j;
-  }
+  // RESI — juga deteksi kalau ada No.Pesanan yang muncul di lebih dari 1 file (kemungkinan overlap)
   const pesananMap = {};
-  data.forEach(r => {
-    const pesanan = String(r[colPesanan] || '').trim();
-    const resi = String(r[colResi] || '').trim();
-    const qty = parseFloat(r[colR]) || 0;
-    if (!pesanan || qty === 0) return;
-    if (!pesananMap[pesanan]) pesananMap[pesanan] = { pcs: 0, resi };
-    pesananMap[pesanan].pcs += qty;
+  const pesananSourceFile = {};
+  let duplicateAcrossFiles = 0;
+  fileResults.forEach(f => {
+    f.normalized.forEach(row => {
+      const pesanan = row.pesanan;
+      if (!pesanan || row.qty === 0) return;
+      if (!pesananMap[pesanan]) {
+        pesananMap[pesanan] = { pcs: 0, resi: row.resi };
+        pesananSourceFile[pesanan] = f.filename;
+      } else if (pesananSourceFile[pesanan] !== f.filename) {
+        duplicateAcrossFiles++;
+      }
+      pesananMap[pesanan].pcs += row.qty;
+    });
   });
+  duplicateInfo = { count: duplicateAcrossFiles };
   const pcsCount = {}, pcsDetails = {};
   Object.entries(pesananMap).forEach(([pesanan, { pcs, resi }]) => {
     pcsCount[pcs] = (pcsCount[pcs] || 0) + 1;
@@ -731,9 +777,15 @@ function processExcel(buffer, filename) {
   const breakdown = Object.entries(pcsCount).map(([pcs,count])=>({pcs:+pcs,count})).sort((a,b)=>a.pcs-b.pcs);
   resiData = { totalResi, totalPcs, breakdown, pcsDetails };
 
-  // update subtitle
-  const dateRange = filename.replace('Order_toship_','').replace('.xlsx','').replace(/_/g,'–').replace('(1)','').replace('(2)','').trim();
-  document.getElementById('subtitle').textContent = 'Shopee · ' + dateRange;
+  // Subtitle — gabung info semua file
+  const labels = fileResults.map(f => {
+    const m = f.filename.match(/Order_toship_(\d{8})_(\d{8})/);
+    return m ? `${m[1]}–${m[2]}` : f.filename.replace('.xlsx','');
+  });
+  const subtitleText = fileResults.length > 1
+    ? `Shopee · ${fileResults.length} file digabung (${labels.join(', ')})`
+    : 'Shopee · ' + labels[0];
+  document.getElementById('subtitle').textContent = subtitleText;
 
   varianMode = 'default'; karMode = 'az'; resiMode = 'default';
   document.querySelectorAll('#panel-varian .pill').forEach((b,i)=>b.classList.toggle('active',i===0));
@@ -750,6 +802,7 @@ function doClear() {
   varianData = []; karakterData = [];
   resiData = { totalResi: 0, totalPcs: 0, breakdown: [], pcsDetails: {} };
   excludedInfo = { count: 0, qty: 0 };
+  duplicateInfo = { count: 0 };
   document.getElementById('subtitle').textContent = 'Shopee · Perlu Dikirim';
   renderVarian(); renderKarakter(); renderResi();
 }
@@ -816,6 +869,7 @@ function renderVarian() {
   const total = varianData.reduce((s,g)=>s+g.total,0);
   grand.innerHTML = `<div class="footer-total">
     ${excludedInfo.count > 0 ? `<span class="ft-item" style="color:var(--red)">⚠ ${excludedInfo.count} pesanan (${excludedInfo.qty} pcs) dikecualikan — status pembatalan</span>` : ''}
+    ${duplicateInfo.count > 0 ? `<span class="ft-item" style="color:var(--orange)">⚠ ${duplicateInfo.count} No. Pesanan muncul di lebih dari 1 file — kemungkinan overlap tanggal, qty digabung</span>` : ''}
     <span class="ft-item">Grand Total: <strong>${total} pcs</strong></span>
   </div>`;
 }
