@@ -332,6 +332,11 @@ body {
 .resi-stat-num.orange { color: var(--orange); }
 .resi-stat-num.purple { color: var(--purple); }
 .resi-stat-lbl  { font-size: 10px; font-weight: 500; color: var(--ios-label2); letter-spacing: 0.1px; }
+.resi-note {
+  margin-top: 10px; padding: 8px 10px;
+  background: var(--ios-surface2); border-radius: 8px;
+  font-size: 11px; color: var(--ios-label2); line-height: 1.4;
+}
 
 /* Visual breakdown legend strip */
 .resi-legend {
@@ -649,18 +654,24 @@ function extractFileData(buffer, filename) {
   const rawRows = rows.slice(headerRow + 1).filter(r => r[colN] || r[colO]);
   let excludedQty = 0;
   const excludedPesananSet = new Set();
-  const normalized = [];
+  const normalized = [];   // status Batal DIBUANG — dipakai Varian & Karakter (kebutuhan produksi/potong)
+  const allRowsRaw = [];   // SEMUA status ikut, gak peduli Batal atau apapun — dipakai tab Resi (total pesanan yg PERNAH dibuat buyer)
   rawRows.forEach(r => {
     const qty = parseFloat(r[colR]) || 0;
+    const pesananVal = colPesanan >= 0 ? String(r[colPesanan] || '').trim() : '';
+    const resiVal = colResi >= 0 ? String(r[colResi] || '').trim() : '';
+
+    // Selalu masuk ke allRowsRaw kalau ada qty, gak peduli status apapun
+    if (qty) allRowsRaw.push({ pesanan: pesananVal, resi: resiVal, qty });
+
     if (colStatus >= 0) {
       const st = String(r[colStatus] || '').trim();
-      // Buang HANYA status pembatalan (mis. "Batal", "Pembatalan diajukan").
-      // Jangan whitelist 1 status doang — file export bisa "Perlu Dikirim" saja
-      // ATAU "semua status" sebulan penuh (Selesai, Sedang Dikirim, Telah Dikirim,
-      // Pesanan diterima..., dll), semua itu tetap pesanan valid yang harus dihitung.
+      // Buang HANYA status pembatalan (mis. "Batal", "Pembatalan diajukan") — TAPI cuma
+      // untuk `normalized` (Varian/Karakter). Jangan whitelist 1 status doang — file export
+      // bisa "Perlu Dikirim" saja ATAU "semua status" sebulan penuh (Selesai, Sedang Dikirim,
+      // Telah Dikirim, Pesanan diterima..., dll), semua itu tetap pesanan valid buat dihitung.
       if (st && /batal/i.test(st)) {
         excludedQty += qty;
-        const pesananVal = colPesanan >= 0 ? String(r[colPesanan] || '').trim() : '';
         if (pesananVal) excludedPesananSet.add(pesananVal); // hitung PESANAN unik, bukan baris
         return;
       }
@@ -670,12 +681,12 @@ function extractFileData(buffer, filename) {
       sku: String(r[colN] || '').trim(),
       variasi: String(r[colO] || '').trim(),
       qty,
-      pesanan: colPesanan >= 0 ? String(r[colPesanan] || '').trim() : '',
-      resi: colResi >= 0 ? String(r[colResi] || '').trim() : '',
+      pesanan: pesananVal,
+      resi: resiVal,
     });
   });
 
-  return { filename, normalized, excludedPesanan: [...excludedPesananSet], excludedQty };
+  return { filename, normalized, allRowsRaw, excludedPesanan: [...excludedPesananSet], excludedQty };
 }
 
 // ── Gabungkan hasil dari semua file (berurutan sesuai file), lalu hitung rekap sekali ──
@@ -767,12 +778,14 @@ function buildRekap(fileResults) {
     return {name, qty, detail: parts.join(' ')};
   }).sort((a,b)=>a.name.localeCompare(b.name));
 
-  // RESI — juga deteksi kalau ada No.Pesanan yang muncul di lebih dari 1 file (kemungkinan overlap)
+  // RESI — pakai SEMUA pesanan yang PERNAH dibuat buyer, gak peduli statusnya
+  // (beda dari Varian/Karakter yang buang status Batal). Juga deteksi kalau ada
+  // No.Pesanan yang muncul di lebih dari 1 file (kemungkinan overlap tanggal).
   const pesananMap = {};
   const pesananSourceFile = {};
   let duplicateAcrossFiles = 0;
   fileResults.forEach(f => {
-    f.normalized.forEach(row => {
+    f.allRowsRaw.forEach(row => {
       const pesanan = row.pesanan;
       if (!pesanan || row.qty === 0) return;
       if (!pesananMap[pesanan]) {
@@ -1022,7 +1035,8 @@ function renderResi() {
           <span class="resi-stat-lbl">Maks PCS/Pesanan</span>
         </div>
       </div>
-    </div>`;
+    </div>
+    <div class="resi-note">ℹ️ Menghitung SEMUA pesanan yang pernah dibuat buyer, termasuk yang Batal — beda basis dengan tab Varian/Karakter yang mengecualikan Batal.</div>`;
 
   let breakdown = [...resiData.breakdown];
   if (resiMode==='asc')  breakdown.sort((a,b)=>a.pcs-b.pcs);
