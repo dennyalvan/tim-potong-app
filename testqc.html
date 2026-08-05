@@ -1,11 +1,17 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.28
+DASHBOARD ver.29
 ============================================================
-PERUBAHAN ver.28: warna tombol "Sinkron" diganti dari hijau jadi ungu (var(--indigo)), senada
-sama warna aksen utama dashboard (request Denny) - bentuk kotak solid + ikon 📤 tetap
-dipertahankan biar tetap gampang dibedain dari tombol Refresh walau sekarang sama-sama ungu.
+PERUBAHAN ver.29: 3 hal dari request Denny.
+  1. Tombol "Sinkron" -> teks jadi "Sync". Tombol Refresh diganti jadi bulat ikon doang (gak
+     ada teks) - hijau vibrant kayak ikon WhatsApp, gradient+shadow biar keliatan "3D"/glossy.
+  2. FIX kolom Varian & angka ukuran suka kepotong di tab Rekap QC - Varian sekarang wrap ke
+     baris baru (bukan dipotong "..."), lebar kolom ukuran (34->40px) & varian (100->118px)
+     dilebarin dikit, padding sel dikurangin biar lebih lega.
+  3. Baris di tabel Rekap QC sekarang bisa diklik buat di-highlight (toggle, cuma 1 baris aktif
+     sekaligus) - biar gak kehilangan fokus baris pas scroll horizontal ngelewatin banyak kolom.
+Riwayat lengkap: git log.
 Riwayat lengkap: git log.
 
 CATATAN KEAMANAN (tetap berlaku, bukan cuma soal 1 versi): token di URL SYNC_AKUNTANSI_URL di
@@ -62,7 +68,16 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
   .header h1 { font-size: 20px; margin: 0; }
   .header-right { text-align: right; position: relative; display: flex; gap: 8px; align-items: flex-start; justify-content: flex-end; flex-wrap: wrap; }
-  .btn-refresh { background: #fff; border: 1.5px solid var(--indigo); border-radius: 20px; padding: 8px 16px; font-weight: 700; font-size: 13px; cursor: pointer; color: var(--indigo); box-shadow: 0 1px 4px rgba(41,43,49,0.10); }
+  /* v.29: tombol Refresh diganti jadi bulat ikon doang (gak ada teks) - hijau vibrant kayak
+     ikon WhatsApp (#25D366), gradient + shadow biar keliatan "3D"/glossy, bukan flat lagi. */
+  .btn-refresh {
+    width: 38px; height: 38px; border-radius: 50%; padding: 0; border: none;
+    background: linear-gradient(150deg, #3EED84, #1DA851);
+    color: #fff; font-size: 17px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 3px 7px rgba(15,120,60,0.45), inset 0 1px 1px rgba(255,255,255,0.5), inset 0 -2px 3px rgba(0,0,0,0.15);
+  }
+  .btn-refresh:active { box-shadow: 0 1px 3px rgba(15,120,60,0.4), inset 0 1px 2px rgba(0,0,0,0.2); }
   .btn-sinkron { background: var(--indigo); border: 1.5px solid var(--indigo); border-radius: 10px; padding: 8px 16px; font-weight: 700; font-size: 13px; cursor: pointer; color: #fff; box-shadow: 0 1px 4px rgba(41,43,49,0.10); }
   .btn-sinkron:disabled { opacity: 0.6; cursor: default; }
   .loading-popup { position: absolute; top: calc(100% + 6px); right: 0; background: #1c1c1e; color: #fff; padding: 6px 13px; border-radius: 20px; font-size: 11.5px; font-weight: 600; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 50; }
@@ -185,10 +200,16 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .rekap-summary { font-size: 12px; color: var(--gray-text); margin-bottom: 8px; }
   .rekap-wrap { background: #fff; border-radius: 14px; overflow: auto; max-height: 62vh; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
   .rekap-row { display: grid; align-items: center; }
-  .rekap-row > div { padding: 8px 6px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rekap-row > div { padding: 8px 4px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* v.29: kolom Varian & angka ukuran suka kepotong (request Denny) - Varian sekarang wrap ke
+     baris baru (bukan dipotong "..."), lebar kolom ukuran & varian juga dilebarin dikit. */
+  .rekap-row > div.rekap-varian { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.25; }
   .rekap-head { border-bottom: 1.4px solid var(--border); position: sticky; top: 0; z-index: 2; background: #fff; }
   .rekap-head > div { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--gray-label); }
-  .rekap-row:not(.rekap-head) { border-bottom: 1px solid var(--border); }
+  .rekap-row:not(.rekap-head) { border-bottom: 1px solid var(--border); cursor: pointer; }
+  /* v.29: baris bisa diklik buat di-highlight (request Denny) - biar gak kehilangan fokus baris
+     pas scroll horizontal ngelewatin banyak kolom ukuran. */
+  .rekap-row.rekap-row-dipilih { background: var(--surface-2); }
   .rekap-row:last-child { border-bottom: none; }
   .rekap-num { text-align: right; font-variant-numeric: tabular-nums; }
   .rekap-muted { color: var(--gray-text); }
@@ -209,8 +230,8 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
       <h1 id="pageTitle">DASHBOARD QC</h1>
     </div>
     <div class="header-right">
-      <button class="btn-sinkron" id="btnSinkronAkuntansi">📤 Sinkron</button>
-      <button class="btn-refresh" id="btnRefresh">🔄 Refresh</button>
+      <button class="btn-sinkron" id="btnSinkronAkuntansi">📤 Sync</button>
+      <button class="btn-refresh" id="btnRefresh">🔄</button>
       <p class="loading-popup" id="loadingIndicator">⏳ Memuat...</p>
     </div>
   </div>
@@ -398,25 +419,25 @@ document.getElementById('btnSinkronAkuntansi').addEventListener('click', functio
   const btn = this;
   if (btn.disabled) return;
   btn.disabled = true;
-  btn.textContent = '⏳ Sinkron...';
+  btn.textContent = '⏳ Sync...';
   fetch(SYNC_AKUNTANSI_URL + '&action=sinkron')
     .then(function (r) { return r.json(); })
     .then(function (data) {
       btn.disabled = false;
-      btn.textContent = '📤 Sinkron';
+      btn.textContent = '📤 Sync';
       const ringkasan = (data.hasil || []).map(function (h) { return h.nama + ': ' + h.ringkas; }).join('\n');
       if (data.adaError) {
-        tampilkanToast('Sinkron selesai, ada yang gagal - cek detail.');
-        alert((data.judul || 'Sinkron selesai') + '\n\n' + ringkasan);
+        tampilkanToast('Sync selesai, ada yang gagal - cek detail.');
+        alert((data.judul || 'Sync selesai') + '\n\n' + ringkasan);
       } else {
         const now = new Date();
         const jam = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) + ', ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-        tampilkanToast('✓ Sinkron selesai ' + jam);
+        tampilkanToast('✓ Sync selesai ' + jam);
       }
     })
     .catch(function (e) {
       btn.disabled = false;
-      btn.textContent = '📤 Sinkron';
+      btn.textContent = '📤 Sync';
       tampilkanToast('Gagal sinkron: ' + e.message);
     });
 });
@@ -1084,7 +1105,7 @@ function renderRekapQC() {
   items.forEach(function (it) { it.perUkuran.forEach(function (u) { semuaUkuranDipakai[u.ukuran] = true; }); });
   const ukuranDipakai = DAFTAR_UKURAN_URUT.filter(function (u) { return semuaUkuranDipakai[u]; });
 
-  const LEBAR_WAKTU = 92, LEBAR_WARNA = 110, LEBAR_VARIAN = 100, LEBAR_UKURAN = 34, LEBAR_ANGKA = 60;
+  const LEBAR_WAKTU = 92, LEBAR_WARNA = 110, LEBAR_VARIAN = 118, LEBAR_UKURAN = 40, LEBAR_ANGKA = 60;
   const templateKolom = LEBAR_WAKTU + 'px ' + LEBAR_WARNA + 'px ' + LEBAR_VARIAN + 'px ' +
     ukuranDipakai.map(function () { return LEBAR_UKURAN + 'px'; }).join(' ') +
     ' ' + LEBAR_ANGKA + 'px ' + LEBAR_ANGKA + 'px';
@@ -1113,7 +1134,7 @@ function renderRekapQC() {
     return '<div class="rekap-row" style="grid-template-columns:' + templateKolom + '">' +
       '<div class="rekap-muted">' + formatWaktuRekap(it.waktu) + '</div>' +
       '<div>' + escapeHtml(it.warna || '-') + '</div>' +
-      '<div class="rekap-muted">' + escapeHtml(it.varian || '-') + '</div>' +
+      '<div class="rekap-muted rekap-varian">' + escapeHtml(it.varian || '-') + '</div>' +
       ukuranDipakai.map(function (u) { return '<div class="rekap-num">' + (petaUkuran[u] ? petaUkuran[u] : '<span class="rekap-muted">–</span>') + '</div>'; }).join('') +
       '<div class="rekap-selesai">' + it.total + '</div>' +
       '<div class="' + (it.rejectTotal > 0 ? 'rekap-reject' : 'rekap-num rekap-muted') + '">' + it.rejectTotal + '</div>' +
@@ -1121,6 +1142,15 @@ function renderRekapQC() {
   }).join('');
 
   list.innerHTML = headHtml + barisHtml;
+  // v.29: klik baris buat highlight (toggle) - biar gak kehilangan fokus baris pas scroll
+  // horizontal. Klik baris lain otomatis pindahin highlight-nya (cuma 1 baris aktif sekaligus).
+  list.querySelectorAll('.rekap-row:not(.rekap-head)').forEach(function (row) {
+    row.addEventListener('click', function () {
+      const sudahAktif = row.classList.contains('rekap-row-dipilih');
+      list.querySelectorAll('.rekap-row-dipilih').forEach(function (r) { r.classList.remove('rekap-row-dipilih'); });
+      if (!sudahAktif) row.classList.add('rekap-row-dipilih');
+    });
+  });
 
   const totalSel = items.reduce(function (s, it) { return s + it.total; }, 0);
   const totalRej = items.reduce(function (s, it) { return s + it.rejectTotal; }, 0);
