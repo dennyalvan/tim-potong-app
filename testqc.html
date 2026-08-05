@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.32
+DASHBOARD ver.33
 ============================================================
-PERUBAHAN ver.32: kode roll di tab Stok Kain (pas kartu warna di-expand) sekarang di-sort dari
-angka TERBESAR ke terkecil (request Denny) - roll yang kode-nya kosong/null didorong ke paling
-bawah. Riwayat lengkap: git log.
+PERUBAHAN ver.33: kolom search di tab Stok Kain sekarang bisa cari KODE ROLL juga (sebelumnya
+cuma nama warna) - kalau ketemu lewat kode roll, kartu warnanya auto-expand biar rollnya
+langsung kelihatan tanpa perlu tap manual. Placeholder disesuaikan. Riwayat lengkap: git log.
 ============================================================
 
 CATATAN KEAMANAN (tetap berlaku, bukan cuma soal 1 versi): token di URL SYNC_AKUNTANSI_URL di
@@ -271,7 +271,7 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
       <div class="sub" id="totalKgSub">di 0 roll · 0 warna</div>
     </div>
     <div class="section-label">STOK TERSISA PER WARNA</div>
-    <input type="text" class="search-box" id="searchWarna" placeholder="Cari nama kain/warna...">
+    <input type="text" class="search-box" id="searchWarna" placeholder="Cari nama kain/warna/kode roll...">
     <div class="filter-chips">
       <div class="chip active" data-sortwarna="kg">Kg terbanyak</div>
       <div class="chip" data-sortwarna="nama">Nama A-Z</div>
@@ -978,7 +978,15 @@ function renderWarnaGrid() {
   let list = stokUtuhData.perWarna.slice();
   if (searchWarnaQuery) {
     const q = searchWarnaQuery.toLowerCase();
-    list = list.filter(function (w) { return w.warna.toLowerCase().indexOf(q) !== -1; });
+    // v.33: search sekarang juga cari KODE ROLL, gak cuma nama warna (request Denny) - kalau
+    // ketemu lewat kode roll, kartunya auto-expand biar rollnya langsung kelihatan tanpa perlu
+    // tap manual.
+    list = list.filter(function (w) {
+      const cocokWarna = w.warna.toLowerCase().indexOf(q) !== -1;
+      const cocokRoll = w.rolls.some(function (r) { return r.kodeRoll && String(r.kodeRoll).toLowerCase().indexOf(q) !== -1; });
+      if (cocokRoll) warnaTerbuka[w.warna] = true;
+      return cocokWarna || cocokRoll;
+    });
   }
   if (sortWarna === 'kg') list.sort(function (a, b) { return b.totalKg - a.totalKg; });
   else if (sortWarna === 'nama') list.sort(function (a, b) { return a.warna.localeCompare(b.warna); });
