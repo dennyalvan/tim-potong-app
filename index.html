@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.21
+HTML PRODUKSI (Supabase/testproduksi) - ver.22
 ============================================================
-PERUBAHAN ver.21: emoji 🔄 diganti SVG custom warna biru (#2196F3) - request Denny, karena
-warna emoji beda-beda tiap device (font emoji Android vs Windows vs iOS gambarnya beda-beda,
-di HP jadi kelihatan abu-abu bukan biru). Icon custom yang warnanya di-set manual DIJAMIN
-sama persis di semua perangkat. Riwayat lengkap: git log.
+PERUBAHAN ver.22: koreksi ver.21 - Denny cek langsung di HP, icon SVG "sync" Material yang
+bentuknya pita tipis melengkung ternyata keliatan cuma "garis" di layar HP resolusi rapat pas
+diperkecil ke 20px. Diganti ke gaya stroke TEBAL (double-arrow "refresh-cw"), ukuran naik
+sedikit ke 22px, jauh lebih jelas kebaca di ukuran kecil. Riwayat lengkap: git log.
 ============================================================
 ============================================================
 
@@ -139,15 +139,15 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
   .header h1 { font-size: 20px; margin: 0; letter-spacing: 0.3px; }
   .header-right { display: flex; flex-direction: column; align-items: center; gap: 4px; }
   .link-btn { display: block; background: none; border: none; font-size: 13px; cursor: pointer; padding: 2px 0; text-align: right; width: 100%; }
-  /* v.21: emoji 🔄 diganti SVG custom (request Denny) - warna emoji beda-beda tiap device
-     (font emoji Android vs Windows vs iOS gambarnya beda), jadi kalau mau warnanya DIJAMIN
-     sama persis di semua perangkat, harus icon custom yang warnanya di-set manual di sini,
-     bukan pinjam dari font emoji sistem. */
+  /* v.22: ganti lagi icon SVG-nya (request Denny) - path Material "sync" sebelumnya bentuknya
+     pita tipis melengkung, di layar HP yang rapat resolusinya jadi keliatan cuma "garis"
+     doang di ukuran kecil. Sekarang pakai gaya stroke TEBAL (bukan fill tipis) yang jauh
+     lebih jelas kebaca di ukuran kecil manapun. */
   .link-btn.refresh {
-    display: inline-flex; width: 20px; height: 20px; background: none; border: none;
+    display: inline-flex; width: 22px; height: 22px; background: none; border: none;
     align-items: center; justify-content: center; padding: 0; box-shadow: none;
   }
-  .link-btn.refresh svg { width: 20px; height: 20px; }
+  .link-btn.refresh svg { width: 22px; height: 22px; }
   .link-btn.atur { color: var(--orange-link); }
 
   .section-label { font-size: 12.5px; color: var(--gray-label); font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; margin: 14px 4px 6px; }
@@ -312,7 +312,7 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
       <h1>INPUT PRODUKSI</h1>
     </div>
     <div class="header-right">
-      <button class="link-btn refresh" id="btnRefresh"><svg viewBox="0 0 24 24" fill="#2196F3"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74A7.93 7.93 0 0 0 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg></button>
+      <button class="link-btn refresh" id="btnRefresh"><svg viewBox="0 0 24 24" fill="none" stroke="#2196F3" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg></button>
     </div>
   </div>
 
