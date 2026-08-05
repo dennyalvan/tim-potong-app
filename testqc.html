@@ -1,14 +1,11 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.26
+DASHBOARD ver.27
 ============================================================
-PERUBAHAN ver.26: 2 hal dari request Denny.
-  1. Judul "OUTPUT PRODUKSI & QC" diganti jadi "DASHBOARD QC" (title tag, h1, reset teks
-     tab-switch).
-  2. Semua tulisan di tab "Proses & QC" jadi UPPERCASE - pakai text-transform CSS (murni
-     visual), bukan ubah data/string aslinya, jadi logic pencarian/filter tetap jalan normal.
-Riwayat lengkap: git log.
+PERUBAHAN ver.27: koreksi ver.26 - uppercase yang dimaksud Denny cuma buat LABEL TAB di atas
+("PROSES & QC"/"STOK KAIN"/"REKAP QC"), bukan seluruh isi tab. Dipindah dari #tabQC ke
+.tab-btn. Riwayat lengkap: git log.
 
 CATATAN KEAMANAN (tetap berlaku, bukan cuma soal 1 versi): token di URL SYNC_AKUNTANSI_URL di
 bawah ini KELIHATAN oleh siapapun yang buka "view source" halaman ini (file statis publik di
@@ -54,10 +51,10 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
      tombol tab (Proses & QC/Stok Kain/Rekap QC) & semua kotak isian keliatan masih pakai font
      lama. */
   button, input, select, textarea { font-family: inherit; }
-  /* v.26: semua tulisan di tab "Proses & QC" jadi UPPERCASE (request Denny) - pakai
-     text-transform (murni visual di CSS), BUKAN ubah data/string aslinya, jadi logic
-     pencarian/perbandingan kategori dll di JS tetap jalan normal kayak biasa. */
-  #tabQC { text-transform: uppercase; }
+  /* v.27: koreksi ver.26 - Denny maksudnya uppercase cuma buat LABEL TAB di atas (Proses & QC/
+     Stok Kain/Rekap QC), bukan seluruh isi tab "Proses & QC". Revert dari #tabQC, pindah ke
+     .tab-btn. */
+  .tab-btn { text-transform: uppercase; }
   body { margin: 0; font-family: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: #292B31; padding-bottom: 20px; }
   #app { max-width: 520px; margin: 0 auto; padding: 16px; }
 
