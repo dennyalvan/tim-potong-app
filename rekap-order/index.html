@@ -525,9 +525,9 @@ body {
   <!-- KARAKTER PANEL -->
   <div id="panel-karakter" class="panel">
     <div class="filter-row">
-      <button class="pill active" onclick="sortKarakter('az',this)">A → Z</button>
-      <button class="pill" onclick="sortKarakter('qty_desc',this)">Terbanyak</button>
-      <button class="pill" onclick="sortKarakter('qty_asc',this)">Terdikit</button>
+      <button class="pill" data-mode="az" onclick="sortKarakter('az',this)">A → Z</button>
+      <button class="pill active" data-mode="qty_desc" onclick="sortKarakter('qty_desc',this)">Terbanyak</button>
+      <button class="pill" data-mode="qty_asc" onclick="sortKarakter('qty_asc',this)">Terdikit</button>
     </div>
     <div id="karakter-list"></div>
     <div id="grand-kar"></div>
@@ -579,7 +579,7 @@ let varianData = [], karakterData = [];
 let resiData = { totalResi: 0, totalPcs: 0, breakdown: [], pcsDetails: {} };
 let excludedInfo = { count: 0, qty: 0 };
 let duplicateInfo = { count: 0 };
-let varianMode = 'qty_desc', karMode = 'az', resiMode = 'default';
+let varianMode = 'qty_desc', karMode = 'qty_desc', resiMode = 'default';
 const GROUP_COLORS = ['tag-0','tag-1','tag-2','tag-3','tag-4','tag-5','tag-6','tag-7','tag-8'];
 
 // ── UPLOAD (always standby, support banyak file sekaligus — digabung berurutan) ──
@@ -653,7 +653,11 @@ function extractFileData(buffer, filename) {
     const qty = parseFloat(r[colR]) || 0;
     if (colStatus >= 0) {
       const st = String(r[colStatus] || '').trim();
-      if (st && st !== 'Perlu Dikirim') { excludedCount++; excludedQty += qty; return; }
+      // Buang HANYA status pembatalan (mis. "Batal", "Pembatalan diajukan").
+      // Jangan whitelist 1 status doang — file export bisa "Perlu Dikirim" saja
+      // ATAU "semua status" sebulan penuh (Selesai, Sedang Dikirim, Telah Dikirim,
+      // Pesanan diterima..., dll), semua itu tetap pesanan valid yang harus dihitung.
+      if (st && /batal/i.test(st)) { excludedCount++; excludedQty += qty; return; }
     }
     if (!qty) return;
     normalized.push({
@@ -688,19 +692,34 @@ function buildRekap(fileResults) {
   allRows.forEach(row => {
     const sku = row.sku;
     const qty = row.qty;
-    if (!sku || qty === 0) return;
-    const prefix = REG_PREFIXES.find(p => sku.startsWith(p));
-    const m = sku.match(/ - (.+)$/);
+    if (qty === 0) return;
     let label, warna, ukuran;
-    if (m) {
-      ukuran = m[1].replace(/[()]/g,'').trim();
-      warna = sku.slice(0, m.index).trim();
-      const groupKey = prefix ? prefix.trim().replace('.','').replace('-','') : 'ANAK POLOS';
-      label = labelMap[groupKey] || groupKey || 'ANAK POLOS';
-    } else {
+    if (!sku) {
+      // SKU kosong (belum di-set sellernya di Shopee) — JANGAN dibuang, pakai
+      // Nama Variasi sbg fallback (format biasanya "NAMA,UKURAN").
       label = 'LAINNYA';
-      warna = sku;
-      ukuran = row.variasi || 'Item';
+      const varRaw = row.variasi || '';
+      const lastComma = varRaw.lastIndexOf(',');
+      if (lastComma >= 0) {
+        warna = varRaw.slice(0, lastComma).trim() || 'Tanpa SKU';
+        ukuran = varRaw.slice(lastComma+1).trim().replace(/[()]/g,'') || 'Item';
+      } else {
+        warna = varRaw || 'Tanpa SKU';
+        ukuran = 'Item';
+      }
+    } else {
+      const prefix = REG_PREFIXES.find(p => sku.startsWith(p));
+      const m = sku.match(/ - (.+)$/);
+      if (m) {
+        ukuran = m[1].replace(/[()]/g,'').trim();
+        warna = sku.slice(0, m.index).trim();
+        const groupKey = prefix ? prefix.trim().replace('.','').replace('-','') : 'ANAK POLOS';
+        label = labelMap[groupKey] || groupKey || 'ANAK POLOS';
+      } else {
+        label = 'LAINNYA';
+        warna = sku;
+        ukuran = row.variasi || 'Item';
+      }
     }
     if (!groupMap[label]) { groupMap[label] = {}; groupOrder.push(label); }
     if (!groupMap[label][warna]) groupMap[label][warna] = {};
@@ -770,19 +789,28 @@ function buildRekap(fileResults) {
   const breakdown = Object.entries(pcsCount).map(([pcs,count])=>({pcs:+pcs,count})).sort((a,b)=>a.pcs-b.pcs);
   resiData = { totalResi, totalPcs, breakdown, pcsDetails };
 
-  // Subtitle — gabung info semua file
-  const labels = fileResults.map(f => {
-    const m = f.filename.match(/Order_toship_(\d{8})_(\d{8})/);
-    return m ? `${m[1]}–${m[2]}` : f.filename.replace('.xlsx','');
+  // Subtitle — gabung info semua file. Kenali "Order_toship_" & "Order_all_",
+  // dan kalau semua file adalah part dari rentang tanggal yang SAMA (mis. file
+  // "..._part_1_of_3", "..._part_2_of_3", dst), gabung jadi 1 label rapi.
+  const parsed = fileResults.map(f => {
+    const m = f.filename.match(/Order_(?:toship|all)_(\d{8})_(\d{8})/);
+    return m ? { start: m[1], end: m[2] } : null;
   });
-  const subtitleText = fileResults.length > 1
-    ? `Shopee · ${fileResults.length} file digabung (${labels.join(', ')})`
-    : 'Shopee · ' + labels[0];
+  const allSameRange = parsed.length && parsed.every(p => p && p.start===parsed[0].start && p.end===parsed[0].end);
+  let subtitleText;
+  if (fileResults.length > 1 && allSameRange) {
+    subtitleText = `Shopee · ${parsed[0].start}–${parsed[0].end} (${fileResults.length} file digabung)`;
+  } else if (fileResults.length > 1) {
+    const labels = fileResults.map((f,i) => parsed[i] ? `${parsed[i].start}–${parsed[i].end}` : f.filename.replace('.xlsx',''));
+    subtitleText = `Shopee · ${fileResults.length} file digabung (${labels.join(', ')})`;
+  } else {
+    subtitleText = 'Shopee · ' + (parsed[0] ? `${parsed[0].start}–${parsed[0].end}` : fileResults[0].filename.replace('.xlsx',''));
+  }
   document.getElementById('subtitle').textContent = subtitleText;
 
-  varianMode = 'qty_desc'; karMode = 'az'; resiMode = 'default';
+  varianMode = 'qty_desc'; karMode = 'qty_desc'; resiMode = 'default';
   document.querySelectorAll('#panel-varian .pill').forEach(b=>b.classList.toggle('active', b.dataset.mode===varianMode));
-  document.querySelectorAll('#panel-karakter .pill').forEach((b,i)=>b.classList.toggle('active',i===0));
+  document.querySelectorAll('#panel-karakter .pill').forEach(b=>b.classList.toggle('active', b.dataset.mode===karMode));
   document.querySelectorAll('#panel-resi .pill').forEach((b,i)=>b.classList.toggle('active',i===0));
   renderVarian(); renderKarakter(); renderResi();
 }
