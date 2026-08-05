@@ -1,14 +1,13 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.08
+HTML PRODUKSI (Supabase/testproduksi) - ver.09
 ============================================================
-PERUBAHAN ver.08: FIX bug laporan Denny - mini app gak keload data pas launch, harus tap
-Refresh manual dulu. Akar masalah: muatDataReferensi() nembak 5 request PARALEL (Promise.all)
-ke Worker yang sama - kalau MINIMAL 1 dari 5 gagal/timeout (lebih rawan pas Worker/koneksi
-belum "anget" di launch pertama), seluruh proses langsung nyerah tanpa coba lagi, jadi Varian/
-Warna/dst kosong sampai di-refresh manual. Sekarang otomatis coba ULANG SEKALI (jeda 1.5 detik)
-sebelum benar-benar nampilin pesan gagal.
+PERUBAHAN ver.09: tema aksen mode Dewasa dibikin lebih gelap/kontras dari mode Anak (teal) -
+sekarang abu gelap/slate, dipasang lewat var(--mode-accent) yang nyebar ke tombol toggle,
+combo-picker-btn, focus border qty, dan badge kategori per-item di Daftar Item - biar gak
+gampang ketuker lagi mode input yang mana walau udah scroll jauh ke bawah. Riwayat lengkap:
+git log.
 ============================================================
 
 HTML PRODUKSI (Supabase/testproduksi) - ver.07
@@ -94,6 +93,9 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
     --teal-dark: #0d9488;
     --navy: #1e3a5f;
     --navy-dark: #16324a;
+    --mode-accent: var(--teal);
+    --mode-accent-dark: var(--teal-dark);
+    --mode-accent-rgb: 20,184,166;
     --blue-link: #2563eb;
     --orange-link: #d97706;
     --gray-label: #9aa3b2;
@@ -104,6 +106,15 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
     --danger: #ef4444;
   }
   * { box-sizing: border-box; }
+  /* v.09: tema aksen berubah pas mode DEWASA aktif - abu gelap/slate (kontras dari teal Anak)
+     biar gak gampang ketuker lagi mode input yang mana pas lagi asik ngisi form (scroll udah
+     ngelewatin tombol toggle-nya di atas). Dipasang lewat class di <body>, bukan cuma di
+     tombol togglenya doang, supaya nyebar ke elemen form lain yang pakai var(--mode-accent). */
+  body.mode-dewasa {
+    --mode-accent: #475569;
+    --mode-accent-dark: #1e293b;
+    --mode-accent-rgb: 71,85,105;
+  }
   body {
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -134,9 +145,9 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
   }
   .kat-btn .emoji { font-size: 18px; }
   .kat-btn.active {
-    background: linear-gradient(160deg, #2dd4bf, #0d9488);
+    background: linear-gradient(160deg, var(--mode-accent), var(--mode-accent-dark));
     color: #fff; transform: translateY(-3px) scale(1.015);
-    box-shadow: 0 10px 22px -6px rgba(13,148,136,.4);
+    box-shadow: 0 10px 22px -6px rgba(var(--mode-accent-rgb),.4);
   }
 
   .cut-divider { position: relative; height: 2px; margin: 16px 4px 2px; background-image: repeating-linear-gradient(90deg, #d3dae8 0 7px, transparent 7px 15px); }
@@ -169,8 +180,8 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
   .chk-sub { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--gray-text); font-weight: 600; }
   .chk-sub input[type="checkbox"] { width: auto; flex: none; margin: 0; }
   .combo-picker-btn {
-    background: rgba(20,184,166,0.08); border: 1.5px dashed var(--teal);
-    border-radius: 12px; padding: 11px 13px; font-size: 15px; font-weight: 600; color: var(--teal-dark);
+    background: rgba(var(--mode-accent-rgb),0.08); border: 1.5px dashed var(--mode-accent);
+    border-radius: 12px; padding: 11px 13px; font-size: 15px; font-weight: 600; color: var(--mode-accent-dark);
     cursor: pointer; display: flex; justify-content: space-between; align-items: center; margin: 10px 16px;
   }
   .combo-picker-btn .chev { font-size: 13px; opacity: .7; }
@@ -223,7 +234,7 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
   .qty-cell { text-align: center; }
   .qty-cell label { display: block; color: var(--gray-label); font-weight: 650; font-size: 11px; margin-bottom: 2px; }
   .qty-cell input { width: 100%; padding: 6px 4px; border: 1px solid var(--border); border-radius: 10px; text-align: center; font-size: 15px; font-weight: 600; background: var(--bg); }
-  .qty-cell input:focus { border-color: var(--teal); background: #fff; }
+  .qty-cell input:focus { border-color: var(--mode-accent); background: #fff; }
   .toggle-ukuran { padding: 2px 14px 8px; }
   .toggle-ukuran a { color: var(--blue-link); font-size: 12.5px; font-weight: 600; cursor: pointer; }
   .total-qty { display: flex; justify-content: space-between; align-items: center; padding: 8px 14px; border-top: 0.5px solid var(--border); font-size: 13px; color: var(--gray-text); font-weight: 500; }
@@ -235,6 +246,7 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
   .queue-item { background: var(--navy-dark); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
   .queue-item:last-child { margin-bottom: 0; }
   .queue-item .qtag { display: inline-block; background: #2dd4bf; color: #043a35; font-size: 10px; font-weight: 800; padding: 1px 7px; border-radius: 5px; margin-bottom: 4px; }
+  .queue-item .qtag.dewasa { background: #475569; color: #fff; }
   .queue-item .qdesc { font-weight: 700; font-size: 13px; }
   .queue-item .qsizes { color: #b8c4d9; font-size: 12px; margin-top: 2px; }
   .queue-item .qremove { background: none; border: none; color: #f87171; font-size: 16px; cursor: pointer; }
@@ -509,6 +521,7 @@ document.querySelectorAll('.kat-btn').forEach(function (btn) {
     document.querySelectorAll('.kat-btn').forEach(function (b) { b.classList.remove('active'); });
     btn.classList.add('active');
     kategoriAktif = btn.dataset.kat;
+    document.body.classList.toggle('mode-dewasa', kategoriAktif === 'Dewasa'); // v.09
     itemBaru = kosongkanItemBaru();
     openDropdown = null;
     renderDetailCard();
@@ -1094,7 +1107,7 @@ function renderQueue() {
     const deskripsi = deskripsiSingkatItem(it);
     const ukuranTeks = Object.keys(it.ukuran).map(function (u) { return u + it.ukuran[u]; }).join(' ');
     return '<div class="queue-item">' +
-      '<div><span class="qtag">' + escapeHtml(it.kategori) + '</span>' +
+      '<div><span class="qtag' + (String(it.kategori).toLowerCase() === 'dewasa' ? ' dewasa' : '') + '">' + escapeHtml(it.kategori) + '</span>' +
       '<div class="qdesc">' + escapeHtml(deskripsi) + '</div>' +
       '<div class="qsizes">' + escapeHtml(ukuranTeks) + '</div></div>' +
       '<button class="qremove" data-tempid="' + it.tempId + '">✕</button>' +
