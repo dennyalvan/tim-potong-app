@@ -1,15 +1,13 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.24
+HTML PRODUKSI (Supabase/testproduksi) - ver.25
 ============================================================
-PERUBAHAN ver.24: fix bug daftar saran ROLL KODE (renderRollSuggestions,
-renderCustomRollSuggestions, renderKombiRollSuggestions) ke-cap cuma nampilin 8 roll pertama
-(hardcode .slice(0,8)) meskipun stok warna itu roll-nya lebih banyak (contoh: MERAH ada 37
-roll, cuma 8 teratas by kg yang kelihatan & bisa dipilih). Cap-nya dihapus buat 3 fungsi roll
-itu (kotak saran sudah scrollable, max-height 260px, jadi aman ditampilin semua). Cap 8 di
-saran NAMA WARNA (renderWarnaSuggestions/renderCustomWarnaSuggestions) SENGAJA dibiarin, itu
-beda kasus (bukan yang dilaporkan Denny).
+PERUBAHAN ver.25: tambah checkbox "Pakai habis" di baris Kg Kain Terpakai (mode warna
+tunggal/non-kombinasi). Dicentang -> kg otomatis diisi dari kg_sisa kode roll yang lagi
+kepilih (field jadi readonly selama dicentang, biar gak ke-edit manual dobel), gak perlu ngetik
+manual lagi. Ganti warna atau ganti roll selama checkbox aktif -> kg ikut nyesuain otomatis.
+Uncentang -> field balik bisa diketik manual seperti biasa.
 Riwayat lengkap: git log.
 ============================================================
 ============================================================
@@ -199,6 +197,7 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
     text-align: right; font-size: 15px; font-weight: 600; color: #1c1c1e; font-family: inherit; padding: 0;
   }
   .field-row input::placeholder { color: #9aa3b2; font-weight: 500; }
+  .field-row input[readonly] { color: var(--mode-accent-dark); }
   .field-row.wrap .suggestion-list { margin-top: 2px; }
   #rowWarna, #rowKodeRoll { border-bottom: none; }
   .chk-sub { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--gray-text); font-weight: 600; }
@@ -460,6 +459,7 @@ function kosongkanItemBaru() {
     warna: null,
     kg: '',
     estimasi: false,
+    pakaiHabis: false,
     kodeRoll: null,
     kombinasi: null, // { warna: [...], kg: [...], kodeRoll: [...] }
     ukuran: {}
@@ -609,6 +609,16 @@ function daftarSemuaWarnaDikenal_() {
   return Object.keys(stokRollData).sort();
 }
 
+// v.25: buat fitur checkbox "Pakai habis" - cari kg_sisa persis buat 1 kode roll yang lagi
+// kepilih (bukan seluruh daftar), dipakai buat auto-isi Kg Kain Terpakai. null kalau warna/roll
+// belum lengkap kepilih atau kodenya gak ketemu di daftar stok.
+function cariKgRollTerpilih_(warna, kodeRoll) {
+  if (!warna || !kodeRoll) return null;
+  const semua = daftarRollUntukWarna(warna);
+  const cocok = semua.find(function (r) { return String(r.kodeRoll || '') === String(kodeRoll); });
+  return cocok ? cocok.kg : null;
+}
+
 // ------------------------------------------------------------
 // AUTOCOMPLETE - filter di memori (data sudah ke-load duluan), jadi instan tanpa
 // nembak server tiap ketik. Cuma update <div> saran-nya doang (bukan render ulang
@@ -671,6 +681,13 @@ function renderRollSuggestions(query) {
       // kodenya doang) - biar tim potong gampang nyontek angka kg-nya tanpa buka daftar lagi.
       if (inputRoll) inputRoll.value = 'Roll ' + (itemBaru.kodeRoll || '-') + ' / ' + el.dataset.kg + 'kg';
       box.innerHTML = '';
+      // v.25: kalau checkbox Pakai Habis lagi aktif, kg langsung ikut roll yang BARU dipilih ini
+      // (dataset.kg udah ada di sini, gak perlu lookup ulang) - biar konsisten kalau roll diganti.
+      if (itemBaru.pakaiHabis) {
+        itemBaru.kg = String(el.dataset.kg);
+        const inputKg = document.getElementById('inputKg');
+        if (inputKg) { inputKg.value = itemBaru.kg; cekKgLebih99(inputKg, document.getElementById('kgWarningInfo')); }
+      }
     });
   });
 }
@@ -713,8 +730,13 @@ function renderDetailCard() {
       // --- Kg Kain Terpakai (single, non kombinasi) ---
       html += '<div class="field-row wrap" id="rowKg">' +
         '<div class="frow-line"><span class="flabel">Kg Kain Terpakai</span>' +
-        '<input type="number" id="inputKg" placeholder="0" value="' + (itemBaru.kg || '') + '"></div>' +
+        '<input type="number" id="inputKg" placeholder="0" value="' + (itemBaru.kg || '') + '"' + (itemBaru.pakaiHabis ? ' readonly' : '') + '></div>' +
         '<div class="kg-warning-text" id="kgWarningInfo" style="display:none;"></div>' +
+        // v.25: checkbox "Pakai habis" - dicentang -> Kg Kain Terpakai otomatis diisi dari sisa
+        // stok (kg_sisa) kode roll yang lagi kepilih, gak perlu ngetik manual. Field-nya jadi
+        // readonly selama dicentang (biar gak konflik sama angka yang diisi otomatis) - uncentang
+        // buat balik isi manual.
+        '<label class="chk-sub"><input type="checkbox" id="chkPakaiHabis" ' + (itemBaru.pakaiHabis ? 'checked' : '') + '> Pakai habis (isi kg otomatis dari sisa stok roll)</label>' +
         '<label class="chk-sub"><input type="checkbox" id="chkEstimasi" ' + (itemBaru.estimasi ? 'checked' : '') + '> Pakai hitungan estimasi</label>' +
         '</div>';
 
@@ -857,6 +879,13 @@ function pasangEventDetailCard() {
       itemBaru.kodeRoll = null;
       const inputRoll = document.getElementById('inputKodeRoll');
       if (inputRoll) inputRoll.value = '';
+      // v.25: warna ganti -> roll lama gak relevan lagi, kalau Pakai Habis aktif kosongin kg
+      // dulu (nunggu roll baru dipilih) daripada nampilin angka kg roll warna SEBELUMNYA.
+      if (itemBaru.pakaiHabis) {
+        itemBaru.kg = '';
+        const inputKg = document.getElementById('inputKg');
+        if (inputKg) inputKg.value = '';
+      }
       renderWarnaSuggestions(inputWarna.value);
       renderRollSuggestions('');
     });
@@ -872,6 +901,21 @@ function pasangEventDetailCard() {
   }
   const chkEstimasi = document.getElementById('chkEstimasi');
   if (chkEstimasi) chkEstimasi.addEventListener('change', function () { itemBaru.estimasi = chkEstimasi.checked; });
+
+  // v.25: checkbox Pakai Habis - isi Kg Kain Terpakai otomatis dari kg_sisa roll yang lagi
+  // kepilih. Kalau roll belum dipilih pas dicentang, dibiarkan kosong dulu (nanti keisi
+  // otomatis begitu roll dipilih - lihat handler data-pick-roll di renderRollSuggestions).
+  const chkPakaiHabis = document.getElementById('chkPakaiHabis');
+  if (chkPakaiHabis) {
+    chkPakaiHabis.addEventListener('change', function () {
+      itemBaru.pakaiHabis = chkPakaiHabis.checked;
+      if (chkPakaiHabis.checked) {
+        const kgSisa = cariKgRollTerpilih_(itemBaru.warna, itemBaru.kodeRoll);
+        if (kgSisa !== null) itemBaru.kg = String(kgSisa);
+      }
+      renderDetailCard();
+    });
+  }
 
   const inputKodeRoll = document.getElementById('inputKodeRoll');
   if (inputKodeRoll) {
