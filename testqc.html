@@ -1,17 +1,19 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.35
+DASHBOARD ver.36
 ============================================================
-PERUBAHAN ver.35: 3 penyempurnaan fitur "Riwayat Pemakaian" (request Denny).
-  1. FIX bug nyata: state expand roll sebelumnya cuma dikunci pakai kode roll doang - kalau ada
-     2 roll beda yang kebetulan kode-nya sama, keduanya ke-toggle bareng. Sekarang kuncinya
-     warna+kode+kg (unik per roll fisik).
-  2. Cuma 1 roll bisa ke-expand sekaligus di SELURUH daftar - klik roll lain otomatis
-     nutup yang lagi kebuka (sebelumnya bisa banyak roll kebuka bareng).
-  3. Search berdasarkan kode roll sekarang auto-scroll + flash highlight (kuning, fade 2.5
-     detik) ke roll yang ketemu, bukan cuma nge-expand kartu warnanya doang.
+PERUBAHAN ver.36: 2 hal dari request Denny.
+  1. FITUR BARU - "Stok Habis" di bawah daftar roll aktif tab Stok Kain, sama polanya kayak
+     Arsip Selesai di tab Proses & QC (ketuk buat lihat, lazy-load). Roll yang kg_sisa-nya
+     udah <= 0 dipindah ke sini (sebelumnya gak kelihatan sama sekali - /data/stok-utuh emang
+     sengaja cuma nampilin sisa > 0). Butuh endpoint Worker baru GET /data/stok-habis (Worker
+     ver.30).
+  2. Panel "Riwayat Pemakaian" gak ditampilin sama sekali buat roll yang masih fresh/utuh
+     (belum pernah kepakai) - baris rollnya jadi polos gak bisa diklik, sama kayak roll tanpa
+     kode roll. Cuma roll yang beneran udah pernah kepakai sebagian yang punya riwayat.
 Riwayat lengkap: git log.
+============================================================
 ============================================================
 
 CATATAN KEAMANAN (tetap berlaku, bukan cuma soal 1 versi): token di URL SYNC_AKUNTANSI_URL di
@@ -307,6 +309,12 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
       <div class="chip" data-sortwarna="roll">Roll terbanyak</div>
     </div>
     <div class="warna-grid" id="warnaGrid"></div>
+
+    <div class="arsip-toggle" id="stokHabisToggle">
+      <span>📦 Stok Habis<span class="sub" id="stokHabisSub">Ketuk buat lihat</span></span>
+      <span id="stokHabisChevron">▾</span>
+    </div>
+    <div class="arsip-list" id="stokHabisList" style="display:none"></div>
   </div>
 
   <!-- ============ TAB: REKAP QC ============ -->
@@ -972,6 +980,36 @@ function muatArsip() {
 }
 
 // ------------------------------------------------------------
+// STOK HABIS (arsip roll yang udah kg_sisa <= 0, di bawah tab Stok Kain)
+// ------------------------------------------------------------
+let stokHabisDimuat = false;
+document.getElementById('stokHabisToggle').addEventListener('click', function () {
+  const list = document.getElementById('stokHabisList');
+  const terbuka = list.style.display === 'block';
+  list.style.display = terbuka ? 'none' : 'block';
+  document.getElementById('stokHabisChevron').textContent = terbuka ? '▾' : '▴';
+  if (!terbuka && !stokHabisDimuat) muatStokHabis();
+});
+function muatStokHabis() {
+  fetch(WORKER_URL + '/data/stok-habis')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      stokHabisDimuat = true;
+      const list = Array.isArray(data) ? data : [];
+      document.getElementById('stokHabisSub').textContent = list.length + ' roll';
+      if (list.length === 0) {
+        document.getElementById('stokHabisList').innerHTML = '<div class="arsip-item" style="justify-content:center;color:var(--gray-text)">Belum ada roll yang habis.</div>';
+        return;
+      }
+      document.getElementById('stokHabisList').innerHTML = list.map(function (x) {
+        return '<div class="arsip-item"><div class="nama">' + escapeHtml(x.warna) + '</div>' +
+          '<div class="meta">Roll ' + (x.kodeRoll ? escapeHtml(x.kodeRoll) : '-') + '</div></div>';
+      }).join('');
+    })
+    .catch(function (e) { tampilkanToast('Gagal memuat stok habis: ' + e.message); });
+}
+
+// ------------------------------------------------------------
 // TAB STOK KAIN
 // ------------------------------------------------------------
 let sedangMuatStok = false;
@@ -1119,6 +1157,15 @@ function renderBarisRoll_(w, r) {
   const kode = r.kodeRoll;
   if (!kode) {
     return '<div class="roll-row" style="cursor:default"><span>Roll -</span><span>' + formatAngka(r.kg) + ' kg</span></div>';
+  }
+  // v.36: kalau data riwayat udah kebaca DAN roll ini ternyata belum pernah kepakai sama
+  // sekali (kain masih utuh/fresh), gak usah ditampilin sebagai bisa-diklik/ada riwayat sama
+  // sekali (request Denny) - baris polos aja, sama kayak roll tanpa kode.
+  if (riwayatTimPotongData) {
+    const jumlahPakai = riwayatTimPotongData.filter(function (x) { return String(x.kodeRoll || '') === String(kode); }).length;
+    if (jumlahPakai === 0) {
+      return '<div class="roll-row" style="cursor:default"><span>Roll ' + escapeHtml(kode) + '</span><span>' + formatAngka(r.kg) + ' kg</span></div>';
+    }
   }
   const kunci = kunciRoll_(w, r);
   const terbuka = (rollTerbukaKunci === kunci);

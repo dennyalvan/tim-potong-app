@@ -1,13 +1,9 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.29
+// CODE WORKER PRODUKSI ver.30
 // ============================================================
-// PERUBAHAN ver.29: endpoint baru POST /internal/stok-masuk - proxy INSERT stok_kain buat
-// CODE TIM POTONG.js (Apps Script), gantiin panggilan langsung Apps Script -> Supabase yang
-// SELALU gagal (Supabase nolak "Forbidden use of secret API key in browser" - UrlFetchApp
-// Apps Script gak bisa override User-Agent, keterbatasan Google yang gak ada solusinya dari
-// sisi kode Apps Script). Proteksi pakai header X-Internal-Token dicocokkan ke secret BARU
-// env.INTERNAL_SYNC_TOKEN (beda dari SUPABASE_SECRET_KEY) - WAJIB di-set dulu sebagai
-// Cloudflare secret sebelum endpoint ini bisa dipakai.
+// PERUBAHAN ver.30: endpoint baru GET /data/stok-habis - roll yang kg_sisa-nya udah <= 0,
+// dipisah dari /data/stok-utuh (yang sengaja cuma nampilin sisa > 0) buat ditampung bagian
+// "Stok Habis" di dashboard (request Denny, sama polanya kayak Arsip Selesai di Proses & QC).
 //
 // Riwayat versi lengkap: git log.
 //
@@ -91,6 +87,12 @@ export default {
     // v.11 (Dashboard Tahap 3) - ringkasan + detail stok kain yang BELUM DISENTUH SAMA SEKALI
     if (url.pathname === '/data/stok-utuh' && request.method === 'GET') {
       return await handleStokUtuh_(env);
+    }
+
+    // v.30 - roll yang udah HABIS (kg_sisa <= 0), buat "Arsip"/"Stok Habis" di tab Stok Kain
+    // (request Denny - dipisah dari /data/stok-utuh yang emang sengaja cuma nampilin sisa > 0)
+    if (url.pathname === '/data/stok-habis' && request.method === 'GET') {
+      return await handleStokHabis_(env);
     }
 
     // v.13 (Dashboard Tahap 4) - arsip laporan yang sudah SELESAI, N hari terakhir
@@ -695,6 +697,38 @@ async function handleStokUtuh_(env) {
       totalWarna: perWarna.length,
       perWarna: perWarna
     });
+  } catch (e) {
+    return jsonResponse({ ok: false, error: e.message }, 500);
+  }
+}
+
+// ============================================================
+// v.30 - DASHBOARD Stok Kain: roll yang udah HABIS (kg_sisa <= 0) - dipisah dari
+// handleStokUtuh_ (yang sengaja cuma nampilin sisa > 0) buat ditampung di bagian "Arsip"/"Stok
+// Habis", sama kayak pola Arsip Selesai di tab Proses & QC.
+// ============================================================
+async function handleStokHabis_(env) {
+  try {
+    const [rowsStok, rowsKamus] = await Promise.all([
+      ambilDariSupabase_(env, '/rest/v1/stok_kain?select=warna,kode_roll,kg_sisa&kg_sisa=lte.0&order=kode_roll.desc'),
+      ambilDariSupabase_(env, '/rest/v1/kamus_sinonim_warna?select=kanonik,sinonim')
+    ]);
+    const petaKanonik = {};
+    rowsKamus.forEach(function (row) {
+      const kanonik = String(row.kanonik || '').toUpperCase();
+      if (!kanonik) return;
+      petaKanonik[kanonik] = kanonik;
+      (row.sinonim || []).forEach(function (s) { const su = String(s || '').toUpperCase(); if (su) petaKanonik[su] = kanonik; });
+    });
+    const hasil = rowsStok
+      .map(function (row) {
+        const warnaRaw = String(row.warna || '').trim();
+        if (!warnaRaw) return null;
+        const kanonik = petaKanonik[warnaRaw.toUpperCase()] || warnaRaw.toUpperCase();
+        return { warna: kanonik, kodeRoll: row.kode_roll || null };
+      })
+      .filter(function (x) { return x; });
+    return jsonResponse(hasil);
   } catch (e) {
     return jsonResponse({ ok: false, error: e.message }, 500);
   }
