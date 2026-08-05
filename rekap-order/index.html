@@ -984,7 +984,7 @@ function renderResi() {
 
   if (!resiData.totalResi) {
     statsEl.innerHTML = '';
-    listEl.innerHTML  = '<div class="empty"><div class="empty-emoji">📮</div><div class="empty-title">Belum Ada Data Resi</div><div class="empty-sub">Upload file Excel untuk memulai</div></div>';
+    listEl.innerHTML  = '<div class="empty"><div class="empty-emoji">📮</div><div class="empty-title">Belum Ada Data</div><div class="empty-sub">Upload file Excel untuk memulai</div></div>';
     grandEl.innerHTML = ''; return;
   }
 
@@ -998,7 +998,7 @@ function renderResi() {
         <div class="resi-stat-icon-wrap blue">📮</div>
         <div class="resi-stat-text">
           <span class="resi-stat-num blue">${resiData.totalResi}</span>
-          <span class="resi-stat-lbl">Total Resi</span>
+          <span class="resi-stat-lbl">Total Pesanan</span>
         </div>
       </div>
       <div class="resi-stat-card">
@@ -1012,14 +1012,14 @@ function renderResi() {
         <div class="resi-stat-icon-wrap orange">📊</div>
         <div class="resi-stat-text">
           <span class="resi-stat-num orange">${avg}</span>
-          <span class="resi-stat-lbl">Rata-rata PCS/Resi</span>
+          <span class="resi-stat-lbl">Rata-rata PCS/Pesanan</span>
         </div>
       </div>
       <div class="resi-stat-card">
         <div class="resi-stat-icon-wrap purple">🔝</div>
         <div class="resi-stat-text">
           <span class="resi-stat-num purple">${maxPcs}</span>
-          <span class="resi-stat-lbl">Maks PCS/Resi</span>
+          <span class="resi-stat-lbl">Maks PCS/Pesanan</span>
         </div>
       </div>
     </div>`;
@@ -1049,7 +1049,7 @@ function renderResi() {
 
   const legendHtml = `
     <div class="resi-legend">
-      <div class="resi-legend-title">Distribusi PCS per Resi</div>
+      <div class="resi-legend-title">Distribusi PCS per Pesanan</div>
       <div class="resi-legend-bar">${legendSegs}</div>
       <div class="resi-legend-pills">${legendPills}</div>
     </div>`;
@@ -1102,13 +1102,13 @@ function renderResi() {
         </div>
         <div class="resi-card-body">
           <div class="resi-card-meta">
-            <span class="resi-card-count">${b.count} resi</span>
+            <span class="resi-card-count">${b.count} pesanan</span>
             <span class="resi-card-pct" style="background:var(--${clsName}-bg);color:${col}">${pct}%</span>
           </div>
           <div class="resi-track">
             <div class="resi-fill" style="width:${barW}%;background:${col}"></div>
           </div>
-          <div class="resi-card-sub">${b.count} dari ${totalResi} total resi</div>
+          <div class="resi-card-sub">${b.count} dari ${totalResi} total pesanan</div>
         </div>
         ${expandBtn}
       </div>
@@ -1119,7 +1119,7 @@ function renderResi() {
   listEl.innerHTML = legendHtml + `<div class="resi-card-list">${cards}</div>`;
 
   grandEl.innerHTML = `<div class="footer-total">
-    <span class="ft-item">Total Resi: <strong>${resiData.totalResi}</strong></span>
+    <span class="ft-item">Total Pesanan: <strong>${resiData.totalResi}</strong></span>
     <span class="ft-item">Total PCS: <strong>${resiData.totalPcs}</strong></span>
   </div>`;
 }
