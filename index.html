@@ -1,18 +1,12 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.19
+HTML PRODUKSI (Supabase/testproduksi) - ver.20
 ============================================================
-PERUBAHAN ver.19: 5 hal dari request Denny.
-  1. Hapus teks "TIM POTONG" (di bawah judul, kedua header termasuk layar preview) & label
-     "KATEGORI" (di atas toggle Anak/Dewasa) - hemat ruang vertikal.
-  2. Badge "ver.02" sekarang center di atas ikon Refresh (header-right jadi flex column
-     center), bukan rata kanan lagi.
-  3. Tombol DEWASA gak pakai emoji lagi (ANAK tetap pakai 🧒).
-  4. Baris Warna & Kode Roll gak pakai garis bawah lagi (border-bottom dihapus khusus 2 baris
-     itu, baris lain tetap ada).
-  5. Teks checkbox estimasi disederhanain jadi "Pakai hitungan estimasi" (dari "Kg tidak
-     diketahui - pakai estimasi standar").
+PERUBAHAN ver.20: 2 hal dari request Denny.
+  1. Badge "ver.02" dihapus total (dari header utama & header layar preview).
+  2. Ikon Refresh dikecilin dari 36px jadi 20px - disamain tingginya sama judul "INPUT
+     PRODUKSI" (h1 font-size 20px).
 Riwayat lengkap: git log.
 ============================================================
 
@@ -144,13 +138,12 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
   .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
   .header h1 { font-size: 20px; margin: 0; letter-spacing: 0.3px; }
   .header-right { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-  .ver-badge { display: inline-block; background: var(--navy); color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; margin-bottom: 0; }
   .link-btn { display: block; background: none; border: none; font-size: 13px; cursor: pointer; padding: 2px 0; text-align: right; width: 100%; }
-  /* v.18: samain persis ke tombol Refresh di dashboard.html (request Denny) - emoji 🔄 polos
-     tanpa roundbox/border/caption teks, tinggal disamain ukurannya (36px tinggi). */
+  /* v.20: ver.02 dihapus. Ikon Refresh disamain tingginya sama judul "INPUT PRODUKSI" (h1
+     font-size 20px), bukan 36px lagi. */
   .link-btn.refresh {
-    display: inline-flex; width: 36px; height: 36px; background: none; border: none;
-    font-size: 26px; line-height: 1; align-items: center; justify-content: center;
+    display: inline-flex; width: 20px; height: 20px; background: none; border: none;
+    font-size: 20px; line-height: 1; align-items: center; justify-content: center;
     padding: 0; box-shadow: none;
   }
   .link-btn.atur { color: var(--orange-link); }
@@ -317,7 +310,6 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
       <h1>INPUT PRODUKSI</h1>
     </div>
     <div class="header-right">
-      <span class="ver-badge">ver.02</span>
       <button class="link-btn refresh" id="btnRefresh">🔄</button>
     </div>
   </div>
@@ -358,7 +350,6 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
     <div>
       <h1>INPUT PRODUKSI</h1>
     </div>
-    <div class="header-right"><span class="ver-badge">ver.02</span></div>
   </div>
   <div class="preview-center">
     <div class="icon">✅</div>
