@@ -1,12 +1,11 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.30
+DASHBOARD ver.31
 ============================================================
-PERUBAHAN ver.30: koreksi ver.29 - Denny kirim gambar referensi ikon Refresh yang dimaksud
-(gaya "claymorphism"). Diganti total: rounded-SQUARE (bukan bulat), hijau sage lembut (bukan
-neon), gradient+inset shadow biar keliatan puffy 3D, ikon custom SVG panah ganda putih tebal
-(emoji 🔄 diganti karena gayanya beda jauh dari referensi). Riwayat lengkap: git log.
+PERUBAHAN ver.31: koreksi lagi - Denny minta balik ke emoji 🔄 biru polos TANPA background/
+roundbox sama sekali, tinggal disamain tingginya (~36px) sama tombol Sync sebelahnya biar
+proporsional & gak overlap. Ikon SVG clay 3D di ver.30 dihapus. Riwayat lengkap: git log.
 ============================================================
 
 CATATAN KEAMANAN (tetap berlaku, bukan cuma soal 1 versi): token di URL SYNC_AKUNTANSI_URL di
@@ -63,19 +62,14 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
   .header h1 { font-size: 20px; margin: 0; }
   .header-right { text-align: right; position: relative; display: flex; gap: 8px; align-items: flex-start; justify-content: flex-end; flex-wrap: wrap; }
-  /* v.30: samain persis ke gambar referensi Denny - rounded-SQUARE (bukan bulat), hijau sage
-     lembut (bukan neon), efek "clay" 3D puffy (gradient + inset highlight/shadow + drop
-     shadow ngambang), ikon custom SVG panah ganda putih tebal (emoji 🔄 diganti, gayanya beda
-     jauh sama referensi). */
+  /* v.31: koreksi lagi - Denny minta balik ke emoji 🔄 biru polos, TANPA background/roundbox
+     sama sekali, tinggal disamain ukurannya sama tombol Sync sebelahnya (~36px tinggi) biar
+     gak keliatan lebih kecil/gak proporsional, dan gak numpuk (overlap) sama elemen lain. */
   .btn-refresh {
-    width: 40px; height: 40px; border-radius: 13px; padding: 0; border: none;
-    background: linear-gradient(165deg, #97D6AE 0%, #6BB585 55%, #5CA878 100%);
-    cursor: pointer; display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 3px 0 #4C9268, 0 6px 10px rgba(43,99,66,0.35),
-      inset 0 2px 3px rgba(255,255,255,0.55), inset 0 -3px 4px rgba(0,60,30,0.18);
+    background: none; border: none; padding: 0; margin: 0; cursor: pointer;
+    width: 36px; height: 36px; font-size: 26px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
   }
-  .btn-refresh:active { transform: translateY(2px); box-shadow: 0 1px 0 #4C9268, 0 2px 4px rgba(43,99,66,0.3), inset 0 1px 2px rgba(0,60,30,0.2); }
-  .btn-refresh svg { width: 20px; height: 20px; }
   .btn-sinkron { background: var(--indigo); border: 1.5px solid var(--indigo); border-radius: 10px; padding: 8px 16px; font-weight: 700; font-size: 13px; cursor: pointer; color: #fff; box-shadow: 0 1px 4px rgba(41,43,49,0.10); }
   .btn-sinkron:disabled { opacity: 0.6; cursor: default; }
   .loading-popup { position: absolute; top: calc(100% + 6px); right: 0; background: #1c1c1e; color: #fff; padding: 6px 13px; border-radius: 20px; font-size: 11.5px; font-weight: 600; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 50; }
@@ -229,7 +223,7 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
     </div>
     <div class="header-right">
       <button class="btn-sinkron" id="btnSinkronAkuntansi">📤 Sync</button>
-      <button class="btn-refresh" id="btnRefresh"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74A7.93 7.93 0 0 0 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg></button>
+      <button class="btn-refresh" id="btnRefresh">🔄</button>
       <p class="loading-popup" id="loadingIndicator">⏳ Memuat...</p>
     </div>
   </div>
