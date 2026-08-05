@@ -713,7 +713,7 @@ function buildRekap(fileResults) {
     if (!groupMap[label][warna]) groupMap[label][warna] = {};
     groupMap[label][warna][ukuran] = (groupMap[label][warna][ukuran] || 0) + qty;
   });
-  varianData = [...new Set(groupOrder)].map(label => {
+  varianData = [...new Set(groupOrder)].map((label, idx) => {
     const colors = groupMap[label];
     const items = Object.entries(colors).map(([name, sizes]) => {
       const qty = Object.values(sizes).reduce((a,b)=>a+b,0);
@@ -721,7 +721,7 @@ function buildRekap(fileResults) {
       Object.keys(sizes).filter(s=>!SIZE_ORDER.includes(s)).forEach(s=>parts.push(s+sizes[s]));
       return {name, qty, detail: parts.join(' ')};
     });
-    return {group: label, total: items.reduce((a,b)=>a+b.qty,0), items};
+    return {group: label, total: items.reduce((a,b)=>a+b.qty,0), items, colorIdx: idx};
   });
 
   // KARAKTER
@@ -842,6 +842,15 @@ function sortItems(items, mode) {
   if (mode==='qty_asc') return arr.sort((a,b)=>a.qty-b.qty);
   return arr;
 }
+// Urutkan CARD-nya juga (bukan cuma item di dalamnya) — grup dengan total qty
+// terbanyak/tersedikit tampil paling atas kalau sort Terbanyak/Terdikit dipilih.
+function sortGroups(groups, mode) {
+  const arr = [...groups];
+  if (mode==='az') return arr.sort((a,b)=>a.group.localeCompare(b.group));
+  if (mode==='qty_desc') return arr.sort((a,b)=>b.total-a.total);
+  if (mode==='qty_asc') return arr.sort((a,b)=>a.total-b.total);
+  return arr;
+}
 
 // ── RENDER VARIAN ──
 function renderVarian() {
@@ -851,8 +860,9 @@ function renderVarian() {
     el.innerHTML = '<div class="empty"><div class="empty-emoji">📂</div><div class="empty-title">Belum Ada Data</div><div class="empty-sub">Upload file Excel untuk memulai</div></div>';
     grand.innerHTML = ''; return;
   }
-  el.innerHTML = varianData.map((g, gi) => {
-    const color = GROUP_COLORS[gi % GROUP_COLORS.length];
+  const sortedGroups = sortGroups(varianData, varianMode);
+  el.innerHTML = sortedGroups.map(g => {
+    const color = GROUP_COLORS[g.colorIdx % GROUP_COLORS.length];
     const items = sortItems(g.items, varianMode);
     const rows = items.map(it => `
       <div class="vcard-item">
