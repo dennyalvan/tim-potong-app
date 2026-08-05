@@ -1,11 +1,18 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.33
+DASHBOARD ver.34
 ============================================================
-PERUBAHAN ver.33: kolom search di tab Stok Kain sekarang bisa cari KODE ROLL juga (sebelumnya
-cuma nama warna) - kalau ketemu lewat kode roll, kartu warnanya auto-expand biar rollnya
-langsung kelihatan tanpa perlu tap manual. Placeholder disesuaikan. Riwayat lengkap: git log.
+PERUBAHAN ver.34: FITUR BARU - "Riwayat Pemakaian" per roll di tab Stok Kain (mockup udah
+disetujui Denny sebelumnya). Tap 1 roll (bukan cuma kartu warnanya) buat buka panel riwayat -
+daftar laporan Tim Potong yang pernah motong dari roll itu (nama item, tanggal, qty pcs, kg
+terpakai), urut terbaru dulu. Pakai endpoint YANG UDAH ADA /data/export-tim-potong (dibuat buat
+sync AUTOREKAP) - gak perlu endpoint Worker baru, tinggal filter kodeRoll di sisi dashboard,
+data di-cache sekali per sesi. Baris roll dibuat BOLD semua, isi riwayatnya sendiri REGULAR
+(request Denny). CATATAN: "Kg awal" yang ditampilkan itu ESTIMASI (kg sisa + total pemakaian
+tercatat), BUKAN angka pasti dari database - sistem gak pernah nyimpen "kg awal" roll secara
+eksplisit. Riwayat cuma nyari dalam 6 bulan ke belakang (ikut default endpoint export-nya).
+Riwayat lengkap: git log.
 ============================================================
 
 CATATAN KEAMANAN (tetap berlaku, bukan cuma soal 1 versi): token di URL SYNC_AKUNTANSI_URL di
@@ -182,7 +189,27 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .warna-card .kg { font-weight: 800; font-size: 13px; }
   .warna-card .roll-count { font-size: 11px; color: var(--gray-text); margin-top: 2px; }
   .warna-detail { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px; }
-  .warna-detail .roll-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; border-bottom: 1px dashed #f1f4f9; }
+  .warna-detail .roll-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700; padding: 8px 2px 8px 16px; border-bottom: 1px dashed #f1f4f9; cursor: pointer; }
+  .warna-detail .roll-row .roll-kiri { display: flex; align-items: center; gap: 6px; }
+  .warna-detail .roll-row .chev { font-size: 9px; color: var(--gray-label); transition: transform 0.15s; margin-left: -14px; }
+  .warna-detail .roll-row.terbuka .chev { transform: rotate(90deg); }
+  .warna-detail .roll-row .jumlah-pakai { font-size: 10px; font-weight: 600; color: var(--indigo); margin-left: 6px; }
+  /* v.34: panel "Riwayat Pemakaian" per roll (request Denny, mockup udah disetujui) - baris
+     roll di atas dibikin BOLD semua, isi riwayatnya sendiri REGULAR (bukan bold) biar kontras
+     visual jelas antara "header roll" vs "detail pemakaiannya". */
+  .riwayat-wrap { background: var(--surface-2); padding: 8px 10px 10px 16px; margin-bottom: 2px; }
+  .riwayat-meta { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--gray-text); font-weight: 600; margin-bottom: 6px; padding: 0 2px; }
+  .riwayat-meta b { color: #1c1c1e; font-weight: 700; }
+  .riwayat-item { background: #fff; border-radius: 8px; padding: 8px 10px; margin-bottom: 5px; font-weight: 400; }
+  .riwayat-item:last-child { margin-bottom: 0; }
+  .riwayat-item-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .riwayat-item .nama-item { font-weight: 700; font-size: 12px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .riwayat-item .kg-terpakai { font-weight: 700; font-size: 12px; color: var(--danger); white-space: nowrap; }
+  .riwayat-item .estimasi-tag { font-size: 9px; font-weight: 700; color: var(--orange-link); background: #FDF3E3; padding: 1px 5px; border-radius: 4px; margin-left: 5px; }
+  .riwayat-item .sub { font-size: 11px; font-weight: 400; color: var(--gray-text); margin-top: 2px; display: flex; justify-content: space-between; }
+  .riwayat-item .sub .qty { font-weight: 600; }
+  .riwayat-kosong { text-align: center; padding: 12px; color: var(--gray-text); font-size: 11.5px; font-weight: 400; }
+  .riwayat-loading { text-align: center; padding: 12px; color: var(--gray-text); font-size: 11.5px; font-weight: 400; }
 
   /* ============ REKAP QC - CSS GRID (BUKAN <table>) ============
      Porting persis dari HTML QC ver.04.html (Apps Script) - <table>+colgroup TERBUKTI rusak
@@ -379,6 +406,12 @@ let sortWarna = 'kg';
 let searchWarnaQuery = '';
 let searchRekapQuery = '';
 let warnaTerbuka = {};
+// v.34: fitur "Riwayat Pemakaian" per roll (mockup udah disetujui Denny) - riwayatTimPotongData
+// di-cache SEKALI aja (fetch pas roll PERTAMA kali di-tap), dipakai ulang buat semua roll biar
+// gak nembak network tiap buka/tutup roll yang beda-beda.
+let riwayatTimPotongData = null;
+let sedangMuatRiwayat = false;
+let rollTerbuka = {}; // { [kodeRoll]: true }
 
 // ------------------------------------------------------------
 // TAB SWITCH
@@ -973,6 +1006,30 @@ function muatStokUtuh(percobaan, manual) {
       tampilkanToast('Gagal memuat stok: ' + e.message);
     });
 }
+
+// v.34: pakai endpoint YANG UDAH ADA /data/export-tim-potong (dibuat buat sync AUTOREKAP) -
+// gak perlu bikin endpoint Worker baru, tinggal filter kodeRoll di sisi dashboard. bulan=6
+// (6 bulan ke belakang) cukup buat kebanyakan roll, roll yang jauh lebih tua dari itu riwayat
+// awalnya mungkin gak kebaca lengkap - trade-off yang wajar drpd narik SEMUA histori tiap buka.
+function muatRiwayatTimPotong_(kodeRollUntukDibuka) {
+  if (riwayatTimPotongData) { rollTerbuka[kodeRollUntukDibuka] = true; renderWarnaGrid(); return; }
+  if (sedangMuatRiwayat) return;
+  sedangMuatRiwayat = true;
+  fetch(WORKER_URL + '/data/export-tim-potong?bulan=6')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      riwayatTimPotongData = Array.isArray(data) ? data : [];
+      sedangMuatRiwayat = false;
+      rollTerbuka[kodeRollUntukDibuka] = true;
+      renderWarnaGrid();
+    })
+    .catch(function (e) {
+      sedangMuatRiwayat = false;
+      tampilkanToast('Gagal memuat riwayat pemakaian: ' + e.message);
+      renderWarnaGrid();
+    });
+}
+
 function renderWarnaGrid() {
   if (!stokUtuhData) return;
   let list = stokUtuhData.perWarna.slice();
@@ -1008,7 +1065,7 @@ function renderWarnaGrid() {
         return nb - na;
       });
       html += '<div class="warna-detail">' + rollsUrut.map(function (r) {
-        return '<div class="roll-row"><span>Roll ' + (r.kodeRoll ? escapeHtml(r.kodeRoll) : '-') + '</span><span>' + formatAngka(r.kg) + ' kg</span></div>';
+        return renderBarisRoll_(r);
       }).join('') + '</div>';
     }
     html += '</div>';
@@ -1016,12 +1073,73 @@ function renderWarnaGrid() {
   }).join('');
 
   document.querySelectorAll('[data-warnatoggle]').forEach(function (el) {
-    el.addEventListener('click', function () {
+    el.addEventListener('click', function (e) {
+      if (e.target.closest('[data-rolltoggle]')) return; // v.34: klik roll di dalamnya jangan ikut nutup kartu warnanya
       const w = el.dataset.warnatoggle;
       warnaTerbuka[w] = !warnaTerbuka[w];
       renderWarnaGrid();
     });
   });
+  document.querySelectorAll('[data-rolltoggle]').forEach(function (el) {
+    el.addEventListener('click', function (e) {
+      e.stopPropagation();
+      const kode = el.dataset.rolltoggle;
+      if (rollTerbuka[kode]) { rollTerbuka[kode] = false; renderWarnaGrid(); return; }
+      if (riwayatTimPotongData) { rollTerbuka[kode] = true; renderWarnaGrid(); return; }
+      muatRiwayatTimPotong_(kode);
+      renderWarnaGrid(); // render ulang dulu buat nampilin "Memuat riwayat..." pas nunggu fetch
+    });
+  });
+}
+
+// v.34: 1 roll = 1 baris, bisa diklik buat buka/tutup panel "Riwayat Pemakaian". Roll yang
+// kode-nya kosong/null gak bisa diklik (gak ada cara nyari riwayatnya tanpa kode).
+function renderBarisRoll_(r) {
+  const kode = r.kodeRoll;
+  if (!kode) {
+    return '<div class="roll-row" style="cursor:default"><span>Roll -</span><span>' + formatAngka(r.kg) + ' kg</span></div>';
+  }
+  const terbuka = !!rollTerbuka[kode];
+  let hintPakai = '';
+  if (!terbuka && riwayatTimPotongData) {
+    const jumlah = riwayatTimPotongData.filter(function (x) { return String(x.kodeRoll || '') === String(kode); }).length;
+    hintPakai = jumlah > 0 ? '<span class="jumlah-pakai">' + jumlah + 'x pakai</span>' : '';
+  }
+  let html = '<div class="roll-row' + (terbuka ? ' terbuka' : '') + '" data-rolltoggle="' + escapeAttr(kode) + '">' +
+    '<div class="roll-kiri"><span class="chev">▶</span><span>Roll ' + escapeHtml(kode) + '</span>' + hintPakai + '</div>' +
+    '<span>' + formatAngka(r.kg) + ' kg</span></div>';
+  if (terbuka) html += renderRiwayatPanel_(kode, r.kg);
+  return html;
+}
+
+function renderRiwayatPanel_(kode, kgSisa) {
+  if (sedangMuatRiwayat) {
+    return '<div class="riwayat-wrap"><div class="riwayat-loading">⏳ Memuat riwayat pemakaian...</div></div>';
+  }
+  if (!riwayatTimPotongData) {
+    return '<div class="riwayat-wrap"><div class="riwayat-kosong">Gagal memuat riwayat - coba tap lagi.</div></div>';
+  }
+  const cocok = riwayatTimPotongData.filter(function (x) { return String(x.kodeRoll || '') === String(kode); })
+    .sort(function (a, b) { return b.tanggal.localeCompare(a.tanggal) || (b.id - a.id); });
+  const totalTerpakai = cocok.reduce(function (sum, x) { return sum + (parseFloat(x.pemakaianKainKg) || 0); }, 0);
+  const kgAwalEstimasi = kgSisa + totalTerpakai;
+
+  let html = '<div class="riwayat-wrap">' +
+    '<div class="riwayat-meta"><span>Kg awal (estimasi): <b>' + formatAngka(kgAwalEstimasi) + ' kg</b></span><span>Sisa sekarang: <b>' + formatAngka(kgSisa) + ' kg</b></span></div>';
+  if (cocok.length === 0) {
+    html += '<div class="riwayat-kosong">Belum ada laporan Tim Potong yang tercatat pakai roll ini (dalam 6 bulan terakhir).</div>';
+  } else {
+    html += cocok.map(function (x) {
+      const totalQty = Object.keys(x.ukuran || {}).reduce(function (s, u) { return s + x.ukuran[u]; }, 0);
+      return '<div class="riwayat-item">' +
+        '<div class="riwayat-item-top"><span class="nama-item">' + escapeHtml(x.jenisWarnaBaju) + '</span>' +
+        '<span class="kg-terpakai">-' + formatAngka(x.pemakaianKainKg) + ' kg</span></div>' +
+        '<div class="sub"><span>' + formatTanggalPendek(x.tanggal) + '</span><span class="qty">' + totalQty + ' pcs</span></div>' +
+        '</div>';
+    }).join('');
+  }
+  html += '</div>';
+  return html;
 }
 document.getElementById('searchWarna').addEventListener('input', function () {
   searchWarnaQuery = this.value;
