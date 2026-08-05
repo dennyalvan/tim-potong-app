@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.27
+DASHBOARD ver.28
 ============================================================
-PERUBAHAN ver.27: koreksi ver.26 - uppercase yang dimaksud Denny cuma buat LABEL TAB di atas
-("PROSES & QC"/"STOK KAIN"/"REKAP QC"), bukan seluruh isi tab. Dipindah dari #tabQC ke
-.tab-btn. Riwayat lengkap: git log.
+PERUBAHAN ver.28: warna tombol "Sinkron" diganti dari hijau jadi ungu (var(--indigo)), senada
+sama warna aksen utama dashboard (request Denny) - bentuk kotak solid + ikon 📤 tetap
+dipertahankan biar tetap gampang dibedain dari tombol Refresh walau sekarang sama-sama ungu.
+Riwayat lengkap: git log.
 
 CATATAN KEAMANAN (tetap berlaku, bukan cuma soal 1 versi): token di URL SYNC_AKUNTANSI_URL di
 bawah ini KELIHATAN oleh siapapun yang buka "view source" halaman ini (file statis publik di
@@ -62,7 +63,7 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .header h1 { font-size: 20px; margin: 0; }
   .header-right { text-align: right; position: relative; display: flex; gap: 8px; align-items: flex-start; justify-content: flex-end; flex-wrap: wrap; }
   .btn-refresh { background: #fff; border: 1.5px solid var(--indigo); border-radius: 20px; padding: 8px 16px; font-weight: 700; font-size: 13px; cursor: pointer; color: var(--indigo); box-shadow: 0 1px 4px rgba(41,43,49,0.10); }
-  .btn-sinkron { background: var(--green); border: 1.5px solid var(--green); border-radius: 10px; padding: 8px 16px; font-weight: 700; font-size: 13px; cursor: pointer; color: #fff; box-shadow: 0 1px 4px rgba(41,43,49,0.10); }
+  .btn-sinkron { background: var(--indigo); border: 1.5px solid var(--indigo); border-radius: 10px; padding: 8px 16px; font-weight: 700; font-size: 13px; cursor: pointer; color: #fff; box-shadow: 0 1px 4px rgba(41,43,49,0.10); }
   .btn-sinkron:disabled { opacity: 0.6; cursor: default; }
   .loading-popup { position: absolute; top: calc(100% + 6px); right: 0; background: #1c1c1e; color: #fff; padding: 6px 13px; border-radius: 20px; font-size: 11.5px; font-weight: 600; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 50; }
   .loading-popup.show { opacity: 1; }
