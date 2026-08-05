@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.16
+HTML PRODUKSI (Supabase/testproduksi) - ver.17
 ============================================================
-PERUBAHAN ver.16: font diganti ke Space Grotesk (request Denny, samain sama dashboard.html) -
-sebelumnya index.html gak pernah load web font sama sekali (murni system font stack), sekarang
-nambah link Google Fonts + weight 400/500/600/700. Riwayat lengkap: git log.
+PERUBAHAN ver.17: FIX font Space Grotesk (ver.16) belum kesampe ke tombol KATEGORI (Anak/
+Dewasa) & kotak isian - browser gak nurunin font-family body ke elemen form (button/input/
+select/textarea) secara default, harus di-reset eksplisit (`font-family: inherit`). Riwayat
+lengkap: git log.
 ============================================================
 
 HTML PRODUKSI (Supabase/testproduksi) - ver.07
@@ -108,6 +109,11 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
     --page-bg: var(--bg);
   }
   * { box-sizing: border-box; }
+  /* v.17: FIX font Space Grotesk gak nyampe ke tombol/input (request Denny) - browser secara
+     default gak nurunin font-family body ke elemen form (button, input, select, textarea),
+     mereka pakai font UI sistem sendiri kecuali di-reset eksplisit kayak gini. Ini yang bikin
+     tombol KATEGORI (Anak/Dewasa) & semua kotak isian keliatan masih pakai font lama. */
+  button, input, select, textarea { font-family: inherit; }
   /* v.10: background HALAMAN juga ikut gelap pas mode DEWASA (request Denny - sebelumnya cuma
      tombol toggle & beberapa elemen form doang yang berubah, background-nya tetap sama). Pakai
      variabel --page-bg TERPISAH dari --bg (bukan override --bg langsung), soalnya --bg juga

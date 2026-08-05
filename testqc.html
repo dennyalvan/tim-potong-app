@@ -1,12 +1,15 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.24
+DASHBOARD ver.25
 ============================================================
-PERUBAHAN ver.24: font seluruh dashboard diganti dari Inter ke Space Grotesk (request Denny,
-samain sama index.html). Space Grotesk cuma tersedia weight 400/500/600/700 (gak ada 800) -
-elemen yang minta 800 otomatis jatuh ke 700 terdekat, gak ada yang error/kosong. Riwayat
-lengkap: git log.
+PERUBAHAN ver.25: 2 hal dari request Denny.
+  1. FIX font Space Grotesk (ver.24) belum kesampe ke tombol tab (Proses & QC/Stok Kain/Rekap
+     QC) & kotak isian - browser gak nurunin font-family body ke elemen form secara default,
+     harus di-reset eksplisit (`font-family: inherit`).
+  2. Judul "Dashboard Produksi & QC" diganti jadi "OUTPUT PRODUKSI & QC" (title tag, h1, dan
+     reset teks di tab-switch).
+Riwayat lengkap: git log.
 
 CATATAN KEAMANAN (tetap berlaku, bukan cuma soal 1 versi): token di URL SYNC_AKUNTANSI_URL di
 bawah ini KELIHATAN oleh siapapun yang buka "view source" halaman ini (file statis publik di
@@ -20,7 +23,7 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Dashboard Produksi & QC</title>
+<title>OUTPUT PRODUKSI & QC</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -46,6 +49,12 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
     --danger-bg: #F3E1DE;
   }
   * { box-sizing: border-box; }
+  /* v.25: FIX font Space Grotesk gak nyampe ke tombol/input (request Denny) - browser secara
+     default gak nurunin font-family body ke elemen form (button, input, select, textarea),
+     mereka pakai font UI sistem sendiri kecuali di-reset eksplisit kayak gini. Ini yang bikin
+     tombol tab (Proses & QC/Stok Kain/Rekap QC) & semua kotak isian keliatan masih pakai font
+     lama. */
+  button, input, select, textarea { font-family: inherit; }
   body { margin: 0; font-family: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: #292B31; padding-bottom: 20px; }
   #app { max-width: 520px; margin: 0 auto; padding: 16px; }
 
@@ -196,7 +205,7 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
 <div id="app">
   <div class="header">
     <div>
-      <h1 id="pageTitle">Dashboard Produksi & QC</h1>
+      <h1 id="pageTitle">OUTPUT PRODUKSI & QC</h1>
     </div>
     <div class="header-right">
       <button class="btn-sinkron" id="btnSinkronAkuntansi">📤 Sinkron</button>
@@ -368,7 +377,7 @@ document.querySelectorAll('.tab-btn').forEach(function (btn) {
     document.getElementById('tabQC').style.display = tab === 'qc' ? 'block' : 'none';
     document.getElementById('tabStok').style.display = tab === 'stok' ? 'block' : 'none';
     document.getElementById('tabRekap').style.display = tab === 'rekap' ? 'block' : 'none';
-    document.getElementById('pageTitle').textContent = 'Dashboard Produksi & QC';
+    document.getElementById('pageTitle').textContent = 'OUTPUT PRODUKSI & QC';
     if (tab === 'stok' && !stokUtuhData) muatStokUtuh();
     if (tab === 'rekap') muatRekapQC();
   });
