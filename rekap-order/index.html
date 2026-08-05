@@ -513,10 +513,10 @@ body {
   <!-- VARIAN PANEL -->
   <div id="panel-varian" class="panel active">
     <div class="filter-row">
-      <button class="pill active" onclick="sortBy('default',this)">Default</button>
-      <button class="pill" onclick="sortBy('az',this)">A → Z</button>
-      <button class="pill" onclick="sortBy('qty_desc',this)">Terbanyak</button>
-      <button class="pill" onclick="sortBy('qty_asc',this)">Terdikit</button>
+      <button class="pill" data-mode="default" onclick="sortBy('default',this)">Default</button>
+      <button class="pill" data-mode="az" onclick="sortBy('az',this)">A → Z</button>
+      <button class="pill active" data-mode="qty_desc" onclick="sortBy('qty_desc',this)">Terbanyak</button>
+      <button class="pill" data-mode="qty_asc" onclick="sortBy('qty_asc',this)">Terdikit</button>
     </div>
     <div class="varian-grid" id="groups"></div>
     <div id="grand"></div>
@@ -579,7 +579,7 @@ let varianData = [], karakterData = [];
 let resiData = { totalResi: 0, totalPcs: 0, breakdown: [], pcsDetails: {} };
 let excludedInfo = { count: 0, qty: 0 };
 let duplicateInfo = { count: 0 };
-let varianMode = 'default', karMode = 'az', resiMode = 'default';
+let varianMode = 'qty_desc', karMode = 'az', resiMode = 'default';
 const GROUP_COLORS = ['tag-0','tag-1','tag-2','tag-3','tag-4','tag-5','tag-6','tag-7','tag-8'];
 
 // ── UPLOAD (always standby, support banyak file sekaligus — digabung berurutan) ──
@@ -780,8 +780,8 @@ function buildRekap(fileResults) {
     : 'Shopee · ' + labels[0];
   document.getElementById('subtitle').textContent = subtitleText;
 
-  varianMode = 'default'; karMode = 'az'; resiMode = 'default';
-  document.querySelectorAll('#panel-varian .pill').forEach((b,i)=>b.classList.toggle('active',i===0));
+  varianMode = 'qty_desc'; karMode = 'az'; resiMode = 'default';
+  document.querySelectorAll('#panel-varian .pill').forEach(b=>b.classList.toggle('active', b.dataset.mode===varianMode));
   document.querySelectorAll('#panel-karakter .pill').forEach((b,i)=>b.classList.toggle('active',i===0));
   document.querySelectorAll('#panel-resi .pill').forEach((b,i)=>b.classList.toggle('active',i===0));
   renderVarian(); renderKarakter(); renderResi();
