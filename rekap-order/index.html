@@ -647,7 +647,8 @@ function extractFileData(buffer, filename) {
   if (headerRow < 0) throw new Error('kolom header tidak ditemukan');
 
   const rawRows = rows.slice(headerRow + 1).filter(r => r[colN] || r[colO]);
-  let excludedCount = 0, excludedQty = 0;
+  let excludedQty = 0;
+  const excludedPesananSet = new Set();
   const normalized = [];
   rawRows.forEach(r => {
     const qty = parseFloat(r[colR]) || 0;
@@ -657,7 +658,12 @@ function extractFileData(buffer, filename) {
       // Jangan whitelist 1 status doang — file export bisa "Perlu Dikirim" saja
       // ATAU "semua status" sebulan penuh (Selesai, Sedang Dikirim, Telah Dikirim,
       // Pesanan diterima..., dll), semua itu tetap pesanan valid yang harus dihitung.
-      if (st && /batal/i.test(st)) { excludedCount++; excludedQty += qty; return; }
+      if (st && /batal/i.test(st)) {
+        excludedQty += qty;
+        const pesananVal = colPesanan >= 0 ? String(r[colPesanan] || '').trim() : '';
+        if (pesananVal) excludedPesananSet.add(pesananVal); // hitung PESANAN unik, bukan baris
+        return;
+      }
     }
     if (!qty) return;
     normalized.push({
@@ -669,19 +675,20 @@ function extractFileData(buffer, filename) {
     });
   });
 
-  return { filename, normalized, excludedCount, excludedQty };
+  return { filename, normalized, excludedPesanan: [...excludedPesananSet], excludedQty };
 }
 
 // ── Gabungkan hasil dari semua file (berurutan sesuai file), lalu hitung rekap sekali ──
 function buildRekap(fileResults) {
   const allRows = [];
-  let totalExcludedCount = 0, totalExcludedQty = 0;
+  let totalExcludedQty = 0;
+  const excludedPesananSet = new Set();
   fileResults.forEach(f => {
     allRows.push(...f.normalized);
-    totalExcludedCount += f.excludedCount;
     totalExcludedQty += f.excludedQty;
+    f.excludedPesanan.forEach(p => excludedPesananSet.add(p));
   });
-  excludedInfo = { count: totalExcludedCount, qty: totalExcludedQty };
+  excludedInfo = { count: excludedPesananSet.size, qty: totalExcludedQty };
 
   const REG_PREFIXES = ['RFL ','ONESET ','SPEN.','PJ ','SET.','CP ','LT ','CRG-PJG','CARGO','LS24','TS24','TS ','CUSTOM'];
   const SIZE_ORDER = ['S','M','L','XL','XXL'];
