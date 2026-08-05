@@ -1,11 +1,19 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.18
+HTML PRODUKSI (Supabase/testproduksi) - ver.19
 ============================================================
-PERUBAHAN ver.18: tombol Refresh disamain persis sama dashboard.html (request Denny) - emoji
-🔄 polos, tanpa roundbox/border/caption teks "Refresh", ukuran disamain (36px). Riwayat
-lengkap: git log.
+PERUBAHAN ver.19: 5 hal dari request Denny.
+  1. Hapus teks "TIM POTONG" (di bawah judul, kedua header termasuk layar preview) & label
+     "KATEGORI" (di atas toggle Anak/Dewasa) - hemat ruang vertikal.
+  2. Badge "ver.02" sekarang center di atas ikon Refresh (header-right jadi flex column
+     center), bukan rata kanan lagi.
+  3. Tombol DEWASA gak pakai emoji lagi (ANAK tetap pakai 🧒).
+  4. Baris Warna & Kode Roll gak pakai garis bawah lagi (border-bottom dihapus khusus 2 baris
+     itu, baris lain tetap ada).
+  5. Teks checkbox estimasi disederhanain jadi "Pakai hitungan estimasi" (dari "Kg tidak
+     diketahui - pakai estimasi standar").
+Riwayat lengkap: git log.
 ============================================================
 
 HTML PRODUKSI (Supabase/testproduksi) - ver.07
@@ -135,9 +143,8 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
 
   .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
   .header h1 { font-size: 20px; margin: 0; letter-spacing: 0.3px; }
-  .header .subtitle { margin: 2px 0 0; font-size: 13px; color: var(--gray-text); font-weight: 600; }
-  .header-right { text-align: right; }
-  .ver-badge { display: inline-block; background: var(--navy); color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; margin-bottom: 6px; }
+  .header-right { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .ver-badge { display: inline-block; background: var(--navy); color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; margin-bottom: 0; }
   .link-btn { display: block; background: none; border: none; font-size: 13px; cursor: pointer; padding: 2px 0; text-align: right; width: 100%; }
   /* v.18: samain persis ke tombol Refresh di dashboard.html (request Denny) - emoji 🔄 polos
      tanpa roundbox/border/caption teks, tinggal disamain ukurannya (36px tinggi). */
@@ -192,6 +199,7 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
   }
   .field-row input::placeholder { color: #9aa3b2; font-weight: 500; }
   .field-row.wrap .suggestion-list { margin-top: 2px; }
+  #rowWarna, #rowKodeRoll { border-bottom: none; }
   .chk-sub { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--gray-text); font-weight: 600; }
   .chk-sub input[type="checkbox"] { width: auto; flex: none; margin: 0; }
   .combo-picker-btn {
@@ -307,7 +315,6 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
   <div class="header">
     <div>
       <h1>INPUT PRODUKSI</h1>
-      <p class="subtitle">TIM POTONG</p>
     </div>
     <div class="header-right">
       <span class="ver-badge">ver.02</span>
@@ -315,10 +322,9 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
     </div>
   </div>
 
-  <div class="section-label">KATEGORI</div>
   <div class="kategori-toggle">
     <button class="kat-btn active" data-kat="Anak"><span class="emoji">🧒</span> ANAK</button>
-    <button class="kat-btn" data-kat="Dewasa"><span class="emoji">🧑</span> DEWASA</button>
+    <button class="kat-btn" data-kat="Dewasa">DEWASA</button>
   </div>
 
   <div class="cut-divider"><div class="scissor-chip">✂️</div></div>
@@ -351,7 +357,6 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
   <div class="header">
     <div>
       <h1>INPUT PRODUKSI</h1>
-      <p class="subtitle">TIM POTONG</p>
     </div>
     <div class="header-right"><span class="ver-badge">ver.02</span></div>
   </div>
@@ -711,7 +716,7 @@ function renderDetailCard() {
         '<div class="frow-line"><span class="flabel">Kg Kain Terpakai</span>' +
         '<input type="number" id="inputKg" placeholder="0" value="' + (itemBaru.kg || '') + '"></div>' +
         '<div class="kg-warning-text" id="kgWarningInfo" style="display:none;"></div>' +
-        '<label class="chk-sub"><input type="checkbox" id="chkEstimasi" ' + (itemBaru.estimasi ? 'checked' : '') + '> Kg tidak diketahui - pakai estimasi standar</label>' +
+        '<label class="chk-sub"><input type="checkbox" id="chkEstimasi" ' + (itemBaru.estimasi ? 'checked' : '') + '> Pakai hitungan estimasi</label>' +
         '</div>';
 
       // --- Kode Roll ---
