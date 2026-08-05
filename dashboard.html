@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.31
+DASHBOARD ver.32
 ============================================================
-PERUBAHAN ver.31: koreksi lagi - Denny minta balik ke emoji 🔄 biru polos TANPA background/
-roundbox sama sekali, tinggal disamain tingginya (~36px) sama tombol Sync sebelahnya biar
-proporsional & gak overlap. Ikon SVG clay 3D di ver.30 dihapus. Riwayat lengkap: git log.
+PERUBAHAN ver.32: kode roll di tab Stok Kain (pas kartu warna di-expand) sekarang di-sort dari
+angka TERBESAR ke terkecil (request Denny) - roll yang kode-nya kosong/null didorong ke paling
+bawah. Riwayat lengkap: git log.
 ============================================================
 
 CATATAN KEAMANAN (tetap berlaku, bukan cuma soal 1 versi): token di URL SYNC_AKUNTANSI_URL di
@@ -992,7 +992,14 @@ function renderWarnaGrid() {
       '<span class="nama">' + (i + 1) + '. ' + escapeHtml(w.warna) + '</span></div>' +
       '<div style="display:flex;justify-content:space-between;margin-top:4px"><span class="roll-count">' + w.jumlahRoll + ' roll</span><span class="kg">' + formatAngka(w.totalKg) + ' kg</span></div>';
     if (terbuka) {
-      html += '<div class="warna-detail">' + w.rolls.map(function (r) {
+      // v.32: kode roll di-sort dari angka TERBESAR ke terkecil (request Denny) - kode roll
+      // yang kosong/null didorong ke paling bawah.
+      const rollsUrut = w.rolls.slice().sort(function (a, b) {
+        const na = a.kodeRoll ? parseInt(a.kodeRoll, 10) : -1;
+        const nb = b.kodeRoll ? parseInt(b.kodeRoll, 10) : -1;
+        return nb - na;
+      });
+      html += '<div class="warna-detail">' + rollsUrut.map(function (r) {
         return '<div class="roll-row"><span>Roll ' + (r.kodeRoll ? escapeHtml(r.kodeRoll) : '-') + '</span><span>' + formatAngka(r.kg) + ' kg</span></div>';
       }).join('') + '</div>';
     }
