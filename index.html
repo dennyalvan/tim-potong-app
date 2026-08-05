@@ -1,13 +1,15 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.23
+HTML PRODUKSI (Supabase/testproduksi) - ver.24
 ============================================================
-PERUBAHAN ver.23: koreksi lagi - ternyata bukan cuma soal warna, emoji 🔄 di PC-nya Denny
-tampil dengan LATAR kotak rounded biru (kayak app-icon), sementara di HP cuma tampil garis
-polos tanpa latar - beda desain emoji lagi per device. Sekarang dibikin custom lengkap: kotak
-rounded biru solid (30x30, radius 9px) + ikon putih stroke tebal di dalamnya - dijamin sama
-persis di semua device karena SEMUANYA custom, gak ada bagian yang masih pinjam font emoji.
+PERUBAHAN ver.24: fix bug daftar saran ROLL KODE (renderRollSuggestions,
+renderCustomRollSuggestions, renderKombiRollSuggestions) ke-cap cuma nampilin 8 roll pertama
+(hardcode .slice(0,8)) meskipun stok warna itu roll-nya lebih banyak (contoh: MERAH ada 37
+roll, cuma 8 teratas by kg yang kelihatan & bisa dipilih). Cap-nya dihapus buat 3 fungsi roll
+itu (kotak saran sudah scrollable, max-height 260px, jadi aman ditampilin semua). Cap 8 di
+saran NAMA WARNA (renderWarnaSuggestions/renderCustomWarnaSuggestions) SENGAJA dibiarin, itu
+beda kasus (bukan yang dilaporkan Denny).
 Riwayat lengkap: git log.
 ============================================================
 ============================================================
@@ -649,7 +651,7 @@ function renderRollSuggestions(query) {
   // (gak perlu ketik dulu) - beda dari saran Warna yang emang sengaja nunggu ketikan.
   const cocok = q ? semua.filter(function (r) { return String(r.kodeRoll).toUpperCase().indexOf(q) === 0; }) : semua;
   if (cocok.length) {
-    box.innerHTML = cocok.slice(0, 8).map(function (r) {
+    box.innerHTML = cocok.map(function (r) {
       return '<div class="suggestion-item roll-suggestion" data-pick-roll="' + escapeAttr(r.kodeRoll || '') + '" data-kg="' + r.kg + '">Roll ' + escapeHtml(r.kodeRoll || '-') + ' / ' + r.kg + 'kg</div>';
     }).join('');
   } else if (!q && itemBaru.warna) {
@@ -995,7 +997,7 @@ function renderCustomRollSuggestions(idx, query) {
   const semua = daftarRollUntukWarna(warna);
   const cocok = q ? semua.filter(function (r) { return String(r.kodeRoll).toUpperCase().indexOf(q) === 0; }) : semua;
   if (cocok.length) {
-    box.innerHTML = cocok.slice(0, 8).map(function (r) {
+    box.innerHTML = cocok.map(function (r) {
       return '<div class="suggestion-item roll-suggestion" data-pick-croll="' + escapeAttr(r.kodeRoll || '') + '" data-kg="' + r.kg + '" data-idx="' + idx + '">Roll ' + escapeHtml(r.kodeRoll || '-') + ' / ' + r.kg + 'kg</div>';
     }).join('');
   } else if (!q && warna) {
@@ -1028,7 +1030,7 @@ function renderKombiRollSuggestions(idx, query) {
   const semua = daftarRollUntukWarna(warna);
   const cocok = q ? semua.filter(function (r) { return String(r.kodeRoll).toUpperCase().indexOf(q) === 0; }) : semua;
   if (cocok.length) {
-    box.innerHTML = cocok.slice(0, 8).map(function (r) {
+    box.innerHTML = cocok.map(function (r) {
       return '<div class="suggestion-item roll-suggestion" data-pick-kombi-roll="' + escapeAttr(r.kodeRoll || '') + '" data-kg="' + r.kg + '">Roll ' + escapeHtml(r.kodeRoll || '-') + ' / ' + r.kg + 'kg</div>';
     }).join('');
   } else if (!q && warna) {
