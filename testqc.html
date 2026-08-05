@@ -1,17 +1,16 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.34
+DASHBOARD ver.35
 ============================================================
-PERUBAHAN ver.34: FITUR BARU - "Riwayat Pemakaian" per roll di tab Stok Kain (mockup udah
-disetujui Denny sebelumnya). Tap 1 roll (bukan cuma kartu warnanya) buat buka panel riwayat -
-daftar laporan Tim Potong yang pernah motong dari roll itu (nama item, tanggal, qty pcs, kg
-terpakai), urut terbaru dulu. Pakai endpoint YANG UDAH ADA /data/export-tim-potong (dibuat buat
-sync AUTOREKAP) - gak perlu endpoint Worker baru, tinggal filter kodeRoll di sisi dashboard,
-data di-cache sekali per sesi. Baris roll dibuat BOLD semua, isi riwayatnya sendiri REGULAR
-(request Denny). CATATAN: "Kg awal" yang ditampilkan itu ESTIMASI (kg sisa + total pemakaian
-tercatat), BUKAN angka pasti dari database - sistem gak pernah nyimpen "kg awal" roll secara
-eksplisit. Riwayat cuma nyari dalam 6 bulan ke belakang (ikut default endpoint export-nya).
+PERUBAHAN ver.35: 3 penyempurnaan fitur "Riwayat Pemakaian" (request Denny).
+  1. FIX bug nyata: state expand roll sebelumnya cuma dikunci pakai kode roll doang - kalau ada
+     2 roll beda yang kebetulan kode-nya sama, keduanya ke-toggle bareng. Sekarang kuncinya
+     warna+kode+kg (unik per roll fisik).
+  2. Cuma 1 roll bisa ke-expand sekaligus di SELURUH daftar - klik roll lain otomatis
+     nutup yang lagi kebuka (sebelumnya bisa banyak roll kebuka bareng).
+  3. Search berdasarkan kode roll sekarang auto-scroll + flash highlight (kuning, fade 2.5
+     detik) ke roll yang ketemu, bukan cuma nge-expand kartu warnanya doang.
 Riwayat lengkap: git log.
 ============================================================
 
@@ -194,6 +193,9 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .warna-detail .roll-row .chev { font-size: 9px; color: var(--gray-label); transition: transform 0.15s; margin-left: -14px; }
   .warna-detail .roll-row.terbuka .chev { transform: rotate(90deg); }
   .warna-detail .roll-row .jumlah-pakai { font-size: 10px; font-weight: 600; color: var(--indigo); margin-left: 6px; }
+  /* v.35: flash highlight buat roll hasil pencarian, biar gak ketuker fokus pas ketemu */
+  @keyframes rollDisorot { 0% { background: #FFF3CD; } 100% { background: transparent; } }
+  .warna-detail .roll-row.disorot { animation: rollDisorot 2.5s ease forwards; }
   /* v.34: panel "Riwayat Pemakaian" per roll (request Denny, mockup udah disetujui) - baris
      roll di atas dibikin BOLD semua, isi riwayatnya sendiri REGULAR (bukan bold) biar kontras
      visual jelas antara "header roll" vs "detail pemakaiannya". */
@@ -411,7 +413,11 @@ let warnaTerbuka = {};
 // gak nembak network tiap buka/tutup roll yang beda-beda.
 let riwayatTimPotongData = null;
 let sedangMuatRiwayat = false;
-let rollTerbuka = {}; // { [kodeRoll]: true }
+// v.35: cuma 1 roll bisa ke-expand sekaligus (request Denny) - dari object jadi 1 variabel
+// kunci tunggal, dan kuncinya sekarang warna+kode+kg (bukan cuma kode) biar roll dgn kode
+// kembar gak ke-toggle bareng.
+let rollTerbukaKunci = null;
+let rollHighlightKunci = null; // roll hasil search yang lagi di-scroll+flash-highlight
 
 // ------------------------------------------------------------
 // TAB SWITCH
@@ -1011,16 +1017,14 @@ function muatStokUtuh(percobaan, manual) {
 // gak perlu bikin endpoint Worker baru, tinggal filter kodeRoll di sisi dashboard. bulan=6
 // (6 bulan ke belakang) cukup buat kebanyakan roll, roll yang jauh lebih tua dari itu riwayat
 // awalnya mungkin gak kebaca lengkap - trade-off yang wajar drpd narik SEMUA histori tiap buka.
-function muatRiwayatTimPotong_(kodeRollUntukDibuka) {
-  if (riwayatTimPotongData) { rollTerbuka[kodeRollUntukDibuka] = true; renderWarnaGrid(); return; }
-  if (sedangMuatRiwayat) return;
+function muatRiwayatTimPotong_() {
+  if (riwayatTimPotongData || sedangMuatRiwayat) return;
   sedangMuatRiwayat = true;
   fetch(WORKER_URL + '/data/export-tim-potong?bulan=6')
     .then(function (r) { return r.json(); })
     .then(function (data) {
       riwayatTimPotongData = Array.isArray(data) ? data : [];
       sedangMuatRiwayat = false;
-      rollTerbuka[kodeRollUntukDibuka] = true;
       renderWarnaGrid();
     })
     .catch(function (e) {
@@ -1030,18 +1034,24 @@ function muatRiwayatTimPotong_(kodeRollUntukDibuka) {
     });
 }
 
+// v.35: kunci unik per roll (warna+kode+kg) - BUKAN cuma kode roll doang. Kalau ada 2 roll
+// beda yang kebetulan kode-nya sama (request Denny, ini kejadian nyata), masing-masing tetap
+// punya identitas sendiri, gak ke-toggle bareng.
+function kunciRoll_(w, r) {
+  return w.warna + '::' + (r.kodeRoll || '-') + '::' + r.kg;
+}
+
 function renderWarnaGrid() {
   if (!stokUtuhData) return;
   let list = stokUtuhData.perWarna.slice();
   if (searchWarnaQuery) {
     const q = searchWarnaQuery.toLowerCase();
-    // v.33: search sekarang juga cari KODE ROLL, gak cuma nama warna (request Denny) - kalau
-    // ketemu lewat kode roll, kartunya auto-expand biar rollnya langsung kelihatan tanpa perlu
-    // tap manual.
+    // v.33: search sekarang juga cari KODE ROLL, gak cuma nama warna (request Denny).
+    // v.35: efek samping (auto-expand+highlight+scroll) dipindah ke event listener input-nya
+    // (search di bawah) - di sini murni filter doang, biar gak ke-trigger ulang tiap render.
     list = list.filter(function (w) {
       const cocokWarna = w.warna.toLowerCase().indexOf(q) !== -1;
       const cocokRoll = w.rolls.some(function (r) { return r.kodeRoll && String(r.kodeRoll).toLowerCase().indexOf(q) !== -1; });
-      if (cocokRoll) warnaTerbuka[w.warna] = true;
       return cocokWarna || cocokRoll;
     });
   }
@@ -1065,7 +1075,7 @@ function renderWarnaGrid() {
         return nb - na;
       });
       html += '<div class="warna-detail">' + rollsUrut.map(function (r) {
-        return renderBarisRoll_(r);
+        return renderBarisRoll_(w, r);
       }).join('') + '</div>';
     }
     html += '</div>';
@@ -1083,29 +1093,42 @@ function renderWarnaGrid() {
   document.querySelectorAll('[data-rolltoggle]').forEach(function (el) {
     el.addEventListener('click', function (e) {
       e.stopPropagation();
-      const kode = el.dataset.rolltoggle;
-      if (rollTerbuka[kode]) { rollTerbuka[kode] = false; renderWarnaGrid(); return; }
-      if (riwayatTimPotongData) { rollTerbuka[kode] = true; renderWarnaGrid(); return; }
-      muatRiwayatTimPotong_(kode);
-      renderWarnaGrid(); // render ulang dulu buat nampilin "Memuat riwayat..." pas nunggu fetch
+      const kunci = el.dataset.rolltoggle;
+      rollHighlightKunci = null; // v.35: klik manual matiin mode highlight bekas search
+      if (rollTerbukaKunci === kunci) { rollTerbukaKunci = null; renderWarnaGrid(); return; }
+      rollTerbukaKunci = kunci; // v.35: cuma 1 roll aktif sekaligus - yang lain auto-collapse
+      renderWarnaGrid();
+      if (!riwayatTimPotongData) muatRiwayatTimPotong_();
     });
   });
+
+  // v.35: hasil search di-scroll ke pandangan + kasih flash highlight sebentar
+  if (rollHighlightKunci) {
+    const kunciTarget = rollHighlightKunci;
+    requestAnimationFrame(function () {
+      const target = document.querySelector('[data-rolltoggle=' + CSS.escape(kunciTarget) + ']');
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    setTimeout(function () { rollHighlightKunci = null; }, 2600);
+  }
 }
 
 // v.34: 1 roll = 1 baris, bisa diklik buat buka/tutup panel "Riwayat Pemakaian". Roll yang
 // kode-nya kosong/null gak bisa diklik (gak ada cara nyari riwayatnya tanpa kode).
-function renderBarisRoll_(r) {
+function renderBarisRoll_(w, r) {
   const kode = r.kodeRoll;
   if (!kode) {
     return '<div class="roll-row" style="cursor:default"><span>Roll -</span><span>' + formatAngka(r.kg) + ' kg</span></div>';
   }
-  const terbuka = !!rollTerbuka[kode];
+  const kunci = kunciRoll_(w, r);
+  const terbuka = (rollTerbukaKunci === kunci);
+  const disorot = (rollHighlightKunci === kunci);
   let hintPakai = '';
   if (!terbuka && riwayatTimPotongData) {
     const jumlah = riwayatTimPotongData.filter(function (x) { return String(x.kodeRoll || '') === String(kode); }).length;
     hintPakai = jumlah > 0 ? '<span class="jumlah-pakai">' + jumlah + 'x pakai</span>' : '';
   }
-  let html = '<div class="roll-row' + (terbuka ? ' terbuka' : '') + '" data-rolltoggle="' + escapeAttr(kode) + '">' +
+  let html = '<div class="roll-row' + (terbuka ? ' terbuka' : '') + (disorot ? ' disorot' : '') + '" data-rolltoggle="' + escapeAttr(kunci) + '">' +
     '<div class="roll-kiri"><span class="chev">▶</span><span>Roll ' + escapeHtml(kode) + '</span>' + hintPakai + '</div>' +
     '<span>' + formatAngka(r.kg) + ' kg</span></div>';
   if (terbuka) html += renderRiwayatPanel_(kode, r.kg);
@@ -1143,6 +1166,25 @@ function renderRiwayatPanel_(kode, kgSisa) {
 }
 document.getElementById('searchWarna').addEventListener('input', function () {
   searchWarnaQuery = this.value;
+  // v.35: cari & auto-expand+highlight roll yang cocok - dijalanin SEKALI DI SINI (pas user
+  // ngetik), bukan di dalam filter renderWarnaGrid() (yang kepanggil berkali-kali buat alasan
+  // lain juga, misal ganti sort/klik roll lain - kalau taruh di situ bakal ke-trigger ulang
+  // terus & nge-override state expand manual user).
+  rollHighlightKunci = null;
+  if (searchWarnaQuery && stokUtuhData) {
+    const q = searchWarnaQuery.toLowerCase();
+    for (let i = 0; i < stokUtuhData.perWarna.length; i++) {
+      const w = stokUtuhData.perWarna[i];
+      const rollCocok = w.rolls.find(function (r) { return r.kodeRoll && String(r.kodeRoll).toLowerCase().indexOf(q) !== -1; });
+      if (rollCocok) {
+        warnaTerbuka[w.warna] = true;
+        rollTerbukaKunci = kunciRoll_(w, rollCocok);
+        rollHighlightKunci = rollTerbukaKunci;
+        if (!riwayatTimPotongData) muatRiwayatTimPotong_();
+        break;
+      }
+    }
+  }
   renderWarnaGrid();
 });
 document.getElementById('searchRekap').addEventListener('input', function () {
