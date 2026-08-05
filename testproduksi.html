@@ -1,11 +1,10 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.17
+HTML PRODUKSI (Supabase/testproduksi) - ver.18
 ============================================================
-PERUBAHAN ver.17: FIX font Space Grotesk (ver.16) belum kesampe ke tombol KATEGORI (Anak/
-Dewasa) & kotak isian - browser gak nurunin font-family body ke elemen form (button/input/
-select/textarea) secara default, harus di-reset eksplisit (`font-family: inherit`). Riwayat
+PERUBAHAN ver.18: tombol Refresh disamain persis sama dashboard.html (request Denny) - emoji
+🔄 polos, tanpa roundbox/border/caption teks "Refresh", ukuran disamain (36px). Riwayat
 lengkap: git log.
 ============================================================
 
@@ -140,13 +139,12 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
   .header-right { text-align: right; }
   .ver-badge { display: inline-block; background: var(--navy); color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; margin-bottom: 6px; }
   .link-btn { display: block; background: none; border: none; font-size: 13px; cursor: pointer; padding: 2px 0; text-align: right; width: 100%; }
-  /* v.14: koreksi ver.13 - yang harusnya ikut ganti warna itu ISI ROUNDBOX-nya (background),
-     bukan warna teks doang. Sekarang background solid ikut var(--mode-accent) (teal pas Anak,
-     slate pas Dewasa), teks putih biar tetap kebaca jelas di atas warna solid manapun. */
+  /* v.18: samain persis ke tombol Refresh di dashboard.html (request Denny) - emoji 🔄 polos
+     tanpa roundbox/border/caption teks, tinggal disamain ukurannya (36px tinggi). */
   .link-btn.refresh {
-    display: inline-block; width: auto; background: var(--mode-accent); color: #fff;
-    border: 1.5px solid var(--mode-accent-dark); border-radius: 16px; padding: 4px 10px;
-    font-size: 12px; font-weight: 700; box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+    display: inline-flex; width: 36px; height: 36px; background: none; border: none;
+    font-size: 26px; line-height: 1; align-items: center; justify-content: center;
+    padding: 0; box-shadow: none;
   }
   .link-btn.atur { color: var(--orange-link); }
 
@@ -313,7 +311,7 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
     </div>
     <div class="header-right">
       <span class="ver-badge">ver.02</span>
-      <button class="link-btn refresh" id="btnRefresh">🔄 Refresh</button>
+      <button class="link-btn refresh" id="btnRefresh">🔄</button>
     </div>
   </div>
 
