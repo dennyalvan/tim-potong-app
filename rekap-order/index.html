@@ -167,39 +167,34 @@ body {
 .modal-btn.cancel { background: var(--ios-surface2); color: var(--blue); }
 .modal-btn.danger { background: var(--red); color: #fff; }
 
-/* ── SEGMENT CONTROL (tabs) — dibungkus roundbox biar gak nyatu ke background ── */
-.segment-wrap {
-  margin: 14px 0 0;
-  background: var(--ios-surface);
-  border-radius: var(--radius) var(--radius) 0 0;
-  padding: 10px 10px 8px;
-  box-shadow: var(--shadow);
-}
-.segment {
-  display: flex; background: var(--ios-surface2);
-  border-radius: 9px; padding: 2px; gap: 2px;
-}
+/* ── TAB CHIPS — 3 tombol terpisah dengan icon, masing-masing box sendiri ── */
+.segment-wrap { display: flex; gap: 8px; margin: 14px 0 0; }
 .seg-btn {
-  flex: 1; padding: 7px 4px;
-  font-size: 13px; font-weight: 500; font-family: inherit;
-  border: none; background: transparent;
-  color: var(--ios-label2); cursor: pointer; border-radius: 7px;
-  transition: all .2s; letter-spacing: -0.2px;
-}
-.seg-btn.active {
-  background: var(--ios-surface);
-  color: var(--ios-label);
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 12px 8px;
+  font-size: 13px; font-weight: 600; font-family: inherit;
+  border: none; border-radius: 14px; cursor: pointer;
+  background: var(--ios-surface); color: var(--ios-label);
   box-shadow: var(--shadow);
+  transition: all .15s; letter-spacing: -0.1px;
 }
+.seg-btn:active { transform: scale(0.97); }
+.seg-icon { font-size: 15px; line-height: 1; }
+.seg-btn[data-tab="varian"] .seg-icon { color: var(--blue); }
+.seg-btn[data-tab="karakter"] .seg-icon { color: var(--purple); }
+.seg-btn[data-tab="resi"] .seg-icon { color: var(--green); }
+.seg-btn.active {
+  background: var(--accent); color: #fff;
+}
+.seg-btn.active .seg-icon { color: #fff; }
 
-/* ── FILTER PILLS — bagian bawah dari box yang sama dgn segment control ── */
+/* ── FILTER PILLS — card terpisah sendiri ── */
 .filter-row {
   display: flex; gap: 6px; flex-wrap: wrap;
   background: var(--ios-surface);
-  border-top: 1px solid var(--ios-border);
-  border-radius: 0 0 var(--radius) var(--radius);
+  border-radius: var(--radius);
   box-shadow: var(--shadow);
-  margin: 0 0 14px; padding: 10px 10px 12px;
+  margin: 10px 0 14px; padding: 10px 10px 12px;
 }
 .pill {
   padding: 5px 13px; font-size: 12px; font-weight: 500; font-family: inherit;
@@ -510,11 +505,9 @@ body {
 <div id="mainContent">
   <!-- SEGMENT CONTROL -->
   <div class="segment-wrap">
-    <div class="segment">
-      <button class="seg-btn active" onclick="switchTab('varian', this)">Varian</button>
-      <button class="seg-btn" onclick="switchTab('karakter', this)">Karakter</button>
-      <button class="seg-btn" onclick="switchTab('resi', this)">Resi</button>
-    </div>
+    <button class="seg-btn active" data-tab="varian" onclick="switchTab('varian', this)"><span class="seg-icon">🏷️</span> Varian</button>
+    <button class="seg-btn" data-tab="karakter" onclick="switchTab('karakter', this)"><span class="seg-icon">🎭</span> Karakter</button>
+    <button class="seg-btn" data-tab="resi" onclick="switchTab('resi', this)"><span class="seg-icon">📦</span> Resi</button>
   </div>
 
   <!-- VARIAN PANEL -->
