@@ -1,13 +1,15 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.25
+HTML PRODUKSI (Supabase/testproduksi) - ver.26
 ============================================================
-PERUBAHAN ver.25: tambah checkbox "Pakai habis" di baris Kg Kain Terpakai (mode warna
-tunggal/non-kombinasi). Dicentang -> kg otomatis diisi dari kg_sisa kode roll yang lagi
-kepilih (field jadi readonly selama dicentang, biar gak ke-edit manual dobel), gak perlu ngetik
-manual lagi. Ganti warna atau ganti roll selama checkbox aktif -> kg ikut nyesuain otomatis.
-Uncentang -> field balik bisa diketik manual seperti biasa.
+PERUBAHAN ver.26 (koreksi fitur Pakai Habis dari ver.25): (1) label checkbox disingkat jadi
+cuma "Pakai habis" (keterangan tambahan dihapus). (2) fix bug: centang checkbox sempat bikin
+format "Roll <kode> / <kg>kg" di kotak Kode Roll balik jadi cuma kode doang - akar masalahnya
+handler checkbox manggil renderDetailCard() (render ulang), sekarang diganti manipulasi
+.value/.readOnly langsung (pola yang sama dipakai renderKombiRollSuggestions). (3) checkbox
+Pakai Habis versi mode Kombinasi 3 Warna & Ringer ditambahkan, TAPI cuma di slot warna PERTAMA
+(warna ke-2/3 sengaja tidak) - ditaruh sebaris di sebelah label "Kg + Kode Roll - <Warna>".
 Riwayat lengkap: git log.
 ============================================================
 ============================================================
@@ -236,6 +238,8 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
 
   .kombi-warna-section { padding: 10px 16px 14px; border-bottom: 1px solid var(--border); }
   .kombi-warna-section .sub-title { font-size: 11.5px; font-weight: 650; color: var(--gray-label); margin: 10px 0 4px; }
+  .kombi-warna-section .sub-title-row { display: flex; justify-content: space-between; align-items: center; margin: 10px 0 4px; gap: 8px; }
+  .kombi-warna-section .sub-title-row .sub-title { margin: 0; }
   .kombi-warna-section .sub-fields { display: flex; gap: 8px; }
   .kombi-warna-section input.kg-mini { flex: 0 0 70px; min-width: 0; padding: 9px 8px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-weight: 600; background: var(--bg); }
   .kombi-warna-section input.roll-mini-input, .kombi-warna-section input.roll-mini-input-custom { flex: 1; min-width: 0; padding: 9px 8px; border-radius: 8px; font-size: 13.5px; font-weight: 600; background: var(--bg); text-overflow: ellipsis; }
@@ -736,7 +740,7 @@ function renderDetailCard() {
         // stok (kg_sisa) kode roll yang lagi kepilih, gak perlu ngetik manual. Field-nya jadi
         // readonly selama dicentang (biar gak konflik sama angka yang diisi otomatis) - uncentang
         // buat balik isi manual.
-        '<label class="chk-sub"><input type="checkbox" id="chkPakaiHabis" ' + (itemBaru.pakaiHabis ? 'checked' : '') + '> Pakai habis (isi kg otomatis dari sisa stok roll)</label>' +
+        '<label class="chk-sub"><input type="checkbox" id="chkPakaiHabis" ' + (itemBaru.pakaiHabis ? 'checked' : '') + '> Pakai habis</label>' +
         '<label class="chk-sub"><input type="checkbox" id="chkEstimasi" ' + (itemBaru.estimasi ? 'checked' : '') + '> Pakai hitungan estimasi</label>' +
         '</div>';
 
@@ -803,9 +807,11 @@ function renderWarnaKombinasiSection() {
     html += '<div class="ganti-kombinasi"><a id="linkGantiKombinasi">Ganti kombinasi</a></div>';
     w.forEach(function (warna, i) {
       html += '<div class="kombi-warna-section">' +
-        '<div class="sub-title">Kg + Kode Roll - ' + escapeHtml(warna) + '</div>' +
+        '<div class="sub-title-row"><span class="sub-title">Kg + Kode Roll - ' + escapeHtml(warna) + '</span>' +
+        (i === 0 ? '<label class="chk-sub"><input type="checkbox" id="chkPakaiHabisKombi0" ' + (itemBaru.kombinasi.pakaiHabis0 ? 'checked' : '') + '> Pakai habis</label>' : '') +
+        '</div>' +
         '<div class="sub-fields">' +
-        '<input type="number" class="kg-mini" data-kidx="' + i + '" placeholder="kg" value="' + (itemBaru.kombinasi.kg[i] || '') + '">' +
+        '<input type="number" class="kg-mini" data-kidx="' + i + '" placeholder="kg" value="' + (itemBaru.kombinasi.kg[i] || '') + '"' + (i === 0 && itemBaru.kombinasi.pakaiHabis0 ? ' readonly' : '') + '>' +
         '<input type="text" class="autocomplete-input roll-mini-input" data-kidx="' + i + '" placeholder="Kode roll" autocomplete="off" value="' + escapeAttr(itemBaru.kombinasi.kodeRoll[i] || '') + '">' +
         '</div>' +
         '<div class="kg-warning-text" id="kgWarning-' + i + '" style="display:none;"></div>' +
@@ -837,9 +843,11 @@ function renderWarnaRingerSection() {
     html += '<div class="ganti-kombinasi"><a id="linkGantiKombinasi">Ganti kombinasi</a></div>';
     w.forEach(function (warna, i) {
       html += '<div class="kombi-warna-section">' +
-        '<div class="sub-title">Kg + Kode Roll - ' + escapeHtml(warna) + '</div>' +
+        '<div class="sub-title-row"><span class="sub-title">Kg + Kode Roll - ' + escapeHtml(warna) + '</span>' +
+        (i === 0 ? '<label class="chk-sub"><input type="checkbox" id="chkPakaiHabisKombi0" ' + (itemBaru.kombinasi.pakaiHabis0 ? 'checked' : '') + '> Pakai habis</label>' : '') +
+        '</div>' +
         '<div class="sub-fields">' +
-        '<input type="number" class="kg-mini" data-kidx="' + i + '" placeholder="kg" value="' + (itemBaru.kombinasi.kg[i] || '') + '">' +
+        '<input type="number" class="kg-mini" data-kidx="' + i + '" placeholder="kg" value="' + (itemBaru.kombinasi.kg[i] || '') + '"' + (i === 0 && itemBaru.kombinasi.pakaiHabis0 ? ' readonly' : '') + '>' +
         '<input type="text" class="autocomplete-input roll-mini-input" data-kidx="' + i + '" placeholder="Kode roll" autocomplete="off" value="' + escapeAttr(itemBaru.kombinasi.kodeRoll[i] || '') + '">' +
         '</div>' +
         '<div class="kg-warning-text" id="kgWarning-' + i + '" style="display:none;"></div>' +
@@ -902,18 +910,24 @@ function pasangEventDetailCard() {
   const chkEstimasi = document.getElementById('chkEstimasi');
   if (chkEstimasi) chkEstimasi.addEventListener('change', function () { itemBaru.estimasi = chkEstimasi.checked; });
 
-  // v.25: checkbox Pakai Habis - isi Kg Kain Terpakai otomatis dari kg_sisa roll yang lagi
-  // kepilih. Kalau roll belum dipilih pas dicentang, dibiarkan kosong dulu (nanti keisi
-  // otomatis begitu roll dipilih - lihat handler data-pick-roll di renderRollSuggestions).
+  // v.26: checkbox Pakai Habis - isi Kg Kain Terpakai otomatis dari kg_sisa roll yang lagi
+  // kepilih. SENGAJA manipulasi .value/.readOnly langsung, BUKAN renderDetailCard() - render
+  // ulang sempat bikin bug: format "Roll <kode> / <kg>kg" di kotak Kode Roll ke-reset balik jadi
+  // cuma kode-nya doang (itemBaru.kodeRoll gak nyimpen format lengkap itu, cuma disetel manual
+  // ke .value pas roll dipilih - sama persis pola yang sudah dipakai di renderKombiRollSuggestions).
   const chkPakaiHabis = document.getElementById('chkPakaiHabis');
   if (chkPakaiHabis) {
     chkPakaiHabis.addEventListener('change', function () {
       itemBaru.pakaiHabis = chkPakaiHabis.checked;
-      if (chkPakaiHabis.checked) {
-        const kgSisa = cariKgRollTerpilih_(itemBaru.warna, itemBaru.kodeRoll);
-        if (kgSisa !== null) itemBaru.kg = String(kgSisa);
+      const inputKg = document.getElementById('inputKg');
+      if (inputKg) {
+        inputKg.readOnly = chkPakaiHabis.checked;
+        if (chkPakaiHabis.checked) {
+          const kgSisa = cariKgRollTerpilih_(itemBaru.warna, itemBaru.kodeRoll);
+          if (kgSisa !== null) { itemBaru.kg = String(kgSisa); inputKg.value = itemBaru.kg; }
+        }
+        cekKgLebih99(inputKg, document.getElementById('kgWarningInfo'));
       }
-      renderDetailCard();
     });
   }
 
@@ -933,7 +947,7 @@ function pasangEventDetailCard() {
     el.addEventListener('click', function () {
       const w1w2 = el.dataset.nama.split(' ');
       const w3 = el.dataset.ketiga;
-      itemBaru.kombinasi = { warna: [w1w2[0], w1w2.slice(1).join(' '), w3], kg: ['', '', ''], kodeRoll: [null, null, null] };
+      itemBaru.kombinasi = { warna: [w1w2[0], w1w2.slice(1).join(' '), w3], kg: ['', '', ''], kodeRoll: [null, null, null], pakaiHabis0: false };
       openDropdown = null;
       renderDetailCard();
       itemBaru.kombinasi.warna.forEach(function (w, i) { renderKombiRollSuggestions(i, ''); });
@@ -942,7 +956,7 @@ function pasangEventDetailCard() {
   document.querySelectorAll('[data-nama-ring]').forEach(function (el) {
     el.addEventListener('click', function () {
       const parts = el.dataset.namaRing.split(' ');
-      itemBaru.kombinasi = { warna: [parts[0], parts.slice(1).join(' ')], kg: ['', ''], kodeRoll: [null, null] };
+      itemBaru.kombinasi = { warna: [parts[0], parts.slice(1).join(' ')], kg: ['', ''], kodeRoll: [null, null], pakaiHabis0: false };
       openDropdown = null;
       renderDetailCard();
       itemBaru.kombinasi.warna.forEach(function (w, i) { renderKombiRollSuggestions(i, ''); });
@@ -950,6 +964,26 @@ function pasangEventDetailCard() {
   });
   const linkGanti = document.getElementById('linkGantiKombinasi');
   if (linkGanti) linkGanti.addEventListener('click', function () { itemBaru.kombinasi = null; renderDetailCard(); });
+
+  // v.26: checkbox Pakai Habis buat slot warna PERTAMA di mode Kombinasi 3 Warna/Ringer (warna
+  // ke-2/3 sengaja gak dikasih, sesuai request). Pola sama kayak mode tunggal - manipulasi DOM
+  // langsung, BUKAN renderDetailCard(), biar format "Roll X / Ykg" di kotak roll gak ke-reset.
+  const chkPakaiHabisKombi0 = document.getElementById('chkPakaiHabisKombi0');
+  if (chkPakaiHabisKombi0) {
+    chkPakaiHabisKombi0.addEventListener('change', function () {
+      if (!itemBaru.kombinasi) return;
+      itemBaru.kombinasi.pakaiHabis0 = chkPakaiHabisKombi0.checked;
+      const kgInput0 = document.querySelector('.kg-mini[data-kidx="0"]');
+      if (kgInput0) {
+        kgInput0.readOnly = chkPakaiHabisKombi0.checked;
+        if (chkPakaiHabisKombi0.checked) {
+          const kgSisa = cariKgRollTerpilih_(itemBaru.kombinasi.warna[0], itemBaru.kombinasi.kodeRoll[0]);
+          if (kgSisa !== null) { itemBaru.kombinasi.kg[0] = String(kgSisa); kgInput0.value = itemBaru.kombinasi.kg[0]; }
+        }
+        cekKgLebih99(kgInput0, document.getElementById('kgWarning-0'));
+      }
+    });
+  }
 
   document.querySelectorAll('.kg-mini').forEach(function (el) {
     const idx = parseInt(el.dataset.kidx, 10);
@@ -1095,6 +1129,12 @@ function renderKombiRollSuggestions(idx, query) {
       const inputEl = document.querySelector('.roll-mini-input[data-kidx="' + idx + '"]');
       if (inputEl) inputEl.value = 'Roll ' + (itemBaru.kombinasi.kodeRoll[idx] || '-') + ' / ' + el.dataset.kg + 'kg';
       box.innerHTML = '';
+      // v.26: slot warna pertama + checkbox Pakai Habis aktif -> kg ikut roll BARU yang dipilih
+      if (idx === 0 && itemBaru.kombinasi.pakaiHabis0) {
+        itemBaru.kombinasi.kg[0] = String(el.dataset.kg);
+        const kgInput0 = document.querySelector('.kg-mini[data-kidx="0"]');
+        if (kgInput0) { kgInput0.value = itemBaru.kombinasi.kg[0]; cekKgLebih99(kgInput0, document.getElementById('kgWarning-0')); }
+      }
     });
   });
 }
