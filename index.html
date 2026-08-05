@@ -1,12 +1,11 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.13
+HTML PRODUKSI (Supabase/testproduksi) - ver.14
 ============================================================
-PERUBAHAN ver.13: tombol Refresh dikecilin/dibikin compact (padding & font diturunkan), dan
-warnanya sekarang ikut var(--mode-accent) - teal pas mode Anak, abu slate pas mode Dewasa
-(sebelumnya biru tetap di kedua mode). Background tetap putih solid biar kontras tetap
-terjamin. Riwayat lengkap: git log.
+PERUBAHAN ver.14: koreksi ver.13 - Denny konfirmasi yang harus ikut ganti warna itu ISI
+ROUNDBOX tombol Refresh (background solid), bukan warna teksnya doang. Sekarang background
+solid teal (Anak) / slate (Dewasa), teks putih biar tetap kebaca. Riwayat lengkap: git log.
 ============================================================
 
 HTML PRODUKSI (Supabase/testproduksi) - ver.07
@@ -132,14 +131,12 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
   .header-right { text-align: right; }
   .ver-badge { display: inline-block; background: var(--navy); color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; margin-bottom: 6px; }
   .link-btn { display: block; background: none; border: none; font-size: 13px; cursor: pointer; padding: 2px 0; text-align: right; width: 100%; }
-  /* v.13: 2 penyesuaian request Denny - (1) dikecilin/dibikin lebih compact (padding & font
-     diturunkan), (2) warnanya sekarang ikut var(--mode-accent) - jadi teal pas mode Anak, abu
-     slate pas mode Dewasa - bukan biru tetap kayak sebelumnya. Background tetap putih solid
-     (bukan ikut warna aksen juga) biar kontrasnya tetap terjamin di kedua background halaman,
-     cuma border+teksnya yang ikut berubah sesuai mode aktif. */
+  /* v.14: koreksi ver.13 - yang harusnya ikut ganti warna itu ISI ROUNDBOX-nya (background),
+     bukan warna teks doang. Sekarang background solid ikut var(--mode-accent) (teal pas Anak,
+     slate pas Dewasa), teks putih biar tetap kebaca jelas di atas warna solid manapun. */
   .link-btn.refresh {
-    display: inline-block; width: auto; background: #fff; color: var(--mode-accent-dark);
-    border: 1.5px solid var(--mode-accent); border-radius: 16px; padding: 4px 10px;
+    display: inline-block; width: auto; background: var(--mode-accent); color: #fff;
+    border: 1.5px solid var(--mode-accent-dark); border-radius: 16px; padding: 4px 10px;
     font-size: 12px; font-weight: 700; box-shadow: 0 1px 4px rgba(0,0,0,0.12);
   }
   .link-btn.atur { color: var(--orange-link); }
