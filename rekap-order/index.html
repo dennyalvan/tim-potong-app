@@ -427,6 +427,8 @@ body {
   text-align: center; padding: 60px 20px;
   background: var(--ios-surface); border-radius: var(--radius);
   box-shadow: var(--shadow);
+  break-inside: avoid; -webkit-column-break-inside: avoid;
+  column-span: all; -webkit-column-span: all;
 }
 .empty-emoji { font-size: 44px; margin-bottom: 14px; }
 .empty-title { font-size: 17px; font-weight: 600; margin-bottom: 6px; }
@@ -566,6 +568,7 @@ function toggleTheme() { isDark = !isDark; applyTheme(); }
 // ── STATE ──
 let varianData = [], karakterData = [];
 let resiData = { totalResi: 0, totalPcs: 0, breakdown: [], pcsDetails: {} };
+let excludedInfo = { count: 0, qty: 0 };
 let varianMode = 'default', karMode = 'az', resiMode = 'default';
 const GROUP_COLORS = ['tag-0','tag-1','tag-2','tag-3','tag-4','tag-5','tag-6','tag-7','tag-8'];
 
@@ -598,7 +601,7 @@ function processExcel(buffer, filename) {
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
-  let headerRow = -1, colN = -1, colO = -1, colR = -1;
+  let headerRow = -1, colN = -1, colO = -1, colR = -1, colStatus = -1;
   for (let i = 0; i < Math.min(10, rows.length); i++) {
     const r = rows[i];
     for (let j = 0; j < r.length; j++) {
@@ -606,33 +609,61 @@ function processExcel(buffer, filename) {
       if (v.includes('Nomor Referensi SKU')) colN = j;
       if (v.includes('Nama Variasi')) colO = j;
       if (v === 'Jumlah') colR = j;
+      if (v === 'Status Pesanan') colStatus = j;
     }
     if (colN >= 0 && colO >= 0 && colR >= 0) { headerRow = i; break; }
   }
   if (headerRow < 0) throw new Error('Kolom header tidak ditemukan');
-  const data = rows.slice(headerRow + 1).filter(r => r[colN] || r[colO]);
+  let data = rows.slice(headerRow + 1).filter(r => r[colN] || r[colO]);
+
+  // Buang baris yang bukan "Perlu Dikirim" (misal: Pembatalan diajukan) — jangan ikut dihitung
+  let excludedCount = 0, excludedQty = 0;
+  if (colStatus >= 0) {
+    data = data.filter(r => {
+      const st = String(r[colStatus] || '').trim();
+      if (st && st !== 'Perlu Dikirim') {
+        excludedCount++;
+        excludedQty += parseFloat(r[colR]) || 0;
+        return false;
+      }
+      return true;
+    });
+  }
+  if (excludedCount > 0) {
+    console.warn(`Dikecualikan ${excludedCount} baris (${excludedQty} pcs) berstatus bukan "Perlu Dikirim"`);
+  }
+  excludedInfo = { count: excludedCount, qty: excludedQty };
 
   const REG_PREFIXES = ['RFL ','ONESET ','SPEN.','PJ ','SET.','CP ','LT ','CRG-PJG','CARGO','LS24','TS24','TS ','CUSTOM'];
   const SIZE_ORDER = ['S','M','L','XL','XXL'];
 
-  // VARIAN
-  const skuQty = {};
+  // VARIAN — bangun langsung per baris (bukan pre-sum per SKU) supaya item
+  // tanpa pola "- UKURAN" (mis. produk custom/sablon) tidak hilang begitu saja,
+  // dan variasi berbeda di bawah SKU yang sama tidak tercampur.
+  const groupMap = {}, groupOrder = [];
+  const labelMap = {'RFL':'RFL','ONESET':'ONESET','SPEN':'SPEN','PJ':'PJ','SET':'SET','CP':'CP','LT':'LT','CRGPJG':'CRG-PJG','CARGO':'CARGO','LS24':'LS24','TS24':'TS24','TS':'TS','CUSTOM':'CUSTOM'};
   data.forEach(r => {
     const sku = String(r[colN] || '').trim();
     const qty = parseFloat(r[colR]) || 0;
     if (!sku || qty === 0) return;
-    skuQty[sku] = (skuQty[sku] || 0) + qty;
-  });
-  const groupMap = {}, groupOrder = [];
-  Object.entries(skuQty).forEach(([sku, qty]) => {
     const prefix = REG_PREFIXES.find(p => sku.startsWith(p));
-    const groupKey = prefix ? prefix.trim().replace('.','').replace('-','') : 'ANAK POLOS';
-    const labelMap = {'RFL':'RFL','ONESET':'ONESET','SPEN':'SPEN','PJ':'PJ','SET':'SET','CP':'CP','LT':'LT','CRGPJG':'CRG-PJG','CARGO':'CARGO','LS24':'LS24','TS24':'TS24','TS':'TS','CUSTOM':'CUSTOM','ANAK POLOS':'ANAK POLOS'};
-    const label = labelMap[groupKey] || groupKey;
     const m = sku.match(/ - (.+)$/);
-    if (!m) return;
-    const ukuran = m[1].replace(/[()]/g,'').trim();
-    const warna = sku.slice(0, m.index).trim();
+
+    let label, warna, ukuran;
+    if (m) {
+      ukuran = m[1].replace(/[()]/g,'').trim();
+      warna = sku.slice(0, m.index).trim();
+      const groupKey = prefix ? prefix.trim().replace('.','').replace('-','') : 'ANAK POLOS';
+      label = labelMap[groupKey] || groupKey || 'ANAK POLOS';
+    } else {
+      // Tidak match pola ukuran (mis. "SABLON CUSTOM") — jangan dibuang,
+      // masukkan ke grup LAINNYA, pakai Nama Variasi sbg label detail.
+      label = 'LAINNYA';
+      warna = sku;
+      const varRaw = String(r[colO] || '').trim();
+      ukuran = varRaw || 'Item';
+    }
+
     if (!groupMap[label]) { groupMap[label] = {}; groupOrder.push(label); }
     if (!groupMap[label][warna]) groupMap[label][warna] = {};
     groupMap[label][warna][ukuran] = (groupMap[label][warna][ukuran] || 0) + qty;
@@ -718,6 +749,7 @@ function doClear() {
   closeModal();
   varianData = []; karakterData = [];
   resiData = { totalResi: 0, totalPcs: 0, breakdown: [], pcsDetails: {} };
+  excludedInfo = { count: 0, qty: 0 };
   document.getElementById('subtitle').textContent = 'Shopee · Perlu Dikirim';
   renderVarian(); renderKarakter(); renderResi();
 }
@@ -782,7 +814,10 @@ function renderVarian() {
       </div>${rows}</div>`;
   }).join('');
   const total = varianData.reduce((s,g)=>s+g.total,0);
-  grand.innerHTML = `<div class="footer-total"><span class="ft-item">Grand Total: <strong>${total} pcs</strong></span></div>`;
+  grand.innerHTML = `<div class="footer-total">
+    ${excludedInfo.count > 0 ? `<span class="ft-item" style="color:var(--red)">⚠ ${excludedInfo.count} pesanan (${excludedInfo.qty} pcs) dikecualikan — status pembatalan</span>` : ''}
+    <span class="ft-item">Grand Total: <strong>${total} pcs</strong></span>
+  </div>`;
 }
 
 // ── RENDER KARAKTER ──
