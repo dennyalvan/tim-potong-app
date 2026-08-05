@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.14
+HTML PRODUKSI (Supabase/testproduksi) - ver.15
 ============================================================
-PERUBAHAN ver.14: koreksi ver.13 - Denny konfirmasi yang harus ikut ganti warna itu ISI
-ROUNDBOX tombol Refresh (background solid), bukan warna teksnya doang. Sekarang background
-solid teal (Anak) / slate (Dewasa), teks putih biar tetap kebaca. Riwayat lengkap: git log.
+PERUBAHAN ver.15: teks di kotak kg & kode roll mode kombinasi warna sekarang bold (font-weight
+600) begitu diisi - samain sama gaya field lain (mis. Kg Kain Terpakai/Kode Roll di mode
+tunggal). Placeholder-nya ("kg"/"Kode roll") tetap normal biar beda jelas sama yang udah keisi.
+Riwayat lengkap: git log.
 ============================================================
 
 HTML PRODUKSI (Supabase/testproduksi) - ver.07
@@ -222,8 +223,9 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
   .kombi-warna-section { padding: 10px 16px 14px; border-bottom: 1px solid var(--border); }
   .kombi-warna-section .sub-title { font-size: 11.5px; font-weight: 650; color: var(--gray-label); margin: 10px 0 4px; }
   .kombi-warna-section .sub-fields { display: flex; gap: 8px; }
-  .kombi-warna-section input.kg-mini { flex: 0 0 70px; min-width: 0; padding: 9px 8px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; background: var(--bg); }
-  .kombi-warna-section input.roll-mini-input, .kombi-warna-section input.roll-mini-input-custom { flex: 1; min-width: 0; padding: 9px 8px; border-radius: 8px; font-size: 13.5px; background: var(--bg); text-overflow: ellipsis; }
+  .kombi-warna-section input.kg-mini { flex: 0 0 70px; min-width: 0; padding: 9px 8px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-weight: 600; background: var(--bg); }
+  .kombi-warna-section input.roll-mini-input, .kombi-warna-section input.roll-mini-input-custom { flex: 1; min-width: 0; padding: 9px 8px; border-radius: 8px; font-size: 13.5px; font-weight: 600; background: var(--bg); text-overflow: ellipsis; }
+  .kombi-warna-section input.kg-mini::placeholder, .kombi-warna-section input.roll-mini-input::placeholder, .kombi-warna-section input.roll-mini-input-custom::placeholder { font-weight: 500; color: #9aa3b2; }
 
   .autocomplete-input { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 10px; font-size: 15px; }
   .suggestion-list { max-height: 260px; overflow-y: auto; overflow-x: hidden; margin-top: 8px; border-radius: 14px; border: 1px solid var(--border); }
