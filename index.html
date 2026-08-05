@@ -1,12 +1,11 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.15
+HTML PRODUKSI (Supabase/testproduksi) - ver.16
 ============================================================
-PERUBAHAN ver.15: teks di kotak kg & kode roll mode kombinasi warna sekarang bold (font-weight
-600) begitu diisi - samain sama gaya field lain (mis. Kg Kain Terpakai/Kode Roll di mode
-tunggal). Placeholder-nya ("kg"/"Kode roll") tetap normal biar beda jelas sama yang udah keisi.
-Riwayat lengkap: git log.
+PERUBAHAN ver.16: font diganti ke Space Grotesk (request Denny, samain sama dashboard.html) -
+sebelumnya index.html gak pernah load web font sama sekali (murni system font stack), sekarang
+nambah link Google Fonts + weight 400/500/600/700. Riwayat lengkap: git log.
 ============================================================
 
 HTML PRODUKSI (Supabase/testproduksi) - ver.07
@@ -83,6 +82,9 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Input Produksi - Tim Potong</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root {
@@ -118,7 +120,7 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
   }
   body {
     margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-family: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     background: var(--page-bg);
     color: #1c1c1e;
     padding-bottom: 90px;

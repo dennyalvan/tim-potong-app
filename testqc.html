@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.23
+DASHBOARD ver.24
 ============================================================
-PERUBAHAN ver.23: tombol "Sinkron" & "Refresh" di header dibedain (request Denny - keduanya
-sebelumnya sama persis bentuknya cuma beda warna outline, rawan salah tekan). Sinkron sekarang
-solid hijau + radius kotak (bukan pill) + ikon 📤 (beda dari 🔄 Refresh) - 3 lapis pembeda
-sekaligus (isi, bentuk, ikon). Riwayat lengkap: git log.
+PERUBAHAN ver.24: font seluruh dashboard diganti dari Inter ke Space Grotesk (request Denny,
+samain sama index.html). Space Grotesk cuma tersedia weight 400/500/600/700 (gak ada 800) -
+elemen yang minta 800 otomatis jatuh ke 700 terdekat, gak ada yang error/kosong. Riwayat
+lengkap: git log.
 
 CATATAN KEAMANAN (tetap berlaku, bukan cuma soal 1 versi): token di URL SYNC_AKUNTANSI_URL di
 bawah ini KELIHATAN oleh siapapun yang buka "view source" halaman ini (file statis publik di
@@ -23,7 +23,7 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
 <title>Dashboard Produksi & QC</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
@@ -46,7 +46,7 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
     --danger-bg: #F3E1DE;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: #292B31; padding-bottom: 20px; }
+  body { margin: 0; font-family: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: #292B31; padding-bottom: 20px; }
   #app { max-width: 520px; margin: 0 auto; padding: 16px; }
 
   .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
