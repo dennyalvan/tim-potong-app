@@ -1,0 +1,16 @@
+name = "shopee-order-sync"
+main = "worker/index.js"
+compatibility_date = "2024-09-23"
+
+# KV buat nyimpen access_token & refresh_token per shop_id.
+# Cara bikin: `wrangler kv namespace create SHOPEE_KV`
+# lalu tempel "id" hasilnya di bawah ini (ganti PLACEHOLDER).
+[[kv_namespaces]]
+binding = "SHOPEE_KV"
+id = "PLACEHOLDER_GANTI_SETELAH_BUAT_NAMESPACE"
+
+# Secrets (JANGAN ditulis di sini — set lewat CLI atau dashboard Cloudflare):
+#   wrangler secret put SHOPEE_PARTNER_ID
+#   wrangler secret put SHOPEE_PARTNER_KEY
+#   wrangler secret put SHOPEE_REDIRECT_URL
+# Nilainya didapat setelah didaftarkan & approved di open.shopee.com
