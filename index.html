@@ -1,13 +1,19 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.10
+HTML PRODUKSI (Supabase/testproduksi) - ver.11
 ============================================================
-PERUBAHAN ver.10: 3 perbaikan dari review Denny. (1) Background HALAMAN juga ikut gelap pas
-mode Dewasa (var(--page-bg) terpisah dari var(--bg)). (2) FIX kotak "Kode Roll" di mode
-kombinasi warna suka kepotong di layar HP - sebelumnya abis pilih dari saran, kotaknya ditulis
-string panjang "Roll 0846 / 24.8kg" (redundan, kg-nya udah ada di kotak sebelah) - sekarang
-cuma kode rollnya doang + flex/min-width dibenerin biar 2 kotak (kg & roll) berbagi ruang adil.
+PERUBAHAN ver.11: 2 koreksi dari review Denny atas ver.10.
+  1. Fix ver.10 KELIRU - Denny konfirmasi format "Roll <kode> / <kg>kg" di kotak Kode Roll
+     kombinasi warna MEMANG HARUS tetap tampil (bukan cuma kode doang) - dikembalikan, dan
+     solusi overflow-nya benar-benar cuma soal LEBAR kolom: kg-mini sekarang lebar tetap kecil
+     (70px), roll-mini-input dapat sisa ruang (flex:1) buat nampung teks yang lebih panjang.
+     Ketahuan juga efek samping renderDetailCard() dari fix ver.10 kemarin: box saran roll
+     re-muncul sendiri gara-gara event focus ke-trigger ulang - sekarang set .value langsung,
+     gak render ulang.
+  2. Kontras tombol "+ Tambah ke Daftar"/"Buat Teks" kurang pas di mode Dewasa (warnanya
+     dirancang buat background terang) - ditambah override khusus mode Dewasa + --page-bg
+     digelapin 1 tingkat lagi (dde3ec -> c7d0dc).
 Riwayat lengkap: git log.
 ============================================================
 ============================================================
@@ -117,7 +123,7 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
     --mode-accent: #475569;
     --mode-accent-dark: #1e293b;
     --mode-accent-rgb: 71,85,105;
-    --page-bg: #dde3ec;
+    --page-bg: #c7d0dc;
   }
   body {
     margin: 0;
@@ -219,8 +225,8 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
   .kombi-warna-section { padding: 10px 16px 14px; border-bottom: 1px solid var(--border); }
   .kombi-warna-section .sub-title { font-size: 11.5px; font-weight: 650; color: var(--gray-label); margin: 10px 0 4px; }
   .kombi-warna-section .sub-fields { display: flex; gap: 8px; }
-  .kombi-warna-section input.kg-mini { flex: 1; min-width: 0; padding: 9px 8px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; background: var(--bg); }
-  .kombi-warna-section input.roll-mini-input, .kombi-warna-section input.roll-mini-input-custom { flex: 1.3; min-width: 0; padding: 9px 8px; border-radius: 8px; font-size: 14px; background: var(--bg); text-overflow: ellipsis; }
+  .kombi-warna-section input.kg-mini { flex: 0 0 70px; min-width: 0; padding: 9px 8px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; background: var(--bg); }
+  .kombi-warna-section input.roll-mini-input, .kombi-warna-section input.roll-mini-input-custom { flex: 1; min-width: 0; padding: 9px 8px; border-radius: 8px; font-size: 13.5px; background: var(--bg); text-overflow: ellipsis; }
 
   .autocomplete-input { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 10px; font-size: 15px; }
   .suggestion-list { max-height: 260px; overflow-y: auto; overflow-x: hidden; margin-top: 8px; border-radius: 14px; border: 1px solid var(--border); }
@@ -265,6 +271,13 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
   .btn.tambah { background: #dbe4fb; color: var(--navy); }
   .btn.buatteks { background: var(--navy); color: #fff; }
   .btn.buatteks:disabled { background: #c4c4c4; color: #8a8a8a; }
+  /* v.11: kontras tombol bawah kurang pas di mode Dewasa (request Denny) - warna aslinya
+     (#dbe4fb terang, navy gelap) dirancang buat background terang; begitu --page-bg ikut
+     digelapin, tombol.tambah yang terang jadi nyaris nyatu sama background. Override khusus
+     di sini: tombol.tambah dibikin lebih terang lagi (bukan makin gelap) biar tetap menonjol
+     kontras dari background medium-gelapnya, tombol.buatteks tetap gelap pekat. */
+  body.mode-dewasa .btn.tambah { background: #f1f5f9; color: #1e293b; }
+  body.mode-dewasa .btn.buatteks { background: #1e293b; color: #fff; }
   .btn.kirim { background: var(--green); color: #fff; width: 100%; padding: 16px; font-size: 15px; border-radius: 12px; border: none; font-weight: 700; cursor: pointer; }
   .btn.kirim:disabled { background: #9ad9ae; cursor: wait; }
   .btn.secondary { flex: 1; background: #dbe4fb; color: var(--navy); padding: 14px; border-radius: 12px; border: none; font-weight: 700; cursor: pointer; }
@@ -989,7 +1002,13 @@ function renderCustomRollSuggestions(idx, query) {
       e.preventDefault();
       const i = parseInt(el.dataset.idx, 10);
       itemBaru.kombinasi.kodeRoll[i] = el.dataset.pickCroll || null;
-      renderDetailCard();
+      // v.11: tampilin lagi format lengkap "Roll <kode> / <kg>kg" (request Denny - infonya
+      // emang harus tetap kelihatan, bukan cuma kodenya doang). Set langsung via .value (BUKAN
+      // renderDetailCard()) - manggil render ulang sempat bikin bug baru: box saran ke-refresh
+      // lagi gara-gara event focus ke-trigger ulang di input yang baru dibuat.
+      const inputEl = document.querySelector('.roll-mini-input-custom[data-crollidx="' + i + '"]');
+      if (inputEl) inputEl.value = 'Roll ' + (itemBaru.kombinasi.kodeRoll[i] || '-') + ' / ' + el.dataset.kg + 'kg';
+      box.innerHTML = '';
     });
   });
 }
@@ -1014,13 +1033,15 @@ function renderKombiRollSuggestions(idx, query) {
   box.querySelectorAll('[data-pick-kombi-roll]').forEach(function (el) {
     el.addEventListener('mousedown', function (e) {
       e.preventDefault();
-      // v.10: FIX overflow - sebelumnya nulis string panjang "Roll 0846 / 24.8kg" LANGSUNG ke
-      // kotak roll (ketutupan di layar HP), padahal kg-nya udah kelihatan di kotak sebelah
-      // (kg-mini). Sekarang simpan kode roll-nya doang + render ulang, sama kayak handler
-      // "Ganti kombinasi" custom yang emang udah bener dari awal.
+      // v.11: tampilin lagi format lengkap "Roll <kode> / <kg>kg" (request Denny - infonya
+      // emang harus tetap kelihatan, bukan cuma kodenya doang). Set langsung via .value (BUKAN
+      // renderDetailCard()) - manggil render ulang sempat bikin bug baru: box saran ke-refresh
+      // lagi gara-gara event focus ke-trigger ulang di input yang baru dibuat. Lebar kolomnya
+      // sendiri dibenerin lewat CSS (kg-mini dikecilin), bukan lewat motong info yang tampil.
       itemBaru.kombinasi.kodeRoll[idx] = el.dataset.pickKombiRoll || null;
+      const inputEl = document.querySelector('.roll-mini-input[data-kidx="' + idx + '"]');
+      if (inputEl) inputEl.value = 'Roll ' + (itemBaru.kombinasi.kodeRoll[idx] || '-') + ' / ' + el.dataset.kg + 'kg';
       box.innerHTML = '';
-      renderDetailCard();
     });
   });
 }
