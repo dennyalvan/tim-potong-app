@@ -1,15 +1,11 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.26
+HTML PRODUKSI (Supabase/testproduksi) - ver.27
 ============================================================
-PERUBAHAN ver.26 (koreksi fitur Pakai Habis dari ver.25): (1) label checkbox disingkat jadi
-cuma "Pakai habis" (keterangan tambahan dihapus). (2) fix bug: centang checkbox sempat bikin
-format "Roll <kode> / <kg>kg" di kotak Kode Roll balik jadi cuma kode doang - akar masalahnya
-handler checkbox manggil renderDetailCard() (render ulang), sekarang diganti manipulasi
-.value/.readOnly langsung (pola yang sama dipakai renderKombiRollSuggestions). (3) checkbox
-Pakai Habis versi mode Kombinasi 3 Warna & Ringer ditambahkan, TAPI cuma di slot warna PERTAMA
-(warna ke-2/3 sengaja tidak) - ditaruh sebaris di sebelah label "Kg + Kode Roll - <Warna>".
+PERUBAHAN ver.27 (koreksi fitur Pakai Habis dari ver.26): uncentang checkbox "Pakai habis"
+(mode tunggal maupun slot warna pertama di Kombinasi/Ringer) sekarang ikut MENGOSONGKAN angka
+kg-nya, bukan cuma balikin field jadi bisa-diedit sambil angka otomatis lama masih nempel.
 Riwayat lengkap: git log.
 ============================================================
 ============================================================
@@ -910,11 +906,9 @@ function pasangEventDetailCard() {
   const chkEstimasi = document.getElementById('chkEstimasi');
   if (chkEstimasi) chkEstimasi.addEventListener('change', function () { itemBaru.estimasi = chkEstimasi.checked; });
 
-  // v.26: checkbox Pakai Habis - isi Kg Kain Terpakai otomatis dari kg_sisa roll yang lagi
-  // kepilih. SENGAJA manipulasi .value/.readOnly langsung, BUKAN renderDetailCard() - render
-  // ulang sempat bikin bug: format "Roll <kode> / <kg>kg" di kotak Kode Roll ke-reset balik jadi
-  // cuma kode-nya doang (itemBaru.kodeRoll gak nyimpen format lengkap itu, cuma disetel manual
-  // ke .value pas roll dipilih - sama persis pola yang sudah dipakai di renderKombiRollSuggestions).
+  // v.27 (koreksi v.26): uncentang Pakai Habis SEKARANG ikut mengosongkan angka kg (bukan
+  // cuma balikin jadi bisa-diedit sambil angka lama masih nempel) - sesuai request Denny,
+  // biar jelas kelihatan itu harus diisi ulang, bukan angka otomatis yang keliru dikira manual.
   const chkPakaiHabis = document.getElementById('chkPakaiHabis');
   if (chkPakaiHabis) {
     chkPakaiHabis.addEventListener('change', function () {
@@ -925,6 +919,9 @@ function pasangEventDetailCard() {
         if (chkPakaiHabis.checked) {
           const kgSisa = cariKgRollTerpilih_(itemBaru.warna, itemBaru.kodeRoll);
           if (kgSisa !== null) { itemBaru.kg = String(kgSisa); inputKg.value = itemBaru.kg; }
+        } else {
+          itemBaru.kg = '';
+          inputKg.value = '';
         }
         cekKgLebih99(inputKg, document.getElementById('kgWarningInfo'));
       }
@@ -965,9 +962,10 @@ function pasangEventDetailCard() {
   const linkGanti = document.getElementById('linkGantiKombinasi');
   if (linkGanti) linkGanti.addEventListener('click', function () { itemBaru.kombinasi = null; renderDetailCard(); });
 
-  // v.26: checkbox Pakai Habis buat slot warna PERTAMA di mode Kombinasi 3 Warna/Ringer (warna
+  // v.27: checkbox Pakai Habis buat slot warna PERTAMA di mode Kombinasi 3 Warna/Ringer (warna
   // ke-2/3 sengaja gak dikasih, sesuai request). Pola sama kayak mode tunggal - manipulasi DOM
   // langsung, BUKAN renderDetailCard(), biar format "Roll X / Ykg" di kotak roll gak ke-reset.
+  // Uncentang -> kg dikosongin (bukan cuma balik jadi bisa-diedit).
   const chkPakaiHabisKombi0 = document.getElementById('chkPakaiHabisKombi0');
   if (chkPakaiHabisKombi0) {
     chkPakaiHabisKombi0.addEventListener('change', function () {
@@ -979,6 +977,9 @@ function pasangEventDetailCard() {
         if (chkPakaiHabisKombi0.checked) {
           const kgSisa = cariKgRollTerpilih_(itemBaru.kombinasi.warna[0], itemBaru.kombinasi.kodeRoll[0]);
           if (kgSisa !== null) { itemBaru.kombinasi.kg[0] = String(kgSisa); kgInput0.value = itemBaru.kombinasi.kg[0]; }
+        } else {
+          itemBaru.kombinasi.kg[0] = '';
+          kgInput0.value = '';
         }
         cekKgLebih99(kgInput0, document.getElementById('kgWarning-0'));
       }
