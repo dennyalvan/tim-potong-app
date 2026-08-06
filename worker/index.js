@@ -1,9 +1,10 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.30
+// CODE WORKER PRODUKSI ver.31
 // ============================================================
-// PERUBAHAN ver.30: endpoint baru GET /data/stok-habis - roll yang kg_sisa-nya udah <= 0,
-// dipisah dari /data/stok-utuh (yang sengaja cuma nampilin sisa > 0) buat ditampung bagian
-// "Stok Habis" di dashboard (request Denny, sama polanya kayak Arsip Selesai di Proses & QC).
+// PERUBAHAN ver.31: format pesan notifikasi QC (kirimAtauEditNotifikasiQC_) dirombak total
+// sesuai contoh Denny - sekarang 2 format beda: "✅ LENGKAP 👍" (status selesai) vs "🔴 BELUM
+// LENGKAP" (masih proses), header tanggal, nama item + roll, varian (underline), breakdown
+// per ukuran (cuma yang progressnya > 0), baris Total beda format tergantung lengkap/belum.
 //
 // Riwayat versi lengkap: git log.
 //
@@ -878,6 +879,9 @@ async function handleSubmitQC_(body, env) {
     const totalRejectBaru = perUkuran.reduce(function (s, u) { return s + u.reject + (deltaReject[u.ukuran] || 0); }, 0);
     const sudahSelesaiSemua = (totalSelesaiBaru + totalRejectBaru) >= tp.jumlah;
     const statusBaru = sudahSelesaiSemua ? 'SELESAI' : ('PROSES ' + totalSelesaiBaru + '/' + tp.jumlah + ' (' + totalRejectBaru + ' reject)');
+    // v.31: breakdown SELESAI per ukuran (SETELAH delta submit ini) - dipakai buat baris "XL 44"
+    // dst di pesan notifikasi QC format baru (lihat kirimAtauEditNotifikasiQC_).
+    const perUkuranBaru = perUkuran.map(function (u) { return { ukuran: u.ukuran, selesai: u.selesai + (deltaSelesai[u.ukuran] || 0) }; });
 
     await fetch(env.SUPABASE_URL + '/rest/v1/tim_potong?id=eq.' + timPotongId, {
       method: 'PATCH',
@@ -909,7 +913,7 @@ async function handleSubmitQC_(body, env) {
       });
     }
 
-    const idPesanBaru = await kirimAtauEditNotifikasiQC_(env, tp, totalSelesaiBaru, totalRejectBaru, statusBaru);
+    const idPesanBaru = await kirimAtauEditNotifikasiQC_(env, tp, totalSelesaiBaru, totalRejectBaru, statusBaru, varianQC, perUkuranBaru);
     if (idPesanBaru && idPesanBaru !== tp.id_pesan_qc) {
       await fetch(env.SUPABASE_URL + '/rest/v1/tim_potong?id=eq.' + timPotongId, {
         method: 'PATCH',
@@ -956,18 +960,45 @@ async function ambilInfoWarnaVarianUntukLog_(env, namaItem) {
   }
 }
 
-// Kirim notifikasi BARU ke grup QC, atau EDIT pesan lama kalau tim_potong.id_pesan_qc sudah
-// ada (biar 1 laporan cuma punya 1 bubble Telegram yang keupdate terus, bukan spam pesan baru
-// tiap kali ada progress). Balikin message_id (buat disimpan lagi ke id_pesan_qc kalau baru).
-async function kirimAtauEditNotifikasiQC_(env, tp, totalSelesai, totalReject, statusBaru) {
+// v.31: format direvisi total (contoh Denny) - 2 format beda tergantung status:
+//   LENGKAP:
+//     Sabtu,  1/08/26
+//     ✅ LENGKAP 👍
+//
+//     <b>LS24 SAGE</b> (9103)
+//     <u>DEWASA PANJANG</u>
+//     XL 44
+//     XXL 7
+//     Total: 51
+//   BELUM LENGKAP (baris ukuran cuma yang SUDAH ada progress-nya, sisanya gak ditampilin):
+//     Sabtu,  1/08/26
+//     🔴 BELUM LENGKAP
+//
+//     <b>LS24 SAGE</b> (9103)
+//     <u>DEWASA PANJANG</u>
+//     XXL 7
+//     Total: 7 dari 51
+// CATATAN ASUMSI (belum ada di contoh Denny - reject-nya kebetulan 0 di kedua contoh): kalau
+// totalReject > 0, ditambah 1 baris "Reject: <n>" sebelum baris Total. Kalau ternyata Denny mau
+// beda, gampang diubah - tinggal baris `if (totalReject > 0) teks += ...` di bawah.
+async function kirimAtauEditNotifikasiQC_(env, tp, totalSelesai, totalReject, statusBaru, varianQC, perUkuranBaru) {
   const botToken = env.TELEGRAM_BOT_TOKEN;
   const chatId = env.TELEGRAM_QC_CHAT_ID;
   if (!botToken || !chatId) return null;
 
-  const teks = '<b>' + htmlEscape_(tp.jenis_warna_baju) + '</b>' +
-    (tp.kode_roll ? (' (Roll ' + htmlEscape_(tp.kode_roll) + ')') : '') +
-    '\nStatus: ' + htmlEscape_(statusBaru) +
-    '\nSelesai: ' + totalSelesai + ' | Reject: ' + totalReject + ' | Total: ' + tp.jumlah;
+  const sudahLengkap = statusBaru === 'SELESAI';
+  const headerStatus = sudahLengkap ? '✅ LENGKAP 👍' : '🔴 BELUM LENGKAP';
+  const barisUkuran = (perUkuranBaru || [])
+    .filter(function (u) { return u.selesai > 0; })
+    .map(function (u) { return u.ukuran + ' ' + u.selesai; })
+    .join('\n');
+
+  let teks = formatTanggalIndoJakarta_(new Date()) + '\n' + headerStatus + '\n\n';
+  teks += '<b>' + htmlEscape_(tp.jenis_warna_baju) + '</b>' + (tp.kode_roll ? (' (' + htmlEscape_(tp.kode_roll) + ')') : '') + '\n';
+  if (varianQC) teks += '<u>' + htmlEscape_(varianQC) + '</u>\n';
+  if (barisUkuran) teks += barisUkuran + '\n';
+  if (totalReject > 0) teks += 'Reject: ' + totalReject + '\n';
+  teks += sudahLengkap ? ('Total: ' + tp.jumlah) : ('Total: ' + totalSelesai + ' dari ' + tp.jumlah);
 
   if (tp.id_pesan_qc) {
     const resEdit = await fetch('https://api.telegram.org/bot' + botToken + '/editMessageText', {
