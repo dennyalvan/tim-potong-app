@@ -1,7 +1,18 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.36
+DASHBOARD ver.37
+============================================================
+PERUBAHAN ver.37: fix 2 bug dari laporan Denny atas ver.36.
+  1. FIX BUG PARAH: ver.36 kemarin bikin SEMUA roll fresh di seluruh daftar kehilangan panah
+     expand-nya BARENGAN begitu data riwayat kebaca (dipicu tap 1 roll manapun) - soalnya
+     baris roll dievaluasi ulang pakai data riwayat GLOBAL. Sekarang baris roll SELALU bisa
+     diklik; yang disembunyikan cuma ISI PANEL-nya kalau kosong (bukan pesan "belum ada
+     laporan" - beneran gak nampilin apa-apa), bukan kemampuan klik/panahnya.
+  2. FIX tampilan "Stok Habis" numpuk/overlap di HP - dedicated class stok-habis-item (bukan
+     pakai .arsip-item lagi yang didesain buat layout 2 baris), sekarang 1 baris rata kanan-
+     kiri, nama warna di-truncate (...) kalau kepanjangan, kode roll selalu utuh kebaca.
+Riwayat lengkap: git log.
 ============================================================
 PERUBAHAN ver.36: 2 hal dari request Denny.
   1. FITUR BARU - "Stok Habis" di bawah daftar roll aktif tab Stok Kain, sama polanya kayak
@@ -175,6 +186,12 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .arsip-item { background: #fff; border-radius: 12px; padding: 10px 12px; margin-bottom: 6px; font-size: 13px; display: flex; justify-content: space-between; }
   .arsip-item .nama { font-weight: 700; }
   .arsip-item .meta { color: var(--gray-text); font-size: 11px; }
+  /* v.37: FIX tampilan "Stok Habis" numpuk/overlap di HP (request Denny) - dedicated class,
+     bukan pakai .arsip-item lagi (itu didesain buat 2 baris info, bukan 1 baris rata kanan-
+     kiri). Nama warna di-truncate (...) kalau kepanjangan, kode roll SELALU utuh 1 baris. */
+  .stok-habis-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: #fff; border-radius: 10px; padding: 9px 12px; margin-bottom: 6px; }
+  .stok-habis-item .nama { font-weight: 700; font-size: 12.5px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .stok-habis-item .roll { color: var(--gray-text); font-weight: 600; font-size: 11.5px; white-space: nowrap; flex-shrink: 0; }
 
   .total-card { background: #fff; border-radius: 16px; padding: 16px; margin-bottom: 14px; border-top: 3px solid var(--green); }
   .total-card .label { font-size: 12px; color: var(--gray-text); }
@@ -1002,8 +1019,8 @@ function muatStokHabis() {
         return;
       }
       document.getElementById('stokHabisList').innerHTML = list.map(function (x) {
-        return '<div class="arsip-item"><div class="nama">' + escapeHtml(x.warna) + '</div>' +
-          '<div class="meta">Roll ' + (x.kodeRoll ? escapeHtml(x.kodeRoll) : '-') + '</div></div>';
+        return '<div class="stok-habis-item"><span class="nama">' + escapeHtml(x.warna) + '</span>' +
+          '<span class="roll">Roll ' + (x.kodeRoll ? escapeHtml(x.kodeRoll) : '-') + '</span></div>';
       }).join('');
     })
     .catch(function (e) { tampilkanToast('Gagal memuat stok habis: ' + e.message); });
@@ -1158,15 +1175,11 @@ function renderBarisRoll_(w, r) {
   if (!kode) {
     return '<div class="roll-row" style="cursor:default"><span>Roll -</span><span>' + formatAngka(r.kg) + ' kg</span></div>';
   }
-  // v.36: kalau data riwayat udah kebaca DAN roll ini ternyata belum pernah kepakai sama
-  // sekali (kain masih utuh/fresh), gak usah ditampilin sebagai bisa-diklik/ada riwayat sama
-  // sekali (request Denny) - baris polos aja, sama kayak roll tanpa kode.
-  if (riwayatTimPotongData) {
-    const jumlahPakai = riwayatTimPotongData.filter(function (x) { return String(x.kodeRoll || '') === String(kode); }).length;
-    if (jumlahPakai === 0) {
-      return '<div class="roll-row" style="cursor:default"><span>Roll ' + escapeHtml(kode) + '</span><span>' + formatAngka(r.kg) + ' kg</span></div>';
-    }
-  }
+  // v.37: FIX bug parah - ver.36 kemarin bikin SEMUA roll fresh di SELURUH daftar kehilangan
+  // panah expand-nya BARENGAN begitu riwayatTimPotongData kebaca (dipicu tap 1 roll manapun),
+  // soalnya baris roll dievaluasi ulang pakai data GLOBAL itu. Sekarang baris roll SELALU bisa
+  // diklik (chevron gak pernah dicabut) - yang disembunyikan cuma ISI PANEL-nya kalau kosong
+  // (lihat renderRiwayatPanel_), bukan kemampuan klik/panahnya.
   const kunci = kunciRoll_(w, r);
   const terbuka = (rollTerbukaKunci === kunci);
   const disorot = (rollHighlightKunci === kunci);
@@ -1191,23 +1204,23 @@ function renderRiwayatPanel_(kode, kgSisa) {
   }
   const cocok = riwayatTimPotongData.filter(function (x) { return String(x.kodeRoll || '') === String(kode); })
     .sort(function (a, b) { return b.tanggal.localeCompare(a.tanggal) || (b.id - a.id); });
+  // v.37: kalau roll ini ternyata masih fresh/belum pernah kepakai (request Denny) - JANGAN
+  // tampilin apa-apa sama sekali (bukan pesan "belum ada laporan"), chevron-nya tetap bisa
+  // diklik seperti biasa cuma emang gak ada yang muncul di bawahnya.
+  if (cocok.length === 0) return '';
   const totalTerpakai = cocok.reduce(function (sum, x) { return sum + (parseFloat(x.pemakaianKainKg) || 0); }, 0);
   const kgAwalEstimasi = kgSisa + totalTerpakai;
 
   let html = '<div class="riwayat-wrap">' +
     '<div class="riwayat-meta"><span>Kg awal (estimasi): <b>' + formatAngka(kgAwalEstimasi) + ' kg</b></span><span>Sisa sekarang: <b>' + formatAngka(kgSisa) + ' kg</b></span></div>';
-  if (cocok.length === 0) {
-    html += '<div class="riwayat-kosong">Belum ada laporan Tim Potong yang tercatat pakai roll ini (dalam 6 bulan terakhir).</div>';
-  } else {
-    html += cocok.map(function (x) {
-      const totalQty = Object.keys(x.ukuran || {}).reduce(function (s, u) { return s + x.ukuran[u]; }, 0);
-      return '<div class="riwayat-item">' +
-        '<div class="riwayat-item-top"><span class="nama-item">' + escapeHtml(x.jenisWarnaBaju) + '</span>' +
-        '<span class="kg-terpakai">-' + formatAngka(x.pemakaianKainKg) + ' kg</span></div>' +
-        '<div class="sub"><span>' + formatTanggalPendek(x.tanggal) + '</span><span class="qty">' + totalQty + ' pcs</span></div>' +
-        '</div>';
-    }).join('');
-  }
+  html += cocok.map(function (x) {
+    const totalQty = Object.keys(x.ukuran || {}).reduce(function (s, u) { return s + x.ukuran[u]; }, 0);
+    return '<div class="riwayat-item">' +
+      '<div class="riwayat-item-top"><span class="nama-item">' + escapeHtml(x.jenisWarnaBaju) + '</span>' +
+      '<span class="kg-terpakai">-' + formatAngka(x.pemakaianKainKg) + ' kg</span></div>' +
+      '<div class="sub"><span>' + formatTanggalPendek(x.tanggal) + '</span><span class="qty">' + totalQty + ' pcs</span></div>' +
+      '</div>';
+  }).join('');
   html += '</div>';
   return html;
 }
