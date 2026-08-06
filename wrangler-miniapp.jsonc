@@ -1,0 +1,24 @@
+// ============================================================
+// CONFIG WORKERS-WITH-ASSETS "tim-potong-miniapp" ver.01
+// ============================================================
+// Config TERPISAH dari wrangler.toml (itu punya Worker API tim-potong-api, JANGAN digabung).
+// Ini buat serve frontend statis (index.html, dashboard.html, rekap-order/index.html) sebagai
+// Worker with static assets - proyek baru, gantiin Cloudflare Pages "tim-potong-app" (Direct
+// Upload) yang lama, biar bisa disambungkan ke Git Integration/Workers Builds tanpa resiko
+// nabrak nama project lama.
+//
+// Build command (disetel di dashboard Cloudflare, bukan di sini) yang nyiapin folder
+// _site-statis sebelum config ini dibaca:
+//   mkdir -p _site-statis/rekap-order && cp index.html dashboard.html _site-statis/ && cp
+//   rekap-order/index.html _site-statis/rekap-order/
+//
+// Deploy command di dashboard WAJIB pakai -c biar baca file ini, bukan wrangler.toml:
+//   npx wrangler deploy -c wrangler-miniapp.jsonc
+// ============================================================
+{
+  "name": "tim-potong-miniapp",
+  "compatibility_date": "2026-08-06",
+  "assets": {
+    "directory": "./_site-statis"
+  }
+}
