@@ -1,16 +1,15 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.38
+DASHBOARD ver.39
 ============================================================
-PERUBAHAN ver.38: koreksi ver.37 - Denny klarifikasi maksud aslinya: panah expand MEMANG harus
-hilang total (bukan cuma isi panelnya) buat roll yang belum pernah kepakai, biar tampilan
-clean (cuma "Roll XXXX  Ykg"). Akar masalah ver.36 yang bikin ini kerasa buggy BUKAN soal
-nyembunyiin chevron-nya, tapi TIMING-nya (nongol dulu 1 render, baru ilang - kesannya "kedip
-lalu ilang"). Sekarang: (1) data riwayat di-fetch SEKALIAN paralel sama data stok (gak nunggu
-tap roll pertama lagi), (2) render dibikin SEARAH - chevron cuma "naik level" muncul begitu
-riwayat kebaca DAN ada pemakaian, gak pernah nongol dulu baru dicabut. (3) Teks "Nx pakai"
-disingkat jadi "NX" doang.
+PERUBAHAN ver.39: fitur baru "🗑️ Hapus Laporan" di panel expand tab Proses & QC - KHUSUS admin
+(daftar Telegram user ID di secret Worker ADMIN_USER_ID, user biasa gak lihat tombolnya sama
+sekali). Hapus laporan = tim_potong + semua data anaknya (log_qc, log_pemakaian_kain, arsip_
+selesai) via fungsi Postgres hapus_tim_potong_lengkap yang udah ada, stok kain otomatis balik
+lewat trigger yang juga udah ada. Pesan notifikasi QC di Telegram ikut dihapus (best-effort) -
+notifikasi PRODUKSI sengaja TIDAK ikut dihapus karena 1 pesan bisa berisi beberapa item
+sekaligus. Ada konfirmasi native browser dulu sebelum eksekusi (aksi permanen, gak bisa di-undo).
 Riwayat lengkap: git log.
 ============================================================
 
@@ -166,6 +165,7 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   table.rincian-table input { width: 42px; padding: 5px; border: 1px solid var(--border); border-radius: 8px; text-align: center; font-size: 12px; }
 
   .btn-tambah-antrian { width: 100%; background: var(--indigo); color: #fff; border: none; border-radius: 10px; padding: 10px; font-weight: 700; font-size: 13.5px; cursor: pointer; }
+  .btn-hapus-laporan { width: 100%; background: #fff; color: #dc2626; border: 1.5px solid #dc2626; border-radius: 10px; padding: 9px; font-weight: 700; font-size: 13px; cursor: pointer; margin-top: 8px; }
 
   .arsip-toggle { background: #fff; border-radius: 14px; padding: 14px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; margin-top: 14px; font-weight: 700; font-size: 13px; }
   .arsip-toggle .sub { display: block; font-weight: 400; color: var(--gray-text); font-size: 12px; margin-top: 2px; }
@@ -406,6 +406,22 @@ function warnaKeHex_(namaWarna) {
 
 const tg = window.Telegram ? window.Telegram.WebApp : null;
 if (tg) { tg.ready(); tg.expand(); }
+
+// v.32: cek status admin sekali di awal (buat nentuin tombol Hapus Laporan ditampilin atau
+// enggak) - keamanan sebenarnya tetap ditegakkan di Worker (/data/hapus-laporan ngecek ulang
+// dari nol), ini cuma buat UX biar user biasa gak lihat tombol yang bakal ditolak.
+let isAdmin = false;
+if (tg && tg.initData) {
+  fetch(WORKER_URL + '/data/cek-admin', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ initData: tg.initData })
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      isAdmin = !!(data.ok && data.isAdmin);
+      if (isAdmin) renderDaftarLaporan(); // re-render biar tombol Hapus langsung muncul kalau daftar udah kepampang duluan
+    })
+    .catch(function () { /* diamkan - anggap bukan admin */ });
+}
 
 let daftarLaporanData = [];
 let antrianQC = []; // [{timPotongId, mode, ringkas, rincian, preview}]
@@ -709,7 +725,11 @@ function renderLaporanExpand(r) {
     html += '</tbody></table>';
   }
 
-  html += '<button class="btn-tambah-antrian" data-tambah="' + r.id + '">+ Tambah ke Daftar</button></div>';
+  html += '<button class="btn-tambah-antrian" data-tambah="' + r.id + '">+ Tambah ke Daftar</button>';
+  if (isAdmin) {
+    html += '<button class="btn-hapus-laporan" data-hapuslaporan="' + r.id + '">🗑️ Hapus Laporan</button>';
+  }
+  html += '</div>';
   return html;
 }
 
@@ -732,6 +752,43 @@ function pasangEventLaporanCard() {
     el.addEventListener('click', function (e) {
       e.stopPropagation();
       tambahKeAntrian(parseInt(el.dataset.tambah, 10));
+    });
+  });
+  // v.32: tombol Hapus Laporan (khusus admin, lihat isAdmin) - konfirmasi native dulu (aksi
+  // permanen: data + anaknya kehapus semua, stok balik, pesan QC di Telegram ikut kehapus kalau
+  // ada), baru panggil /data/hapus-laporan. Worker yang nentuin boleh/enggak sebenarnya (initData
+  // + daftar ADMIN_USER_ID), ini di frontend cuma soal nampilin tombolnya aja.
+  document.querySelectorAll('[data-hapuslaporan]').forEach(function (el) {
+    el.addEventListener('click', function (e) {
+      e.stopPropagation();
+      const id = parseInt(el.dataset.hapuslaporan, 10);
+      const r = daftarLaporanData.find(function (x) { return x.id === id; });
+      const nama = r ? r.jenisWarnaBaju : ('laporan #' + id);
+      if (!confirm('Hapus laporan "' + nama + '" ini secara PERMANEN?\n\nData produksi, riwayat QC, dan arsipnya akan ikut terhapus. Stok kain otomatis balik. Aksi ini TIDAK BISA dibatalkan.')) return;
+      if (!tg || !tg.initData) { tampilkanToast('Harus dibuka lewat Telegram.'); return; }
+      el.disabled = true;
+      el.textContent = 'Menghapus...';
+      fetch(WORKER_URL + '/data/hapus-laporan', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ initData: tg.initData, timPotongId: id })
+      })
+        .then(function (r2) { return r2.json(); })
+        .then(function (data) {
+          if (data.ok) {
+            daftarLaporanData = daftarLaporanData.filter(function (x) { return x.id !== id; });
+            delete laporanTerbuka[id];
+            renderDaftarLaporan();
+            tampilkanToast('🗑️ "' + data.nama + '" dihapus.' + (data.pesanQCTerhapus ? ' Pesan QC di Telegram ikut dihapus.' : ''));
+          } else {
+            el.disabled = false;
+            el.textContent = '🗑️ Hapus Laporan';
+            tampilkanToast('Gagal hapus: ' + data.error);
+          }
+        })
+        .catch(function (e2) {
+          el.disabled = false;
+          el.textContent = '🗑️ Hapus Laporan';
+          tampilkanToast('Gagal hapus: ' + e2.message);
+        });
     });
   });
   // v.02: checkbox shortcut "tandai selesai semua sisa" - LANGSUNG masuk antrian (mode ringkas,

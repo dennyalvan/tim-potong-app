@@ -83,6 +83,27 @@ export default {
       return await handleSubmitQC_(body, env);
     }
 
+    // v.32 - cek apakah user Telegram yang buka Dashboard ini termasuk admin (daftar di secret
+    // ADMIN_USER_ID) - dipakai frontend buat nentuin tombol "Hapus Laporan" ditampilin atau
+    // enggak. Ini CUMA buat kepentingan tampilan (UX) - keamanan sebenarnya tetap ditegakkan di
+    // /data/hapus-laporan sendiri (endpoint itu ngecek ulang dari nol, gak percaya klaim client).
+    if (url.pathname === '/data/cek-admin' && request.method === 'POST') {
+      let body;
+      try { body = await request.json(); } catch (e) { return jsonResponse({ ok: false, error: 'Body harus JSON.' }, 400); }
+      return await handleCekAdmin_(body, env);
+    }
+
+    // v.32 - hapus 1 laporan tim_potong beserta semua data anaknya (log_qc, log_pemakaian_kain,
+    // arsip_selesai - stok kain otomatis balik lewat trigger yang sudah ada), KHUSUS admin
+    // (daftar di secret ADMIN_USER_ID, dipisah koma kalau lebih dari 1 orang). Sekalian best-
+    // effort hapus pesan notifikasi QC di Telegram (kalau ada) - gagal hapus pesan TIDAK
+    // menggagalkan hapus datanya (mis. pesan udah lama/dihapus manual/bot bukan admin grup).
+    if (url.pathname === '/data/hapus-laporan' && request.method === 'POST') {
+      let body;
+      try { body = await request.json(); } catch (e) { return jsonResponse({ ok: false, error: 'Body harus JSON.' }, 400); }
+      return await handleHapusLaporan_(body, env);
+    }
+
     // v.11 (Dashboard Tahap 3) - ringkasan + detail stok kain yang BELUM DISENTUH SAMA SEKALI
     if (url.pathname === '/data/stok-utuh' && request.method === 'GET') {
       return await handleStokUtuh_(env);
@@ -215,6 +236,73 @@ async function validasiInitData_(initData, env) {
     return { ok: true, userId: userId };
   } catch (e) {
     return { ok: false, error: 'Error validasi: ' + e.message };
+  }
+}
+
+// v.32 - cek userId Telegram terhadap daftar admin di secret ADMIN_USER_ID (dipisah koma kalau
+// lebih dari 1 orang, mis. "111111,222222"). Dipakai buat fitur Hapus Laporan - user biasa
+// TETAP bisa lihat & submit seperti biasa, cuma aksi hapus yang dibatasi ke daftar ini.
+function cekAdmin_(userId, env) {
+  const daftar = String(env.ADMIN_USER_ID || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+  return daftar.length > 0 && daftar.indexOf(String(userId)) !== -1;
+}
+
+async function handleCekAdmin_(body, env) {
+  const validasi = await validasiInitData_(body.initData, env);
+  if (!validasi.ok) return jsonResponse(validasi, 401);
+  return jsonResponse({ ok: true, isAdmin: cekAdmin_(validasi.userId, env) });
+}
+
+async function handleHapusLaporan_(body, env) {
+  const validasi = await validasiInitData_(body.initData, env);
+  if (!validasi.ok) return jsonResponse(validasi, 401);
+  if (!cekAdmin_(validasi.userId, env)) {
+    return jsonResponse({ ok: false, error: 'Kamu tidak punya izin menghapus laporan.' }, 403);
+  }
+
+  const timPotongId = parseInt(body.timPotongId, 10);
+  if (!timPotongId) return jsonResponse({ ok: false, error: 'timPotongId wajib diisi.' }, 400);
+
+  try {
+    const rowsTP = await ambilDariSupabase_(env, '/rest/v1/tim_potong?select=id,jenis_warna_baju,id_pesan_qc&id=eq.' + timPotongId);
+    if (!rowsTP || rowsTP.length === 0) {
+      return jsonResponse({ ok: false, error: 'Laporan id=' + timPotongId + ' tidak ditemukan (mungkin sudah dihapus duluan).' }, 404);
+    }
+    const tp = rowsTP[0];
+
+    // hapus_tim_potong_lengkap() (fungsi Postgres yang sudah ada) - hapus child-first
+    // (log_pemakaian_kain -> arsip_selesai -> log_qc -> tim_potong). Stok kain otomatis balik
+    // lewat trigger kembalikan_stok_kain_saat_hapus_log_pemakaian yang udah lama ada.
+    const resRpc = await fetch(env.SUPABASE_URL + '/rest/v1/rpc/hapus_tim_potong_lengkap', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: env.SUPABASE_SECRET_KEY, Authorization: 'Bearer ' + env.SUPABASE_SECRET_KEY },
+      body: JSON.stringify({ ids: [timPotongId] })
+    });
+    if (resRpc.status >= 300) {
+      return jsonResponse({ ok: false, error: 'Gagal hapus dari Supabase: HTTP ' + resRpc.status + ' ' + (await resRpc.text()).substring(0, 300) }, 500);
+    }
+    const ringkasanHapus = await resRpc.json();
+
+    // Best-effort hapus pesan notifikasi QC di Telegram - CATATAN: notifikasi PRODUKSI (grup
+    // Tim Potong) SENGAJA TIDAK ikut dihapus, karena 1 pesan produksi bisa berisi BEBERAPA item
+    // sekaligus (submit gabungan) - kalau ikut dihapus, item LAIN yang masih valid di pesan yang
+    // sama ikut hilang catatannya. Notifikasi QC aman dihapus karena 1 laporan = 1 pesan sendiri.
+    let pesanQCTerhapus = false;
+    if (tp.id_pesan_qc && env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_QC_CHAT_ID) {
+      try {
+        const resDel = await fetch('https://api.telegram.org/bot' + env.TELEGRAM_BOT_TOKEN + '/deleteMessage', {
+          method: 'post',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: env.TELEGRAM_QC_CHAT_ID, message_id: tp.id_pesan_qc })
+        });
+        const dataDel = await resDel.json();
+        pesanQCTerhapus = !!dataDel.ok;
+      } catch (e) { /* diabaikan - hapus data tetap dianggap sukses walau pesan gagal dihapus */ }
+    }
+
+    return jsonResponse({ ok: true, nama: tp.jenis_warna_baju, ringkasan: ringkasanHapus, pesanQCTerhapus: pesanQCTerhapus });
+  } catch (e) {
+    return jsonResponse({ ok: false, error: e.message }, 500);
   }
 }
 
