@@ -1,0 +1,35 @@
+name: Deploy Statis ke Cloudflare Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'dashboard.html'
+      - 'rekap-order/**'
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout kode
+        uses: actions/checkout@v4
+
+      # Rakit folder statis terpisah dari folder worker/shopee-worker - CUMA file yang
+      # sebelumnya di-serve GitHub Pages (root index.html, dashboard.html, rekap-order/).
+      # Struktur repo GitHub-nya sendiri SENGAJA gak diubah, ini cuma langkah persiapan
+      # sesaat sebelum upload ke Cloudflare Pages.
+      - name: Rakit folder statis
+        run: |
+          mkdir -p _site-statis/rekap-order
+          cp index.html dashboard.html _site-statis/
+          cp rekap-order/index.html _site-statis/rekap-order/
+
+      - name: Deploy ke Cloudflare Pages
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: tim-potong-app
+          directory: _site-statis
