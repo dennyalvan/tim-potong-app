@@ -1,10 +1,8 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.31
+// CODE WORKER PRODUKSI ver.32
 // ============================================================
-// PERUBAHAN ver.31: format pesan notifikasi QC (kirimAtauEditNotifikasiQC_) dirombak total
-// sesuai contoh Denny - sekarang 2 format beda: "✅ LENGKAP 👍" (status selesai) vs "🔴 BELUM
-// LENGKAP" (masih proses), header tanggal, nama item + roll, varian (underline), breakdown
-// per ukuran (cuma yang progressnya > 0), baris Total beda format tergantung lengkap/belum.
+// PERUBAHAN ver.32 (koreksi ver.31): teks varian di notifikasi QC sekarang BOLD + underline
+// (sebelumnya cuma underline).
 //
 // Riwayat versi lengkap: git log.
 //
@@ -966,7 +964,7 @@ async function ambilInfoWarnaVarianUntukLog_(env, namaItem) {
 //     ✅ LENGKAP 👍
 //
 //     <b>LS24 SAGE</b> (9103)
-//     <u>DEWASA PANJANG</u>
+//     <b><u>DEWASA PANJANG</u></b>
 //     XL 44
 //     XXL 7
 //     Total: 51
@@ -975,7 +973,7 @@ async function ambilInfoWarnaVarianUntukLog_(env, namaItem) {
 //     🔴 BELUM LENGKAP
 //
 //     <b>LS24 SAGE</b> (9103)
-//     <u>DEWASA PANJANG</u>
+//     <b><u>DEWASA PANJANG</u></b>
 //     XXL 7
 //     Total: 7 dari 51
 // CATATAN ASUMSI (belum ada di contoh Denny - reject-nya kebetulan 0 di kedua contoh): kalau
@@ -995,7 +993,7 @@ async function kirimAtauEditNotifikasiQC_(env, tp, totalSelesai, totalReject, st
 
   let teks = formatTanggalIndoJakarta_(new Date()) + '\n' + headerStatus + '\n\n';
   teks += '<b>' + htmlEscape_(tp.jenis_warna_baju) + '</b>' + (tp.kode_roll ? (' (' + htmlEscape_(tp.kode_roll) + ')') : '') + '\n';
-  if (varianQC) teks += '<u>' + htmlEscape_(varianQC) + '</u>\n';
+  if (varianQC) teks += '<b><u>' + htmlEscape_(varianQC) + '</u></b>\n';
   if (barisUkuran) teks += barisUkuran + '\n';
   if (totalReject > 0) teks += 'Reject: ' + totalReject + '\n';
   teks += sudahLengkap ? ('Total: ' + tp.jumlah) : ('Total: ' + totalSelesai + ' dari ' + tp.jumlah);
