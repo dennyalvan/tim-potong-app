@@ -26,6 +26,16 @@ jobs:
           cp index.html dashboard.html _site-statis/
           cp rekap-order/index.html _site-statis/rekap-order/
 
+      # pages-action gak otomatis bikin project baru - harus sudah ada duluan. Langkah ini
+      # bikin project-nya kalau belum ada (aman diulang - kalau sudah ada, API balikin error
+      # "already exists" yang sengaja diabaikan lewat "|| true", gak menggagalkan job).
+      - name: Buat project Cloudflare Pages (kalau belum ada)
+        run: |
+          curl -s -X POST "https://api.cloudflare.com/client/v4/accounts/${{ secrets.CLOUDFLARE_ACCOUNT_ID }}/pages/projects" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"name":"tim-potong-app","production_branch":"main"}' || true
+
       - name: Deploy ke Cloudflare Pages
         uses: cloudflare/pages-action@v1
         with:
