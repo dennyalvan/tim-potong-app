@@ -1,12 +1,15 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.33
+// CODE WORKER PRODUKSI ver.34
 // ============================================================
-// PERUBAHAN ver.33: fitur baru Hapus Laporan (khusus admin) - 2 endpoint baru: POST
-// /data/cek-admin (dipakai frontend nentuin tampilin tombol Hapus atau enggak) dan POST
-// /data/hapus-laporan (hapus tim_potong_id + semua data anak via hapus_tim_potong_lengkap(),
-// stok otomatis balik lewat trigger yang udah ada, best-effort hapus pesan QC di Telegram).
-// Admin ditentukan dari secret baru ADMIN_USER_ID (daftar Telegram user ID dipisah koma) -
-// WAJIB di-set dulu sebagai Cloudflare secret sebelum fitur ini bisa dipakai siapa pun.
+// PERUBAHAN ver.34: endpoint baru POST /data/hapus-log-qc - hapus/batalkan 1 baris submit QC
+// (log_qc) dari tab REKAP QC, KHUSUS admin (sama pola cek-nya kayak Hapus Laporan). Beda dari
+// /data/hapus-laporan (itu hapus 1 laporan tim_potong LENGKAP) - ini cuma membatalkan 1x
+// submit-nya doang, progress laporan induk dihitung ulang dari sisa log_qc yang masih aktif,
+// notifikasi Telegram QC ikut disinkronkan. Sekalian nambah fungsi Postgres baru
+// hapus_arsip_selesai_partial() + trigger undo_qc_saat_arsip_selesai_dihapus dimodifikasi
+// (skip "batalkan semua log_qc" kalau dipanggil dari alur ini) - biar laporan yang tadinya
+// SELESAI+kearsip tapi jadi gak lengkap lagi gara-gara pembatalan 1 submit ini gak nyangkut di
+// arsip yang salah.
 //
 // Riwayat versi lengkap: git log.
 //
@@ -14,7 +17,7 @@
 // + Supabase (SUPABASE_URL, SUPABASE_SECRET_KEY sebagai secret) + Telegram
 // (TELEGRAM_BOT_TOKEN, TELEGRAM_GROUP_CHAT_ID, TELEGRAM_QC_CHAT_ID, ALLOWED_USER_ID opsional)
 // + INTERNAL_SYNC_TOKEN (secret baru ver.29, buat proxy Apps Script -> Supabase)
-// + ADMIN_USER_ID (secret baru ver.33, buat fitur Hapus Laporan - lihat di atas).
+// + ADMIN_USER_ID (secret baru ver.33, buat fitur Hapus Laporan & Hapus Log QC).
 // ============================================================
 
 export default {
@@ -107,6 +110,15 @@ export default {
       let body;
       try { body = await request.json(); } catch (e) { return jsonResponse({ ok: false, error: 'Body harus JSON.' }, 400); }
       return await handleHapusLaporan_(body, env);
+    }
+
+    // v.34 - hapus/batalkan 1 baris submit QC (log_qc), dipakai tombol Hapus di tab REKAP QC.
+    // Beda dari /data/hapus-laporan (itu hapus 1 laporan tim_potong LENGKAP) - ini cuma
+    // membatalkan 1x submit-nya, progress laporan induk dihitung ulang dari sisanya.
+    if (url.pathname === '/data/hapus-log-qc' && request.method === 'POST') {
+      let body;
+      try { body = await request.json(); } catch (e) { return jsonResponse({ ok: false, error: 'Body harus JSON.' }, 400); }
+      return await handleHapusLogQC_(body, env);
     }
 
     // v.11 (Dashboard Tahap 3) - ringkasan + detail stok kain yang BELUM DISENTUH SAMA SEKALI
@@ -306,6 +318,90 @@ async function handleHapusLaporan_(body, env) {
     }
 
     return jsonResponse({ ok: true, nama: tp.jenis_warna_baju, ringkasan: ringkasanHapus, pesanQCTerhapus: pesanQCTerhapus });
+  } catch (e) {
+    return jsonResponse({ ok: false, error: e.message }, 500);
+  }
+}
+
+// v.34: hapus/batalkan 1 baris submit QC (log_qc) dari tab REKAP QC - BEDA dari Hapus Laporan
+// (yang hapus 1 laporan tim_potong LENGKAP). Ini cuma membatalkan 1x submit-nya doang, progress
+// laporan induknya dihitung ulang dari sisa log_qc yang masih aktif, notifikasi Telegram QC-nya
+// ikut di-update biar sinkron. Khusus admin, sama pola cek-nya kayak Hapus Laporan.
+async function handleHapusLogQC_(body, env) {
+  const validasi = await validasiInitData_(body.initData, env);
+  if (!validasi.ok) return jsonResponse(validasi, 401);
+  if (!cekAdmin_(validasi.userId, env)) {
+    return jsonResponse({ ok: false, error: 'Kamu tidak punya izin menghapus data QC.' }, 403);
+  }
+
+  const logQcId = parseInt(body.logQcId, 10);
+  if (!logQcId) return jsonResponse({ ok: false, error: 'logQcId wajib diisi.' }, 400);
+
+  try {
+    const rowsLog = await ambilDariSupabase_(env, '/rest/v1/log_qc?select=id,tim_potong_id,status&id=eq.' + logQcId);
+    if (!rowsLog || rowsLog.length === 0) {
+      return jsonResponse({ ok: false, error: 'Data QC id=' + logQcId + ' tidak ditemukan (mungkin sudah dihapus duluan).' }, 404);
+    }
+    if (rowsLog[0].status !== 'aktif') {
+      return jsonResponse({ ok: false, error: 'Data ini sudah dibatalkan sebelumnya.' }, 400);
+    }
+    const timPotongId = rowsLog[0].tim_potong_id;
+
+    // Batalkan (append-only - gak dihapus fisik, cuma ditandai, sama kayak pola Undo yang lain)
+    await fetch(env.SUPABASE_URL + '/rest/v1/log_qc?id=eq.' + logQcId, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', apikey: env.SUPABASE_SECRET_KEY, Authorization: 'Bearer ' + env.SUPABASE_SECRET_KEY, Prefer: 'return=minimal' },
+      body: JSON.stringify({ status: 'dibatalkan' })
+    });
+
+    const rowsTP = await ambilDariSupabase_(env, '/rest/v1/tim_potong?select=id,jumlah,id_pesan_qc&id=eq.' + timPotongId);
+    if (!rowsTP || rowsTP.length === 0) {
+      return jsonResponse({ ok: true, catatan: 'Data QC dibatalkan, tapi laporan induknya (id=' + timPotongId + ') sudah gak ada.' });
+    }
+    const tp = rowsTP[0];
+
+    // Hitung ulang dari SISA log_qc yang masih aktif (setelah pembatalan barusan)
+    const kolomUkuran = Object.values(KOLOM_UKURAN_MAP).join(',');
+    const rowsSisaAktif = await ambilDariSupabase_(env, '/rest/v1/log_qc?select=varian,total,reject,' + kolomUkuran + '&tim_potong_id=eq.' + timPotongId + '&status=eq.aktif');
+
+    let totalSelesai = 0, totalReject = 0, varianQC = null;
+    const perUkuranMap = {};
+    rowsSisaAktif.forEach(function (r) {
+      totalSelesai += Number(r.total) || 0;
+      const rejectObj = parseRejectNotasi_(r.reject);
+      totalReject += Object.values(rejectObj).reduce(function (s, v) { return s + v; }, 0);
+      if (!varianQC) varianQC = r.varian;
+      const ukuranObj = kolomKeUkuran_(r);
+      Object.keys(ukuranObj).forEach(function (u) { perUkuranMap[u] = (perUkuranMap[u] || 0) + ukuranObj[u]; });
+    });
+    const perUkuranBaru = DAFTAR_UKURAN_TIMPOTONG.filter(function (u) { return perUkuranMap[u]; }).map(function (u) { return { ukuran: u, selesai: perUkuranMap[u] }; });
+
+    const sudahSelesaiSemua = (totalSelesai + totalReject) >= tp.jumlah;
+    const statusBaru = sudahSelesaiSemua ? 'SELESAI' : ('PROSES ' + totalSelesai + '/' + tp.jumlah + ' (' + totalReject + ' reject)');
+
+    await fetch(env.SUPABASE_URL + '/rest/v1/tim_potong?id=eq.' + timPotongId, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', apikey: env.SUPABASE_SECRET_KEY, Authorization: 'Bearer ' + env.SUPABASE_SECRET_KEY, Prefer: 'return=minimal' },
+      body: JSON.stringify({ status: statusBaru })
+    });
+
+    // Kalau tadinya sudah SELESAI & kearsip, tapi sekarang jadi gak lengkap lagi gara-gara
+    // pembatalan ini - bersihin arsip_selesai-nya, TAPI lewat fungsi khusus yang gak ikut
+    // membatalkan SEMUA log_qc lagi (beda dari kasus hapus arsip manual biasa).
+    if (!sudahSelesaiSemua) {
+      await fetch(env.SUPABASE_URL + '/rest/v1/rpc/hapus_arsip_selesai_partial', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: env.SUPABASE_SECRET_KEY, Authorization: 'Bearer ' + env.SUPABASE_SECRET_KEY },
+        body: JSON.stringify({ p_tim_potong_id: timPotongId })
+      }).catch(function () { /* diabaikan - status tim_potong sudah benar walau ini gagal */ });
+    }
+
+    // Sinkronkan notifikasi Telegram QC (kalau ada) biar angkanya gak beda sama dashboard
+    if (tp.id_pesan_qc) {
+      await kirimAtauEditNotifikasiQC_(env, tp, totalSelesai, totalReject, statusBaru, varianQC, perUkuranBaru);
+    }
+
+    return jsonResponse({ ok: true, timPotongId: timPotongId, statusBaru: statusBaru });
   } catch (e) {
     return jsonResponse({ ok: false, error: e.message }, 500);
   }

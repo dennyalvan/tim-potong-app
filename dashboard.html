@@ -1,15 +1,13 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.39
+DASHBOARD ver.40
 ============================================================
-PERUBAHAN ver.39: fitur baru "🗑️ Hapus Laporan" di panel expand tab Proses & QC - KHUSUS admin
-(daftar Telegram user ID di secret Worker ADMIN_USER_ID, user biasa gak lihat tombolnya sama
-sekali). Hapus laporan = tim_potong + semua data anaknya (log_qc, log_pemakaian_kain, arsip_
-selesai) via fungsi Postgres hapus_tim_potong_lengkap yang udah ada, stok kain otomatis balik
-lewat trigger yang juga udah ada. Pesan notifikasi QC di Telegram ikut dihapus (best-effort) -
-notifikasi PRODUKSI sengaja TIDAK ikut dihapus karena 1 pesan bisa berisi beberapa item
-sekaligus. Ada konfirmasi native browser dulu sebelum eksekusi (aksi permanen, gak bisa di-undo).
+PERUBAHAN ver.40: fitur baru tombol Hapus (🗑️) per-baris di tab REKAP QC - KHUSUS admin, sama
+pola cek-nya kayak Hapus Laporan. BEDA dari Hapus Laporan (yang hapus 1 laporan tim_potong
+LENGKAP): ini cuma membatalkan 1x SUBMIT QC-nya doang (1 baris = 1 log_qc), progress laporan
+induknya dihitung ulang otomatis dari sisa submit yang masih aktif, notifikasi Telegram QC ikut
+disinkronkan ke angka baru. Endpoint baru Worker: POST /data/hapus-log-qc.
 Riwayat lengkap: git log.
 ============================================================
 
@@ -166,6 +164,8 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
 
   .btn-tambah-antrian { width: 100%; background: var(--indigo); color: #fff; border: none; border-radius: 10px; padding: 10px; font-weight: 700; font-size: 13.5px; cursor: pointer; }
   .btn-hapus-laporan { width: 100%; background: #fff; color: #dc2626; border: 1.5px solid #dc2626; border-radius: 10px; padding: 9px; font-weight: 700; font-size: 13px; cursor: pointer; margin-top: 8px; }
+  .rekap-hapus-btn { background: none; border: none; cursor: pointer; font-size: 14px; padding: 4px; line-height: 1; opacity: .55; }
+  .rekap-hapus-btn:active { opacity: 1; }
 
   .arsip-toggle { background: #fff; border-radius: 14px; padding: 14px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; margin-top: 14px; font-weight: 700; font-size: 13px; }
   .arsip-toggle .sub { display: block; font-weight: 400; color: var(--gray-text); font-size: 12px; margin-top: 2px; }
@@ -418,7 +418,7 @@ if (tg && tg.initData) {
     .then(function (r) { return r.json(); })
     .then(function (data) {
       isAdmin = !!(data.ok && data.isAdmin);
-      if (isAdmin) renderDaftarLaporan(); // re-render biar tombol Hapus langsung muncul kalau daftar udah kepampang duluan
+      if (isAdmin) { renderDaftarLaporan(); renderRekapQC(); } // re-render biar tombol Hapus langsung muncul kalau daftar/rekap udah kepampang duluan
     })
     .catch(function () { /* diamkan - anggap bukan admin */ });
 }
@@ -1387,11 +1387,13 @@ function renderRekapQC() {
   items.forEach(function (it) { it.perUkuran.forEach(function (u) { semuaUkuranDipakai[u.ukuran] = true; }); });
   const ukuranDipakai = DAFTAR_UKURAN_URUT.filter(function (u) { return semuaUkuranDipakai[u]; });
 
-  const LEBAR_WAKTU = 92, LEBAR_WARNA = 110, LEBAR_VARIAN = 118, LEBAR_UKURAN = 40, LEBAR_ANGKA = 60;
+  // v.34: kolom tambahan buat tombol Hapus, CUMA muncul buat admin (lihat isAdmin) - biar user
+  // biasa gak ada ruang kosong yang gak kepakai di tabelnya.
+  const LEBAR_WAKTU = 92, LEBAR_WARNA = 110, LEBAR_VARIAN = 118, LEBAR_UKURAN = 40, LEBAR_ANGKA = 60, LEBAR_HAPUS = 36;
   const templateKolom = LEBAR_WAKTU + 'px ' + LEBAR_WARNA + 'px ' + LEBAR_VARIAN + 'px ' +
     ukuranDipakai.map(function () { return LEBAR_UKURAN + 'px'; }).join(' ') +
-    ' ' + LEBAR_ANGKA + 'px ' + LEBAR_ANGKA + 'px';
-  const lebarTotal = LEBAR_WAKTU + LEBAR_WARNA + LEBAR_VARIAN + (ukuranDipakai.length * LEBAR_UKURAN) + (LEBAR_ANGKA * 2);
+    ' ' + LEBAR_ANGKA + 'px ' + LEBAR_ANGKA + 'px' + (isAdmin ? ' ' + LEBAR_HAPUS + 'px' : '');
+  const lebarTotal = LEBAR_WAKTU + LEBAR_WARNA + LEBAR_VARIAN + (ukuranDipakai.length * LEBAR_UKURAN) + (LEBAR_ANGKA * 2) + (isAdmin ? LEBAR_HAPUS : 0);
 
   const list = document.getElementById('rekapList');
   list.style.minWidth = lebarTotal + 'px';
@@ -1400,7 +1402,8 @@ function renderRekapQC() {
   const headHtml = '<div class="rekap-row rekap-head" style="grid-template-columns:' + templateKolom + '">' +
     '<div>Waktu</div><div>Warna</div><div>Varian</div>' +
     ukuranDipakai.map(function (u) { return '<div class="rekap-num">' + u + '</div>'; }).join('') +
-    '<div class="rekap-num">Selesai</div><div class="rekap-num">Reject</div></div>';
+    '<div class="rekap-num">Selesai</div><div class="rekap-num">Reject</div>' +
+    (isAdmin ? '<div></div>' : '') + '</div>';
 
   if (items.length === 0) {
     summary.textContent = searchRekapQuery ? 'Gak ada hasil buat "' + searchRekapQuery + '".' : 'Belum ada submit QC dalam 14 hari terakhir.';
@@ -1420,6 +1423,7 @@ function renderRekapQC() {
       ukuranDipakai.map(function (u) { return '<div class="rekap-num">' + (petaUkuran[u] ? petaUkuran[u] : '<span class="rekap-muted">–</span>') + '</div>'; }).join('') +
       '<div class="rekap-selesai">' + it.total + '</div>' +
       '<div class="' + (it.rejectTotal > 0 ? 'rekap-reject' : 'rekap-num rekap-muted') + '">' + it.rejectTotal + '</div>' +
+      (isAdmin ? '<div><button class="rekap-hapus-btn" data-hapuslogqc="' + it.id + '" title="Hapus submit ini">🗑️</button></div>' : '') +
       '</div>';
   }).join('');
 
@@ -1431,6 +1435,42 @@ function renderRekapQC() {
       const sudahAktif = row.classList.contains('rekap-row-dipilih');
       list.querySelectorAll('.rekap-row-dipilih').forEach(function (r) { r.classList.remove('rekap-row-dipilih'); });
       if (!sudahAktif) row.classList.add('rekap-row-dipilih');
+    });
+  });
+
+  // v.34: tombol Hapus per-baris (khusus admin) - batalkan 1x submit QC ini doang (BEDA dari
+  // Hapus Laporan di tab Proses & QC yang hapus 1 laporan LENGKAP). stopPropagation biar gak
+  // ikut nge-toggle highlight baris. Sukses -> hapus dari rekapItemsRaw lokal + refresh ulang
+  // tab Proses & QC (progress laporan induknya ikut berubah).
+  list.querySelectorAll('[data-hapuslogqc]').forEach(function (el) {
+    el.addEventListener('click', function (e) {
+      e.stopPropagation();
+      const logQcId = parseInt(el.dataset.hapuslogqc, 10);
+      if (!confirm('Batalkan submit QC ini?\n\nProgress laporan yang bersangkutan akan dihitung ulang otomatis (dikurangi jumlah dari submit ini). Aksi ini TIDAK BISA dibatalkan.')) return;
+      if (!tg || !tg.initData) { tampilkanToast('Harus dibuka lewat Telegram.'); return; }
+      el.disabled = true;
+      el.textContent = '⏳';
+      fetch(WORKER_URL + '/data/hapus-log-qc', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ initData: tg.initData, logQcId: logQcId })
+      })
+        .then(function (r2) { return r2.json(); })
+        .then(function (data) {
+          if (data.ok) {
+            rekapItemsRaw = rekapItemsRaw.filter(function (x) { return x.id !== logQcId; });
+            renderRekapQC();
+            muatDaftarLaporan(); // progress laporan induknya ikut berubah - refresh tab Proses & QC
+            tampilkanToast('🗑️ Submit QC dibatalkan.');
+          } else {
+            el.disabled = false;
+            el.textContent = '🗑️';
+            tampilkanToast('Gagal hapus: ' + data.error);
+          }
+        })
+        .catch(function (e2) {
+          el.disabled = false;
+          el.textContent = '🗑️';
+          tampilkanToast('Gagal hapus: ' + e2.message);
+        });
     });
   });
 
