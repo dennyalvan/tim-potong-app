@@ -1,15 +1,20 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.32
+// CODE WORKER PRODUKSI ver.33
 // ============================================================
-// PERUBAHAN ver.32 (koreksi ver.31): teks varian di notifikasi QC sekarang BOLD + underline
-// (sebelumnya cuma underline).
+// PERUBAHAN ver.33: fitur baru Hapus Laporan (khusus admin) - 2 endpoint baru: POST
+// /data/cek-admin (dipakai frontend nentuin tampilin tombol Hapus atau enggak) dan POST
+// /data/hapus-laporan (hapus tim_potong_id + semua data anak via hapus_tim_potong_lengkap(),
+// stok otomatis balik lewat trigger yang udah ada, best-effort hapus pesan QC di Telegram).
+// Admin ditentukan dari secret baru ADMIN_USER_ID (daftar Telegram user ID dipisah koma) -
+// WAJIB di-set dulu sebagai Cloudflare secret sebelum fitur ini bisa dipakai siapa pun.
 //
 // Riwayat versi lengkap: git log.
 //
 // SETUP AWAL (referensi kalau perlu deploy ulang dari nol): Cloudflare Worker "tim-potong-api"
 // + Supabase (SUPABASE_URL, SUPABASE_SECRET_KEY sebagai secret) + Telegram
 // (TELEGRAM_BOT_TOKEN, TELEGRAM_GROUP_CHAT_ID, TELEGRAM_QC_CHAT_ID, ALLOWED_USER_ID opsional)
-// + INTERNAL_SYNC_TOKEN (secret baru ver.29, buat proxy Apps Script -> Supabase).
+// + INTERNAL_SYNC_TOKEN (secret baru ver.29, buat proxy Apps Script -> Supabase)
+// + ADMIN_USER_ID (secret baru ver.33, buat fitur Hapus Laporan - lihat di atas).
 // ============================================================
 
 export default {
