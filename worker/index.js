@@ -1,15 +1,12 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.34
+// CODE WORKER PRODUKSI ver.35
 // ============================================================
-// PERUBAHAN ver.34: endpoint baru POST /data/hapus-log-qc - hapus/batalkan 1 baris submit QC
-// (log_qc) dari tab REKAP QC, KHUSUS admin (sama pola cek-nya kayak Hapus Laporan). Beda dari
-// /data/hapus-laporan (itu hapus 1 laporan tim_potong LENGKAP) - ini cuma membatalkan 1x
-// submit-nya doang, progress laporan induk dihitung ulang dari sisa log_qc yang masih aktif,
-// notifikasi Telegram QC ikut disinkronkan. Sekalian nambah fungsi Postgres baru
-// hapus_arsip_selesai_partial() + trigger undo_qc_saat_arsip_selesai_dihapus dimodifikasi
-// (skip "batalkan semua log_qc" kalau dipanggil dari alur ini) - biar laporan yang tadinya
-// SELESAI+kearsip tapi jadi gak lengkap lagi gara-gara pembatalan 1 submit ini gak nyangkut di
-// arsip yang salah.
+// PERUBAHAN ver.35: 2 fix di handleHapusLogQC_ (endpoint /data/hapus-log-qc, ver.34) - (1) query
+// tim_potong yang dipakai buat sinkron notifikasi Telegram kurang kolom jenis_warna_baju &
+// kode_roll, jadi baris nama item kosong di pesan Telegram; (2) kalau pembatalan bikin progress
+// balik ke NOL total (gak ada log_qc aktif sama sekali), pesan Telegram-nya sekarang DIHAPUS
+// (bukan diedit jadi "0 dari N") - id_pesan_qc dikosongkan lagi biar submit QC berikutnya kirim
+// pesan baru dari awal.
 //
 // Riwayat versi lengkap: git log.
 //
@@ -354,7 +351,7 @@ async function handleHapusLogQC_(body, env) {
       body: JSON.stringify({ status: 'dibatalkan' })
     });
 
-    const rowsTP = await ambilDariSupabase_(env, '/rest/v1/tim_potong?select=id,jumlah,id_pesan_qc&id=eq.' + timPotongId);
+    const rowsTP = await ambilDariSupabase_(env, '/rest/v1/tim_potong?select=id,jumlah,id_pesan_qc,jenis_warna_baju,kode_roll&id=eq.' + timPotongId);
     if (!rowsTP || rowsTP.length === 0) {
       return jsonResponse({ ok: true, catatan: 'Data QC dibatalkan, tapi laporan induknya (id=' + timPotongId + ') sudah gak ada.' });
     }
@@ -396,12 +393,35 @@ async function handleHapusLogQC_(body, env) {
       }).catch(function () { /* diabaikan - status tim_potong sudah benar walau ini gagal */ });
     }
 
-    // Sinkronkan notifikasi Telegram QC (kalau ada) biar angkanya gak beda sama dashboard
+    // Sinkronkan notifikasi Telegram QC (kalau ada) biar angkanya gak beda sama dashboard.
+    // Kalau progress balik ke NOL total (gak ada log_qc aktif SAMA SEKALI buat laporan ini
+    // setelah pembatalan barusan) - hapus pesannya sekalian, bukan diedit jadi "0 dari N" yang
+    // gak ada gunanya ditampilin. id_pesan_qc dikosongkan lagi biar submit QC berikutnya kirim
+    // pesan baru dari awal (sama kayak submit pertama kali).
+    let pesanQCTerhapus = false;
     if (tp.id_pesan_qc) {
-      await kirimAtauEditNotifikasiQC_(env, tp, totalSelesai, totalReject, statusBaru, varianQC, perUkuranBaru);
+      const tidakAdaProgresSamaSekali = rowsSisaAktif.length === 0;
+      if (tidakAdaProgresSamaSekali) {
+        try {
+          const resDel = await fetch('https://api.telegram.org/bot' + env.TELEGRAM_BOT_TOKEN + '/deleteMessage', {
+            method: 'post',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: env.TELEGRAM_QC_CHAT_ID, message_id: tp.id_pesan_qc })
+          });
+          const dataDel = await resDel.json();
+          pesanQCTerhapus = !!dataDel.ok;
+        } catch (e) { /* diabaikan - pembatalan data tetap dianggap sukses walau pesan gagal dihapus */ }
+        await fetch(env.SUPABASE_URL + '/rest/v1/tim_potong?id=eq.' + timPotongId, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', apikey: env.SUPABASE_SECRET_KEY, Authorization: 'Bearer ' + env.SUPABASE_SECRET_KEY, Prefer: 'return=minimal' },
+          body: JSON.stringify({ id_pesan_qc: null })
+        });
+      } else {
+        await kirimAtauEditNotifikasiQC_(env, tp, totalSelesai, totalReject, statusBaru, varianQC, perUkuranBaru);
+      }
     }
 
-    return jsonResponse({ ok: true, timPotongId: timPotongId, statusBaru: statusBaru });
+    return jsonResponse({ ok: true, timPotongId: timPotongId, statusBaru: statusBaru, pesanQCTerhapus: pesanQCTerhapus });
   } catch (e) {
     return jsonResponse({ ok: false, error: e.message }, 500);
   }
