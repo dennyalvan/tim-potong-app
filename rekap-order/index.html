@@ -167,6 +167,30 @@ body {
 .modal-btn.cancel { background: var(--ios-surface2); color: var(--blue); }
 .modal-btn.danger { background: var(--red); color: #fff; }
 
+/* ── FILTER WAKTU ── */
+.time-filter-wrap {
+  background: var(--ios-surface); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 12px 14px; margin: 14px 0 0;
+}
+.time-filter-title { font-size: 12px; font-weight: 700; color: var(--ios-label); margin-bottom: 10px; }
+.time-filter-group { margin-bottom: 8px; }
+.time-filter-group:last-of-type { margin-bottom: 0; }
+.time-filter-label { display: block; font-size: 11px; color: var(--ios-label2); margin-bottom: 5px; }
+.time-filter-btns { display: flex; gap: 6px; }
+.time-filter-btn {
+  flex: 1; padding: 7px 8px; font-size: 12px; font-weight: 500; font-family: inherit;
+  border: 1px solid var(--ios-border); border-radius: 8px; cursor: pointer;
+  background: var(--ios-surface2); color: var(--ios-label2);
+  transition: all .15s;
+}
+.time-filter-btn:active { transform: scale(0.97); }
+.time-filter-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.time-filter-badge {
+  margin-top: 10px; padding: 6px 10px; border-radius: 7px;
+  background: var(--accent-bg); color: var(--accent);
+  font-size: 11px; font-weight: 600; text-align: center;
+}
+
 /* ── TAB CHIPS — 3 tombol terpisah dengan icon, masing-masing box sendiri ── */
 .segment-wrap { display: flex; gap: 8px; margin: 14px 0 0; }
 .seg-btn {
@@ -508,6 +532,26 @@ body {
 
 <!-- MAIN CONTENT -->
 <div id="mainContent">
+  <!-- FILTER WAKTU -->
+  <div class="time-filter-wrap">
+    <div class="time-filter-title">🕐 Filter Waktu</div>
+    <div class="time-filter-group">
+      <span class="time-filter-label">Pengiriman Diatur</span>
+      <div class="time-filter-btns">
+        <button class="time-filter-btn" data-field="kirim" data-bucket="before" onclick="setTimeFilter('kirim','before')">Sebelum 12:00</button>
+        <button class="time-filter-btn" data-field="kirim" data-bucket="after" onclick="setTimeFilter('kirim','after')">Setelah 12:00</button>
+      </div>
+    </div>
+    <div class="time-filter-group">
+      <span class="time-filter-label">Pembayaran Dilakukan</span>
+      <div class="time-filter-btns">
+        <button class="time-filter-btn" data-field="bayar" data-bucket="before" onclick="setTimeFilter('bayar','before')">Sebelum 12:00</button>
+        <button class="time-filter-btn" data-field="bayar" data-bucket="after" onclick="setTimeFilter('bayar','after')">Setelah 12:00</button>
+      </div>
+    </div>
+    <div class="time-filter-badge" id="timeFilterBadge" style="display:none"></div>
+  </div>
+
   <!-- SEGMENT CONTROL -->
   <div class="segment-wrap">
     <button class="seg-btn active" data-tab="varian" onclick="switchTab('varian', this)"><span class="seg-icon">🏷️</span> Varian</button>
@@ -584,6 +628,8 @@ let varianData = [], karakterData = [];
 let resiData = { totalResi: 0, totalPcs: 0, breakdown: [], pcsDetails: {} };
 let excludedInfo = { count: 0, qty: 0 };
 let duplicateInfo = { count: 0 };
+let lastFileResults = [];      // hasil ekstrak mentah (blm difilter waktu), disimpan buat re-filter tanpa upload ulang
+let activeTimeFilter = null;   // {field:'kirim'|'bayar', bucket:'before'|'after'} | null
 let varianMode = 'qty_desc', karMode = 'qty_desc', resiMode = 'default';
 const GROUP_COLORS = ['tag-0','tag-1','tag-2','tag-3','tag-4','tag-5','tag-6','tag-7','tag-8'];
 
@@ -614,6 +660,8 @@ function handleFiles(fileList) {
         catch (err) { failedFiles.push(`${filename}: ${err.message}`); }
       });
       if (!results.length) throw new Error('Semua file gagal diproses:\n' + failedFiles.join('\n'));
+      activeTimeFilter = null; // reset filter waktu tiap upload baru
+      updateTimeFilterUI();
       buildRekap(results);
       if (failedFiles.length) showError(`${failedFiles.length} file dilewati (gagal parse): ` + failedFiles.join(' | '));
     })
@@ -628,14 +676,32 @@ function setUploadProcessing(on, count) {
   document.getElementById('uploadHint').textContent = on ? 'Mohon tunggu sebentar' : 'Format .xlsx · Bisa pilih beberapa file sekaligus, otomatis digabung';
 }
 
-// ── Baca 1 file Excel -> baris ternormalisasi (independen dari posisi kolom file itu sendiri,
-// karena posisi kolom bisa beda antar-export, mis. ada/tidaknya kolom "Tipe Pesanan") ──
-function extractFileData(buffer, filename) {
-  const wb = XLSX.read(buffer, { type: 'arraybuffer' });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+// ── Parse nilai tanggal dari cell Excel — bisa berupa Date object (kalau cellDates:true
+// kena), string "YYYY-MM-DD HH:MM", atau serial number Excel. Robust ke semua kemungkinan. ──
+function parseCellDate(val) {
+  if (val === null || val === undefined || val === '') return null;
+  if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+  if (typeof val === 'number') {
+    try {
+      const parsed = XLSX.SSF.parse_date_code(val);
+      if (parsed) return new Date(parsed.y, parsed.m - 1, parsed.d, parsed.H || 0, parsed.M || 0, parsed.S || 0);
+    } catch (e) { /* fallthrough */ }
+    return null;
+  }
+  const d = new Date(String(val).trim().replace(' ', 'T'));
+  return isNaN(d.getTime()) ? null : d;
+}
 
-  let headerRow = -1, colN = -1, colO = -1, colR = -1, colStatus = -1, colResi = -1, colPesanan = -1;
+// ── Baca 1 file Excel -> baris ternormalisasi (independen dari posisi kolom file itu sendiri,
+// karena posisi kolom bisa beda antar-export, mis. ada/tidaknya kolom "Tipe Pesanan").
+// Batal TIDAK dibuang di sini — biar filter waktu & filter status bisa konsisten dihitung
+// bareng di buildRekap, tiap kali filter waktu diganti tanpa perlu upload ulang. ──
+function extractFileData(buffer, filename) {
+  const wb = XLSX.read(buffer, { type: 'arraybuffer', cellDates: true });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
+
+  let headerRow = -1, colN = -1, colO = -1, colR = -1, colStatus = -1, colResi = -1, colPesanan = -1, colKirim = -1, colBayar = -1;
   for (let i = 0; i < Math.min(10, rows.length); i++) {
     const r = rows[i];
     for (let j = 0; j < r.length; j++) {
@@ -646,58 +712,62 @@ function extractFileData(buffer, filename) {
       if (v === 'Status Pesanan') colStatus = j;
       if (v.includes('No. Resi')) colResi = j;
       if (v === 'No. Pesanan') colPesanan = j;
+      if (v === 'Waktu Pengiriman Diatur') colKirim = j;
+      if (v === 'Waktu Pembayaran Dilakukan') colBayar = j;
     }
     if (colN >= 0 && colO >= 0 && colR >= 0) { headerRow = i; break; }
   }
   if (headerRow < 0) throw new Error('kolom header tidak ditemukan');
 
   const rawRows = rows.slice(headerRow + 1).filter(r => r[colN] || r[colO]);
-  let excludedQty = 0;
-  const excludedPesananSet = new Set();
-  const normalized = [];   // status Batal DIBUANG — dipakai Varian & Karakter (kebutuhan produksi/potong)
-  const allRowsRaw = [];   // SEMUA status ikut, gak peduli Batal atau apapun — dipakai tab Resi (total pesanan yg PERNAH dibuat buyer)
+  const parsedRows = [];
   rawRows.forEach(r => {
     const qty = parseFloat(r[colR]) || 0;
-    const pesananVal = colPesanan >= 0 ? String(r[colPesanan] || '').trim() : '';
-    const resiVal = colResi >= 0 ? String(r[colResi] || '').trim() : '';
-
-    // Selalu masuk ke allRowsRaw kalau ada qty, gak peduli status apapun
-    if (qty) allRowsRaw.push({ pesanan: pesananVal, resi: resiVal, qty });
-
-    if (colStatus >= 0) {
-      const st = String(r[colStatus] || '').trim();
-      // Buang HANYA status pembatalan (mis. "Batal", "Pembatalan diajukan") — TAPI cuma
-      // untuk `normalized` (Varian/Karakter). Jangan whitelist 1 status doang — file export
-      // bisa "Perlu Dikirim" saja ATAU "semua status" sebulan penuh (Selesai, Sedang Dikirim,
-      // Telah Dikirim, Pesanan diterima..., dll), semua itu tetap pesanan valid buat dihitung.
-      if (st && /batal/i.test(st)) {
-        excludedQty += qty;
-        if (pesananVal) excludedPesananSet.add(pesananVal); // hitung PESANAN unik, bukan baris
-        return;
-      }
-    }
     if (!qty) return;
-    normalized.push({
+    const st = colStatus >= 0 ? String(r[colStatus] || '').trim() : '';
+    parsedRows.push({
       sku: String(r[colN] || '').trim(),
       variasi: String(r[colO] || '').trim(),
       qty,
-      pesanan: pesananVal,
-      resi: resiVal,
+      pesanan: colPesanan >= 0 ? String(r[colPesanan] || '').trim() : '',
+      resi: colResi >= 0 ? String(r[colResi] || '').trim() : '',
+      isBatal: !!(st && /batal/i.test(st)),
+      waktuKirim: colKirim >= 0 ? parseCellDate(r[colKirim]) : null,
+      waktuBayar: colBayar >= 0 ? parseCellDate(r[colBayar]) : null,
     });
   });
 
-  return { filename, normalized, allRowsRaw, excludedPesanan: [...excludedPesananSet], excludedQty };
+  return { filename, rows: parsedRows };
 }
 
-// ── Gabungkan hasil dari semua file (berurutan sesuai file), lalu hitung rekap sekali ──
+// ── Gabungkan hasil dari semua file (berurutan sesuai file), terapkan filter waktu
+// (kalau ada), lalu hitung rekap sekali. Dipanggil ulang tiap kali filter waktu
+// diganti (pakai lastFileResults yang tersimpan, TANPA perlu upload ulang). ──
 function buildRekap(fileResults) {
-  const allRows = [];
-  let totalExcludedQty = 0;
+  lastFileResults = fileResults;
+
+  const allRowsUnfiltered = [];
+  fileResults.forEach(f => allRowsUnfiltered.push(...f.rows.map(r => ({...r, _file: f.filename}))));
+
+  // ── Filter waktu (kalau aktif) — berlaku ke SEMUA tab (Varian/Karakter/Resi) ──
+  const timeField = activeTimeFilter ? (activeTimeFilter.field === 'kirim' ? 'waktuKirim' : 'waktuBayar') : null;
+  const timeFiltered = !activeTimeFilter ? allRowsUnfiltered : allRowsUnfiltered.filter(row => {
+    const d = row[timeField];
+    if (!d) return false; // gak punya timestamp = gak bisa dinilai masuk sebelum/setelah jam 12, exclude
+    const hour = d.getHours();
+    return activeTimeFilter.bucket === 'before' ? hour < 12 : hour >= 12;
+  });
+
+  // ── Exclude status Batal (buat Varian/Karakter — kebutuhan produksi/potong) ──
   const excludedPesananSet = new Set();
-  fileResults.forEach(f => {
-    allRows.push(...f.normalized);
-    totalExcludedQty += f.excludedQty;
-    f.excludedPesanan.forEach(p => excludedPesananSet.add(p));
+  let totalExcludedQty = 0;
+  const allRows = timeFiltered.filter(row => {
+    if (row.isBatal) {
+      totalExcludedQty += row.qty;
+      if (row.pesanan) excludedPesananSet.add(row.pesanan);
+      return false;
+    }
+    return true;
   });
   excludedInfo = { count: excludedPesananSet.size, qty: totalExcludedQty };
 
@@ -778,24 +848,22 @@ function buildRekap(fileResults) {
     return {name, qty, detail: parts.join(' ')};
   }).sort((a,b)=>a.name.localeCompare(b.name));
 
-  // RESI — pakai SEMUA pesanan yang PERNAH dibuat buyer, gak peduli statusnya
-  // (beda dari Varian/Karakter yang buang status Batal). Juga deteksi kalau ada
-  // No.Pesanan yang muncul di lebih dari 1 file (kemungkinan overlap tanggal).
+  // RESI — pakai SEMUA pesanan yang PERNAH dibuat buyer (dari timeFiltered, SEBELUM
+  // exclude Batal), gak peduli statusnya. Juga deteksi No.Pesanan yang muncul di
+  // lebih dari 1 file (kemungkinan overlap tanggal).
   const pesananMap = {};
   const pesananSourceFile = {};
   let duplicateAcrossFiles = 0;
-  fileResults.forEach(f => {
-    f.allRowsRaw.forEach(row => {
-      const pesanan = row.pesanan;
-      if (!pesanan || row.qty === 0) return;
-      if (!pesananMap[pesanan]) {
-        pesananMap[pesanan] = { pcs: 0, resi: row.resi };
-        pesananSourceFile[pesanan] = f.filename;
-      } else if (pesananSourceFile[pesanan] !== f.filename) {
-        duplicateAcrossFiles++;
-      }
-      pesananMap[pesanan].pcs += row.qty;
-    });
+  timeFiltered.forEach(row => {
+    const pesanan = row.pesanan;
+    if (!pesanan || row.qty === 0) return;
+    if (!pesananMap[pesanan]) {
+      pesananMap[pesanan] = { pcs: 0, resi: row.resi };
+      pesananSourceFile[pesanan] = row._file;
+    } else if (pesananSourceFile[pesanan] !== row._file) {
+      duplicateAcrossFiles++;
+    }
+    pesananMap[pesanan].pcs += row.qty;
   });
   duplicateInfo = { count: duplicateAcrossFiles };
   const pcsCount = {}, pcsDetails = {};
@@ -835,6 +903,36 @@ function buildRekap(fileResults) {
   renderVarian(); renderKarakter(); renderResi();
 }
 
+// ── FILTER WAKTU (Pengiriman Diatur / Pembayaran Dilakukan — sebelum/setelah jam 12) ──
+function setTimeFilter(field, bucket) {
+  if (!lastFileResults.length) return; // belum ada data, gak ngapa-ngapain
+  if (activeTimeFilter && activeTimeFilter.field === field && activeTimeFilter.bucket === bucket) {
+    activeTimeFilter = null; // klik yang sama lagi = matikan filter
+  } else {
+    activeTimeFilter = { field, bucket };
+  }
+  updateTimeFilterUI();
+  buildRekap(lastFileResults); // re-agregasi pakai data mentah yg tersimpan, gak perlu upload ulang
+}
+
+function updateTimeFilterUI() {
+  document.querySelectorAll('.time-filter-btn').forEach(b => {
+    const isActive = activeTimeFilter && b.dataset.field === activeTimeFilter.field && b.dataset.bucket === activeTimeFilter.bucket;
+    b.classList.toggle('active', !!isActive);
+  });
+  const badge = document.getElementById('timeFilterBadge');
+  if (badge) {
+    if (activeTimeFilter) {
+      const fieldLabel = activeTimeFilter.field === 'kirim' ? 'Pengiriman Diatur' : 'Pembayaran Dilakukan';
+      const bucketLabel = activeTimeFilter.bucket === 'before' ? 'sebelum 12:00' : 'setelah 12:00';
+      badge.textContent = `Filter aktif: ${fieldLabel} · ${bucketLabel}`;
+      badge.style.display = 'block';
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+}
+
 // ── CLEAR ──
 function confirmClear() { document.getElementById('modalOverlay').classList.add('visible'); }
 function closeModal() { document.getElementById('modalOverlay').classList.remove('visible'); }
@@ -844,6 +942,9 @@ function doClear() {
   resiData = { totalResi: 0, totalPcs: 0, breakdown: [], pcsDetails: {} };
   excludedInfo = { count: 0, qty: 0 };
   duplicateInfo = { count: 0 };
+  lastFileResults = [];
+  activeTimeFilter = null;
+  updateTimeFilterUI();
   document.getElementById('subtitle').textContent = 'Shopee · Perlu Dikirim';
   renderVarian(); renderKarakter(); renderResi();
 }
