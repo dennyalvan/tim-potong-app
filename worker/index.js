@@ -181,6 +181,18 @@ export default {
       return await handleInternalStokMasuk_(request, env);
     }
 
+    // v.37 - proxy DEBUG/DEPLOY ke Apps Script (CODE TIM POTONG) - biar Claude bisa baca/tulis
+    // Script Properties DAN deploy kode baru ke Apps Script tanpa Denny buka dashboard manual.
+    // Proteksi: header X-GAS-Debug-Token harus cocok env.GAS_DEBUG_TOKEN (secret TERPISAH dari
+    // INTERNAL_SYNC_TOKEN - kalau salah satu bocor, yang lain tetap aman). Worker cuma neruskan
+    // body mentah ke Apps Script Web App (yang punya action-nya sendiri: gasDebugGetProperty/
+    // gasDebugSetProperty/gasDebugDeleteProperty/gasDebugListProperties/gasDebugUpdateCode) -
+    // logic sebenarnya ada di sisi Apps Script, Worker di sini murni jembatan jaringan (karena
+    // domain script.google.com gak bisa diakses langsung dari sandbox Claude).
+    if (url.pathname === '/internal/gas-debug' && request.method === 'POST') {
+      return await handleGasDebugProxy_(request, env);
+    }
+
     return jsonResponse({ ok: false, error: 'Endpoint tidak ditemukan: ' + url.pathname }, 404);
   }
 };
@@ -822,6 +834,46 @@ async function handleInternalStokMasuk_(request, env) {
     }
 
     return jsonResponse({ ok: true });
+  } catch (e) {
+    return jsonResponse({ ok: false, error: e.message }, 500);
+  }
+}
+
+// ============================================================
+// v.37 - Proxy DEBUG/DEPLOY ke Apps Script (CODE TIM POTONG). Worker cuma jembatan jaringan -
+// terima request dari Claude (tervalidasi GAS_DEBUG_TOKEN), teruskan MENTAH-MENTAH ke Apps
+// Script Web App (yang punya actionnya sendiri: gasDebugGetProperty/gasDebugSetProperty/
+// gasDebugDeleteProperty/gasDebugListProperties/gasDebugUpdateCode), balikin respons Apps
+// Script apa adanya. Body request WAJIB ada field "action" + field lain sesuai action-nya
+// (lihat handler masing-masing action di Apps Script).
+// ============================================================
+async function handleGasDebugProxy_(request, env) {
+  try {
+    const token = request.headers.get('X-GAS-Debug-Token');
+    if (!token || token !== env.GAS_DEBUG_TOKEN) {
+      return jsonResponse({ ok: false, error: 'Token tidak valid' }, 401);
+    }
+
+    const body = await request.json();
+    if (!body.action) {
+      return jsonResponse({ ok: false, error: 'Field "action" wajib diisi' }, 400);
+    }
+
+    const res = await fetch(env.APPS_SCRIPT_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.assign({}, body, { gasDebugToken: env.GAS_DEBUG_TOKEN }))
+    });
+
+    const teksRespons = await res.text();
+    let jsonRespons;
+    try {
+      jsonRespons = JSON.parse(teksRespons);
+    } catch (parseErr) {
+      return jsonResponse({ ok: false, error: 'Respons Apps Script bukan JSON valid: ' + teksRespons.substring(0, 500) }, 502);
+    }
+
+    return jsonResponse(jsonRespons, res.status >= 300 ? 502 : 200);
   } catch (e) {
     return jsonResponse({ ok: false, error: e.message }, 500);
   }
