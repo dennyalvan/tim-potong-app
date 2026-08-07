@@ -1,12 +1,11 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.35
+// CODE WORKER PRODUKSI ver.36
 // ============================================================
-// PERUBAHAN ver.35: 2 fix di handleHapusLogQC_ (endpoint /data/hapus-log-qc, ver.34) - (1) query
-// tim_potong yang dipakai buat sinkron notifikasi Telegram kurang kolom jenis_warna_baju &
-// kode_roll, jadi baris nama item kosong di pesan Telegram; (2) kalau pembatalan bikin progress
-// balik ke NOL total (gak ada log_qc aktif sama sekali), pesan Telegram-nya sekarang DIHAPUS
-// (bukan diedit jadi "0 dari N") - id_pesan_qc dikosongkan lagi biar submit QC berikutnya kirim
-// pesan baru dari awal.
+// PERUBAHAN ver.36: optimasi kecepatan respon /produksi & /stok - tanganiCommandCepat_ sekarang
+// jalanin hapusPasanganSebelumnya_ (hapus pesan lama) & kirimTombolMiniApp_/kirimTombolDashboard_
+// (kirim tombol baru) secara PARALEL (Promise.all), bukan berurutan kayak sebelumnya. Dua-duanya
+// gak saling bergantung, jadi user cuma nunggu 1x round-trip terlama ke Telegram, bukan jumlah
+// dua-duanya. Gak ada perubahan logika/hasil, murni urutan eksekusi.
 //
 // Riwayat versi lengkap: git log.
 //
@@ -1916,10 +1915,14 @@ async function proxyKeAppsScript_(rawBodyText, env) {
 
 async function tanganiCommandCepat_(env, message, jenis) {
   const chatId = message.chat.id;
-  await hapusPasanganSebelumnya_(env, jenis, chatId);
-  const botMsgId = (jenis === 'produksi')
-    ? await kirimTombolMiniApp_(env, chatId)
-    : await kirimTombolDashboard_(env, chatId);
+  // Hapus pesan lama & kirim tombol baru gak saling bergantung - jalanin PARALEL (bukan
+  // berurutan kayak sebelumnya) biar user gak nunggu 2x round-trip ke Telegram, cukup 1x
+  // (nunggu yang paling lama dari dua-duanya, bukan jumlah dua-duanya).
+  const hasil = await Promise.all([
+    hapusPasanganSebelumnya_(env, jenis, chatId),
+    (jenis === 'produksi') ? kirimTombolMiniApp_(env, chatId) : kirimTombolDashboard_(env, chatId)
+  ]);
+  const botMsgId = hasil[1];
   await simpanPasanganTerakhir_(env, jenis, chatId, message.message_id, botMsgId);
   return jsonResponse({ ok: true });
 }
