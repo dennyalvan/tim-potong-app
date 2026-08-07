@@ -6,6 +6,9 @@ on:
     paths:
       - 'sheet-updates/*.json'
 
+permissions:
+  contents: write
+
 jobs:
   write-sheet:
     runs-on: ubuntu-latest
@@ -13,15 +16,49 @@ jobs:
       - name: Checkout kode
         uses: actions/checkout@v4
 
-      - name: Kirim update ke Web App Sheets
-        env:
-          WEBAPP_URL: ${{ secrets.SHEETS_WEBAPP_URL }}
-          WRITE_TOKEN: ${{ secrets.SHEETS_WRITE_TOKEN }}
+      - name: Kirim update ke Web App Sheets (hapus file yang sukses, biarkan yang gagal buat dicoba ulang)
         run: |
           set -e
+          shopt -s nullglob
+          gagal=0
           for f in sheet-updates/*.json; do
             echo "=== Memproses $f ==="
             payload=$(jq --arg token "$WRITE_TOKEN" '. + {token: $token}' "$f")
-            curl -sL -X POST "$WEBAPP_URL" -H "Content-Type: application/json" -d "$payload"
+            respon=$(curl -sL -X POST "$WEBAPP_URL" -H "Content-Type: application/json" -d "$payload")
+            echo "$respon"
+
+            ok=$(echo "$respon" | jq -r '.ok // false')
+            if [ "$ok" = "true" ]; then
+              tidak_ketemu=$(echo "$respon" | jq -r '[.hasil[]? | select(.status == "TIDAK KETEMU - dilewati")] | length')
+              if [ "$tidak_ketemu" != "0" ]; then
+                echo "::warning::$f - ada $tidak_ketemu update yang TIDAK KETEMU (dilewati oleh Sheets), cek manual kalau perlu"
+              fi
+              echo "-> Sukses, $f dihapus dari antrean."
+              rm "$f"
+            else
+              error_msg=$(echo "$respon" | jq -r '.error // "tidak diketahui"')
+              echo "::error::GAGAL memproses $f - $error_msg (file TIDAK dihapus, biar bisa dicoba ulang setelah diperbaiki)"
+              gagal=1
+            fi
             echo ""
           done
+          if [ "$gagal" -ne 0 ]; then
+            echo "Ada file yang gagal diproses - lihat log di atas."
+            exit 1
+          fi
+        env:
+          WEBAPP_URL: ${{ secrets.SHEETS_WEBAPP_URL }}
+          WRITE_TOKEN: ${{ secrets.SHEETS_WRITE_TOKEN }}
+
+      - name: Commit & push file yang sudah sukses diproses
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add sheet-updates/
+          if ! git diff --cached --quiet; then
+            git commit -m "Auto: hapus file sheet-updates yang sudah sukses ditulis ke Sheets [skip ci]"
+            git push
+          else
+            echo "Tidak ada file yang perlu dibersihkan dari commit ini."
+          fi
