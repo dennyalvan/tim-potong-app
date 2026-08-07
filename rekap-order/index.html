@@ -211,7 +211,9 @@ body {
   min-width: 0; padding: 0;
 }
 .cal-day:hover { background: var(--ios-surface); }
-.cal-day.empty { cursor: default; pointer-events: none; }
+.cal-day-adjacent { color: var(--ios-label2); opacity: .55; }
+.cal-day-disabled { cursor: default; pointer-events: none; opacity: .3; }
+.cal-day-disabled:hover { background: transparent; }
 .cal-day.in-range { background: var(--accent-bg); border-radius: 0; color: var(--accent); }
 .cal-day.range-start, .cal-day.range-end {
   background: var(--accent); color: #fff; font-weight: 700;
@@ -703,7 +705,7 @@ let excludedInfo = { count: 0, qty: 0 };
 let duplicateInfo = { count: 0 };
 let lastFileResults = [];      // hasil ekstrak mentah (blm difilter waktu), disimpan buat re-filter tanpa upload ulang
 let activeDateRange = null;    // {field:'kirim'|'bayar', start:Date, end:Date} | null
-let calState = { field: null, viewYear: null, viewMonth: null, rangeStart: null, rangeEnd: null, hoverDate: null };
+let calState = { field: null, viewYear: null, viewMonth: null, rangeStart: null, rangeEnd: null, hoverDate: null, datesWithData: null };
 let activeTimeFilter = null;   // {field:'kirim'|'bayar', bucket:'before'|'after'} | null
 let varianMode = 'qty_desc', karMode = 'qty_desc', resiMode = 'default';
 const GROUP_COLORS = ['tag-0','tag-1','tag-2','tag-3','tag-4','tag-5','tag-6','tag-7','tag-8'];
@@ -737,7 +739,7 @@ function handleFiles(fileList) {
       if (!results.length) throw new Error('Semua file gagal diproses:\n' + failedFiles.join('\n'));
       activeTimeFilter = null; // reset filter waktu tiap upload baru
       activeDateRange = null;
-      calState = { field: null, viewYear: null, viewMonth: null, rangeStart: null, rangeEnd: null, hoverDate: null };
+      calState = { field: null, viewYear: null, viewMonth: null, rangeStart: null, rangeEnd: null, hoverDate: null, datesWithData: null };
       const calPopup = document.getElementById('calPopup');
       if (calPopup) calPopup.style.display = 'none';
       updateTimeFilterUI();
@@ -1048,12 +1050,19 @@ function toggleCalendar(field) {
   calState.rangeEnd = activeDateRange && activeDateRange.field === field ? activeDateRange.end : null;
   calState.hoverDate = null;
 
-  // Buka di bulan berisi tanggal TERAKHIR yang ada di data field ini (paling relevan)
+  // Query realtime dari data yg lagi kebuka — tanggal mana aja yg BENERAN ada datanya utk field ini
   const key = field === 'kirim' ? 'waktuKirim' : 'waktuBayar';
+  const datesWithData = new Set();
   let latest = null;
   lastFileResults.forEach(f => f.rows.forEach(r => {
-    if (r[key] && (!latest || r[key] > latest)) latest = r[key];
+    if (r[key]) {
+      datesWithData.add(dateKey(r[key]));
+      if (!latest || r[key] > latest) latest = r[key];
+    }
   }));
+  calState.datesWithData = datesWithData;
+
+  // Buka di bulan berisi tanggal TERAKHIR yang ada di data field ini (paling relevan)
   const ref = calState.rangeStart || latest || new Date();
   calState.viewYear = ref.getFullYear();
   calState.viewMonth = ref.getMonth();
@@ -1070,6 +1079,7 @@ function calNavMonth(delta) {
 }
 
 function sameDay(a, b) { return a && b && a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
+function dateKey(d) { return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; }
 
 function renderCalendar() {
   const bulanNama = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
@@ -1078,23 +1088,42 @@ function renderCalendar() {
   const firstOfMonth = new Date(calState.viewYear, calState.viewMonth, 1);
   const startOffset = firstOfMonth.getDay(); // 0=Minggu
   const daysInMonth = new Date(calState.viewYear, calState.viewMonth + 1, 0).getDate();
+  const daysInPrevMonth = new Date(calState.viewYear, calState.viewMonth, 0).getDate();
+  const totalCellsSoFar = startOffset + daysInMonth;
+  const trailingCount = (7 - (totalCellsSoFar % 7)) % 7;
 
   const rangeEndForPreview = calState.rangeEnd || calState.hoverDate;
   let lo = calState.rangeStart, hi = rangeEndForPreview;
   if (lo && hi && lo > hi) { const t = lo; lo = hi; hi = t; }
 
-  let html = '';
-  for (let i = 0; i < startOffset; i++) html += '<div class="cal-day empty"></div>';
-  for (let d = 1; d <= daysInMonth; d++) {
-    const thisDate = new Date(calState.viewYear, calState.viewMonth, d);
+  function cellHtml(y, m, d, adjacent) {
+    const thisDate = new Date(y, m, d);
+    const hasData = calState.datesWithData.has(dateKey(thisDate));
     let cls = 'cal-day';
+    if (adjacent) cls += ' cal-day-adjacent';
+    if (!hasData) cls += ' cal-day-disabled';
     if (lo && hi && thisDate >= new Date(lo.getFullYear(),lo.getMonth(),lo.getDate()) && thisDate <= new Date(hi.getFullYear(),hi.getMonth(),hi.getDate())) {
       cls += ' in-range';
     }
     if (sameDay(thisDate, calState.rangeStart) && sameDay(thisDate, calState.rangeEnd)) cls += ' range-single';
     else if (sameDay(thisDate, lo)) cls += ' range-start';
     else if (calState.rangeEnd && sameDay(thisDate, hi)) cls += ' range-end';
-    html += `<button class="${cls}" onmouseenter="calDayHover(${d})" onclick="calDayClick(${d})">${d}</button>`;
+    const handlers = hasData ? `onmouseenter="calDayHover(${y},${m},${d})" onclick="calDayClick(${y},${m},${d})"` : '';
+    return `<button class="${cls}" ${handlers}>${d}</button>`;
+  }
+
+  let html = '';
+  // Bulan sebelumnya (muted, disabled kalau gak ada data)
+  for (let i = startOffset; i > 0; i--) {
+    html += cellHtml(calState.viewYear, calState.viewMonth - 1, daysInPrevMonth - i + 1, true);
+  }
+  // Bulan ini
+  for (let d = 1; d <= daysInMonth; d++) {
+    html += cellHtml(calState.viewYear, calState.viewMonth, d, false);
+  }
+  // Bulan berikutnya (muted, disabled kalau gak ada data) — biar grid genap
+  for (let d = 1; d <= trailingCount; d++) {
+    html += cellHtml(calState.viewYear, calState.viewMonth + 1, d, true);
   }
   document.getElementById('calGrid').innerHTML = html;
 
@@ -1115,19 +1144,20 @@ function renderCalendar() {
   }
 }
 
-function calDayHover(d) {
+function calDayHover(y, m, d) {
   if (!calState.rangeStart || calState.rangeEnd) return; // cuma preview kalau lagi milih tanggal akhir
-  calState.hoverDate = new Date(calState.viewYear, calState.viewMonth, d);
+  calState.hoverDate = new Date(y, m, d);
   renderCalendar();
 }
 
-function calDayClick(d) {
-  const clicked = new Date(calState.viewYear, calState.viewMonth, d);
+function calDayClick(y, m, d) {
+  const clicked = new Date(y, m, d);
   if (!calState.rangeStart || calState.rangeEnd) {
-    // mulai seleksi baru
+    // mulai seleksi baru — kalau klik di bulan sebelah, pindah tampilan ke bulan itu juga
     calState.rangeStart = clicked;
     calState.rangeEnd = null;
     calState.hoverDate = null;
+    calState.viewYear = y; calState.viewMonth = m;
   } else {
     // tentukan tanggal akhir — swap kalau user klik tanggal SEBELUM tanggal awal
     if (clicked < calState.rangeStart) {
@@ -1168,7 +1198,7 @@ function doClear() {
   lastFileResults = [];
   activeTimeFilter = null;
   activeDateRange = null;
-  calState = { field: null, viewYear: null, viewMonth: null, rangeStart: null, rangeEnd: null, hoverDate: null };
+  calState = { field: null, viewYear: null, viewMonth: null, rangeStart: null, rangeEnd: null, hoverDate: null, datesWithData: null };
   const calPopup = document.getElementById('calPopup');
   if (calPopup) calPopup.style.display = 'none';
   updateTimeFilterUI();
