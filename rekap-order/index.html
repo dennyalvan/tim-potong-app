@@ -177,6 +177,55 @@ body {
 .time-filter-group:last-of-type { margin-bottom: 0; }
 .time-filter-label { display: block; font-size: 11px; color: var(--ios-label2); margin-bottom: 5px; }
 .time-filter-btns { display: flex; gap: 6px; }
+.time-filter-cal-btn {
+  padding: 7px 10px; font-size: 13px; border: 1px solid var(--ios-border);
+  border-radius: 8px; cursor: pointer; background: var(--ios-surface2);
+  transition: all .15s; flex-shrink: 0;
+}
+.time-filter-cal-btn:active { transform: scale(0.93); }
+.time-filter-cal-btn.active { background: var(--accent); border-color: var(--accent); }
+
+/* ── CALENDAR POPUP ── */
+.cal-popup {
+  margin-top: 10px; padding: 12px; border-radius: 10px;
+  background: var(--ios-surface2); border: 1px solid var(--ios-border);
+}
+.cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.cal-month-label { font-size: 13px; font-weight: 700; color: var(--ios-label); }
+.cal-nav {
+  width: 26px; height: 26px; border: none; border-radius: 6px; cursor: pointer;
+  background: var(--ios-surface); color: var(--ios-label); font-size: 15px;
+  display: flex; align-items: center; justify-content: center;
+}
+.cal-nav:active { transform: scale(0.9); }
+.cal-dow {
+  display: grid; grid-template-columns: repeat(7, 1fr); text-align: center;
+  font-size: 10px; color: var(--ios-label2); margin-bottom: 4px; font-weight: 600;
+}
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.cal-day {
+  aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+  font-size: 12px; border: none; border-radius: 6px; cursor: pointer;
+  background: transparent; color: var(--ios-label); transition: all .1s;
+}
+.cal-day:hover { background: var(--ios-surface); }
+.cal-day.empty { cursor: default; pointer-events: none; }
+.cal-day.in-range { background: var(--accent-bg); border-radius: 0; color: var(--accent); }
+.cal-day.range-start, .cal-day.range-end {
+  background: var(--accent); color: #fff; font-weight: 700;
+}
+.cal-day.range-start { border-radius: 6px 0 0 6px; }
+.cal-day.range-end { border-radius: 0 6px 6px 0; }
+.cal-day.range-single { border-radius: 6px; }
+.cal-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--ios-border);
+}
+.cal-range-label { font-size: 11px; color: var(--ios-label2); flex: 1; }
+.cal-clear-btn {
+  font-size: 11px; padding: 4px 10px; border: none; border-radius: 6px;
+  background: var(--red-bg); color: var(--red); cursor: pointer; font-weight: 600;
+}
 .time-filter-btn {
   flex: 1; padding: 7px 8px; font-size: 12px; font-weight: 500; font-family: inherit;
   border: 1px solid var(--ios-border); border-radius: 8px; cursor: pointer;
@@ -540,6 +589,7 @@ body {
       <div class="time-filter-btns">
         <button class="time-filter-btn" data-field="kirim" data-bucket="before" onclick="setTimeFilter('kirim','before')">Sebelum 12:00</button>
         <button class="time-filter-btn" data-field="kirim" data-bucket="after" onclick="setTimeFilter('kirim','after')">Setelah 12:00</button>
+        <button class="time-filter-cal-btn" data-field="kirim" onclick="toggleCalendar('kirim')">📅</button>
       </div>
     </div>
     <div class="time-filter-group">
@@ -547,8 +597,27 @@ body {
       <div class="time-filter-btns">
         <button class="time-filter-btn" data-field="bayar" data-bucket="before" onclick="setTimeFilter('bayar','before')">Sebelum 12:00</button>
         <button class="time-filter-btn" data-field="bayar" data-bucket="after" onclick="setTimeFilter('bayar','after')">Setelah 12:00</button>
+        <button class="time-filter-cal-btn" data-field="bayar" onclick="toggleCalendar('bayar')">📅</button>
       </div>
     </div>
+
+    <!-- CALENDAR POPUP -->
+    <div class="cal-popup" id="calPopup" style="display:none">
+      <div class="cal-header">
+        <button class="cal-nav" onclick="calNavMonth(-1)">‹</button>
+        <span class="cal-month-label" id="calMonthLabel"></span>
+        <button class="cal-nav" onclick="calNavMonth(1)">›</button>
+      </div>
+      <div class="cal-dow">
+        <span>M</span><span>S</span><span>S</span><span>R</span><span>K</span><span>J</span><span>S</span>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+      <div class="cal-footer">
+        <span class="cal-range-label" id="calRangeLabel">Pilih tanggal awal</span>
+        <button class="cal-clear-btn" onclick="clearDateRange()">Hapus</button>
+      </div>
+    </div>
+
     <div class="time-filter-badge" id="timeFilterBadge" style="display:none"></div>
   </div>
 
@@ -629,6 +698,8 @@ let resiData = { totalResi: 0, totalPcs: 0, breakdown: [], pcsDetails: {} };
 let excludedInfo = { count: 0, qty: 0 };
 let duplicateInfo = { count: 0 };
 let lastFileResults = [];      // hasil ekstrak mentah (blm difilter waktu), disimpan buat re-filter tanpa upload ulang
+let activeDateRange = null;    // {field:'kirim'|'bayar', start:Date, end:Date} | null
+let calState = { field: null, viewYear: null, viewMonth: null, rangeStart: null, rangeEnd: null, hoverDate: null };
 let activeTimeFilter = null;   // {field:'kirim'|'bayar', bucket:'before'|'after'} | null
 let varianMode = 'qty_desc', karMode = 'qty_desc', resiMode = 'default';
 const GROUP_COLORS = ['tag-0','tag-1','tag-2','tag-3','tag-4','tag-5','tag-6','tag-7','tag-8'];
@@ -661,6 +732,10 @@ function handleFiles(fileList) {
       });
       if (!results.length) throw new Error('Semua file gagal diproses:\n' + failedFiles.join('\n'));
       activeTimeFilter = null; // reset filter waktu tiap upload baru
+      activeDateRange = null;
+      calState = { field: null, viewYear: null, viewMonth: null, rangeStart: null, rangeEnd: null, hoverDate: null };
+      const calPopup = document.getElementById('calPopup');
+      if (calPopup) calPopup.style.display = 'none';
       updateTimeFilterUI();
       buildRekap(results);
       if (failedFiles.length) showError(`${failedFiles.length} file dilewati (gagal parse): ` + failedFiles.join(' | '));
@@ -749,13 +824,21 @@ function buildRekap(fileResults) {
   const allRowsUnfiltered = [];
   fileResults.forEach(f => allRowsUnfiltered.push(...f.rows.map(r => ({...r, _file: f.filename}))));
 
-  // ── Filter waktu (kalau aktif) — berlaku ke SEMUA tab (Varian/Karakter/Resi) ──
+  // ── Filter tanggal + filter waktu (kalau aktif) — berlaku ke SEMUA tab (Varian/Karakter/Resi) ──
   const timeField = activeTimeFilter ? (activeTimeFilter.field === 'kirim' ? 'waktuKirim' : 'waktuBayar') : null;
-  const timeFiltered = !activeTimeFilter ? allRowsUnfiltered : allRowsUnfiltered.filter(row => {
-    const d = row[timeField];
-    if (!d) return false; // gak punya timestamp = gak bisa dinilai masuk sebelum/setelah jam 12, exclude
-    const hour = d.getHours();
-    return activeTimeFilter.bucket === 'before' ? hour < 12 : hour >= 12;
+  const rangeField = activeDateRange ? (activeDateRange.field === 'kirim' ? 'waktuKirim' : 'waktuBayar') : null;
+  const timeFiltered = allRowsUnfiltered.filter(row => {
+    if (activeDateRange) {
+      const d = row[rangeField];
+      if (!d || d < activeDateRange.start || d > activeDateRange.end) return false;
+    }
+    if (activeTimeFilter) {
+      const d = row[timeField];
+      if (!d) return false; // gak punya timestamp = gak bisa dinilai masuk sebelum/setelah jam 12, exclude
+      const hour = d.getHours();
+      if (activeTimeFilter.bucket === 'before' ? hour >= 12 : hour < 12) return false;
+    }
+    return true;
   });
 
   // ── Exclude status Batal (buat Varian/Karakter — kebutuhan produksi/potong) ──
@@ -920,17 +1003,153 @@ function updateTimeFilterUI() {
     const isActive = activeTimeFilter && b.dataset.field === activeTimeFilter.field && b.dataset.bucket === activeTimeFilter.bucket;
     b.classList.toggle('active', !!isActive);
   });
+  document.querySelectorAll('.time-filter-cal-btn').forEach(b => {
+    b.classList.toggle('active', !!(activeDateRange && activeDateRange.field === b.dataset.field));
+  });
   const badge = document.getElementById('timeFilterBadge');
   if (badge) {
+    const parts = [];
+    if (activeDateRange) {
+      const fieldLabel = activeDateRange.field === 'kirim' ? 'Pengiriman Diatur' : 'Pembayaran Dilakukan';
+      parts.push(`${fieldLabel}: ${fmtDateShort(activeDateRange.start)} – ${fmtDateShort(activeDateRange.end)}`);
+    }
     if (activeTimeFilter) {
       const fieldLabel = activeTimeFilter.field === 'kirim' ? 'Pengiriman Diatur' : 'Pembayaran Dilakukan';
       const bucketLabel = activeTimeFilter.bucket === 'before' ? 'sebelum 12:00' : 'setelah 12:00';
-      badge.textContent = `Filter aktif: ${fieldLabel} · ${bucketLabel}`;
+      parts.push(`${fieldLabel} · ${bucketLabel}`);
+    }
+    if (parts.length) {
+      badge.textContent = 'Filter aktif: ' + parts.join(' + ');
       badge.style.display = 'block';
     } else {
       badge.style.display = 'none';
     }
   }
+}
+
+function fmtDateShort(d) {
+  const bulan = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+  return `${d.getDate()} ${bulan[d.getMonth()]}`;
+}
+
+// ── CALENDAR DATE-RANGE PICKER ──
+function toggleCalendar(field) {
+  if (!lastFileResults.length) return;
+  const popup = document.getElementById('calPopup');
+  const isOpen = popup.style.display !== 'none' && calState.field === field;
+  if (isOpen) { popup.style.display = 'none'; calState.field = null; return; }
+
+  calState.field = field;
+  calState.rangeStart = activeDateRange && activeDateRange.field === field ? activeDateRange.start : null;
+  calState.rangeEnd = activeDateRange && activeDateRange.field === field ? activeDateRange.end : null;
+  calState.hoverDate = null;
+
+  // Buka di bulan berisi tanggal TERAKHIR yang ada di data field ini (paling relevan)
+  const key = field === 'kirim' ? 'waktuKirim' : 'waktuBayar';
+  let latest = null;
+  lastFileResults.forEach(f => f.rows.forEach(r => {
+    if (r[key] && (!latest || r[key] > latest)) latest = r[key];
+  }));
+  const ref = calState.rangeStart || latest || new Date();
+  calState.viewYear = ref.getFullYear();
+  calState.viewMonth = ref.getMonth();
+
+  popup.style.display = 'block';
+  renderCalendar();
+}
+
+function calNavMonth(delta) {
+  calState.viewMonth += delta;
+  if (calState.viewMonth < 0) { calState.viewMonth = 11; calState.viewYear--; }
+  if (calState.viewMonth > 11) { calState.viewMonth = 0; calState.viewYear++; }
+  renderCalendar();
+}
+
+function sameDay(a, b) { return a && b && a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
+
+function renderCalendar() {
+  const bulanNama = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  document.getElementById('calMonthLabel').textContent = `${bulanNama[calState.viewMonth]} ${calState.viewYear}`;
+
+  const firstOfMonth = new Date(calState.viewYear, calState.viewMonth, 1);
+  const startOffset = firstOfMonth.getDay(); // 0=Minggu
+  const daysInMonth = new Date(calState.viewYear, calState.viewMonth + 1, 0).getDate();
+
+  const rangeEndForPreview = calState.rangeEnd || calState.hoverDate;
+  let lo = calState.rangeStart, hi = rangeEndForPreview;
+  if (lo && hi && lo > hi) { const t = lo; lo = hi; hi = t; }
+
+  let html = '';
+  for (let i = 0; i < startOffset; i++) html += '<div class="cal-day empty"></div>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const thisDate = new Date(calState.viewYear, calState.viewMonth, d);
+    let cls = 'cal-day';
+    if (lo && hi && thisDate >= new Date(lo.getFullYear(),lo.getMonth(),lo.getDate()) && thisDate <= new Date(hi.getFullYear(),hi.getMonth(),hi.getDate())) {
+      cls += ' in-range';
+    }
+    if (sameDay(thisDate, calState.rangeStart) && sameDay(thisDate, calState.rangeEnd)) cls += ' range-single';
+    else if (sameDay(thisDate, lo)) cls += ' range-start';
+    else if (calState.rangeEnd && sameDay(thisDate, hi)) cls += ' range-end';
+    html += `<button class="${cls}" onmouseenter="calDayHover(${d})" onclick="calDayClick(${d})">${d}</button>`;
+  }
+  document.getElementById('calGrid').innerHTML = html;
+
+  const lbl = document.getElementById('calRangeLabel');
+  if (calState.rangeStart && calState.rangeEnd) {
+    const key = calState.field === 'kirim' ? 'waktuKirim' : 'waktuBayar';
+    const start = new Date(calState.rangeStart); start.setHours(0,0,0,0);
+    const end = new Date(calState.rangeEnd); end.setHours(23,59,59,999);
+    let qty = 0;
+    lastFileResults.forEach(f => f.rows.forEach(r => {
+      if (!r.isBatal && r[key] && r[key] >= start && r[key] <= end) qty += r.qty;
+    }));
+    lbl.innerHTML = `${fmtDateShort(calState.rangeStart)} – ${fmtDateShort(calState.rangeEnd)} · <strong>${qty} pcs</strong>`;
+  } else if (calState.rangeStart) {
+    lbl.textContent = `${fmtDateShort(calState.rangeStart)} → pilih tanggal akhir`;
+  } else {
+    lbl.textContent = 'Pilih tanggal awal';
+  }
+}
+
+function calDayHover(d) {
+  if (!calState.rangeStart || calState.rangeEnd) return; // cuma preview kalau lagi milih tanggal akhir
+  calState.hoverDate = new Date(calState.viewYear, calState.viewMonth, d);
+  renderCalendar();
+}
+
+function calDayClick(d) {
+  const clicked = new Date(calState.viewYear, calState.viewMonth, d);
+  if (!calState.rangeStart || calState.rangeEnd) {
+    // mulai seleksi baru
+    calState.rangeStart = clicked;
+    calState.rangeEnd = null;
+    calState.hoverDate = null;
+  } else {
+    // tentukan tanggal akhir — swap kalau user klik tanggal SEBELUM tanggal awal
+    if (clicked < calState.rangeStart) {
+      calState.rangeEnd = calState.rangeStart;
+      calState.rangeStart = clicked;
+    } else {
+      calState.rangeEnd = clicked;
+    }
+    // Langsung terapkan begitu rentang lengkap
+    const start = new Date(calState.rangeStart); start.setHours(0,0,0,0);
+    const end = new Date(calState.rangeEnd); end.setHours(23,59,59,999);
+    activeDateRange = { field: calState.field, start, end };
+    updateTimeFilterUI();
+    buildRekap(lastFileResults);
+  }
+  renderCalendar();
+}
+
+function clearDateRange() {
+  activeDateRange = null;
+  calState.rangeStart = null;
+  calState.rangeEnd = null;
+  calState.hoverDate = null;
+  updateTimeFilterUI();
+  renderCalendar();
+  buildRekap(lastFileResults);
 }
 
 // ── CLEAR ──
@@ -944,6 +1163,10 @@ function doClear() {
   duplicateInfo = { count: 0 };
   lastFileResults = [];
   activeTimeFilter = null;
+  activeDateRange = null;
+  calState = { field: null, viewYear: null, viewMonth: null, rangeStart: null, rangeEnd: null, hoverDate: null };
+  const calPopup = document.getElementById('calPopup');
+  if (calPopup) calPopup.style.display = 'none';
   updateTimeFilterUI();
   document.getElementById('subtitle').textContent = 'Shopee · Perlu Dikirim';
   renderVarian(); renderKarakter(); renderResi();
