@@ -1,6 +1,21 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.36
+// CODE WORKER PRODUKSI ver.37
 // ============================================================
+// PERUBAHAN ver.37: MIGRASI parsing "Masuk ..." (stok kain baru datang) dari Apps Script ke sini.
+// Sebelumnya: Worker terusin MENTAH-MENTAH ke Apps Script (proxyKeAppsScript_), Apps Script yang
+// parsing teks + tulis ke Sheet STOK KAIN + panggil balik Worker (/internal/stok-masuk) buat
+// sinkron ke Supabase. Sekarang: Worker sendiri yang parsing (isBarisMasuk_/parseBarisMasuk_/dkk,
+// port 1:1 dari Apps Script) DAN tulis langsung ke Supabase (tambahStokKainMasukSupabase_) - gak
+// ada lagi round-trip ke Apps Script/HTTP internal buat fitur ini. Apps Script (CODE TIM POTONG)
+// TIDAK disentuh sama sekali - kodenya jadi gak pernah kepanggil lagi buat alur ini (mati
+// otomatis karena Worker sudah intercept duluan), tapi sengaja DIBIARKAN dulu sebagai jaring
+// pengaman, belum dihapus.
+// DAMPAK PENTING: tab Sheet "STOK KAIN" TIDAK LAGI auto-nambah baris tiap ada laporan masuk baru
+// (Worker gak punya akses tulis Sheets). Sheet-nya sekarang murni "snapshot stok aktif", di-
+// refresh manual lewat SYNC AKUNTANSI - sudah dikonfirmasi Denny ini memang perilaku yang mau.
+// Fitur foto-nota-AI (baca struk supplier via Claude Vision) TIDAK ikut dimigrasi - itu tetap di
+// Apps Script apa adanya (di luar scope "parsing via teks").
+//
 // PERUBAHAN ver.36: optimasi kecepatan respon /produksi & /stok - tanganiCommandCepat_ sekarang
 // jalanin hapusPasanganSebelumnya_ (hapus pesan lama) & kirimTombolMiniApp_/kirimTombolDashboard_
 // (kirim tombol baru) secara PARALEL (Promise.all), bukan berurutan kayak sebelumnya. Dua-duanya
@@ -792,9 +807,39 @@ async function handleExportLogQCMentah_(env, bulan) {
 }
 
 // ============================================================
-// v.29 - INSERT stok_kain, dipanggil CODE TIM POTONG.js (Apps Script) lewat proxy ini (bukan
-// ke Supabase langsung - lihat komentar di routing di atas buat alasannya).
+// v.29 - INSERT stok_kain. Endpoint HTTP ini TETAP ADA (dipakai gas-debug/tools lain kalau
+// perlu), tapi sejak v.37 logic intinya dipindah ke tambahStokKainMasukSupabase_() di bawah,
+// biar bisa dipakai bareng dari 2 tempat: endpoint HTTP ini (request luar) DAN
+// tanganiPesanMasuk_() (dipanggil langsung dari Worker sendiri, tanpa HTTP round-trip).
 // ============================================================
+async function tambahStokKainMasukSupabase_(env, data) {
+  const payload = {
+    tgl_beli: data.tglBeli || new Date().toISOString().slice(0, 10),
+    supplier: data.supplier || null,
+    warna: data.warna,
+    kg: data.kg,
+    kode_roll: data.kodeRoll || null,
+    kg_terpakai: 0
+  };
+  if (data.harga !== undefined && data.harga !== null && data.harga !== '') payload.harga_rp_kg = data.harga;
+  if (data.diskon) payload.diskon_rp_kg = data.diskon;
+
+  const res = await fetch(env.SUPABASE_URL + '/rest/v1/stok_kain', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: env.SUPABASE_SECRET_KEY,
+      Authorization: 'Bearer ' + env.SUPABASE_SECRET_KEY,
+      Prefer: 'return=minimal'
+    },
+    body: JSON.stringify([payload])
+  });
+
+  if (res.status >= 300) {
+    throw new Error('HTTP ' + res.status + ': ' + (await res.text()).substring(0, 300));
+  }
+}
+
 async function handleInternalStokMasuk_(request, env) {
   try {
     const token = request.headers.get('X-Internal-Token');
@@ -807,36 +852,284 @@ async function handleInternalStokMasuk_(request, env) {
       return jsonResponse({ ok: false, error: 'warna dan kg wajib diisi' }, 400);
     }
 
-    const payload = {
-      tgl_beli: body.tglBeli || new Date().toISOString().slice(0, 10),
-      supplier: body.supplier || null,
-      warna: body.warna,
-      kg: body.kg,
-      kode_roll: body.kodeRoll || null,
-      kg_terpakai: 0
-    };
-    if (body.harga !== undefined && body.harga !== null && body.harga !== '') payload.harga_rp_kg = body.harga;
-    if (body.diskon) payload.diskon_rp_kg = body.diskon;
-
-    const res = await fetch(env.SUPABASE_URL + '/rest/v1/stok_kain', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: env.SUPABASE_SECRET_KEY,
-        Authorization: 'Bearer ' + env.SUPABASE_SECRET_KEY,
-        Prefer: 'return=minimal'
-      },
-      body: JSON.stringify([payload])
+    await tambahStokKainMasukSupabase_(env, {
+      tglBeli: body.tglBeli, supplier: body.supplier, warna: body.warna,
+      kg: body.kg, kodeRoll: body.kodeRoll, harga: body.harga, diskon: body.diskon
     });
-
-    if (res.status >= 300) {
-      return jsonResponse({ ok: false, error: 'HTTP ' + res.status + ': ' + (await res.text()).substring(0, 300) }, 500);
-    }
 
     return jsonResponse({ ok: true });
   } catch (e) {
     return jsonResponse({ ok: false, error: e.message }, 500);
   }
+}
+
+// ============================================================
+// v.37 - PARSING TEKS "MASUK ..." (migrasi dari CODE TIM POTONG Apps Script) - port 1:1 dari
+// fungsi isBarisMasuk/isBarisPasanganKgKode/isBarisWarnaKgKode/isBarisLanjutanMasuk/
+// extractKodeRoll/pisahkanBarisMasukDanProduksi/parseBarisMasuk di Apps Script. Sengaja PERSIS
+// (bukan ditulis ulang gaya baru) karena kedua runtime (Apps Script V8 & Cloudflare Workers V8)
+// pakai mesin regex yang sama persis - jadi hasil parsing dijamin identik dengan versi lama,
+// gak perlu re-desain aturan dari nol. Mendukung 4 gaya penulisan (D/C/B/A), lihat komentar di
+// parseBarisMasuk_ untuk detail tiap gaya & contohnya.
+//
+// Baris "RIB" TIDAK di-skip di sini (beda dari fitur baca-nota-foto) - konsisten sama perilaku
+// lama jalur teks manual, yang memang belum pernah menerapkan aturan skip RIB.
+//
+// CATATAN PENTING: sejak migrasi ini, tab Sheet "STOK KAIN" TIDAK LAGI otomatis nambah baris
+// tiap ada laporan "Masuk..." baru (karena Worker gak punya akses tulis ke Google Sheets sama
+// sekali) - stok baru cuma masuk ke Supabase. Tab Sheet-nya sekarang murni cerminan "stok aktif
+// sekarang" yang di-refresh manual lewat tombol "Sinkron Sekarang" di project Apps Script
+// terpisah SYNC AKUNTANSI (fungsi sinkronKeSheetStokKain) - ini sudah dikonfirmasi Denny sebagai
+// perilaku yang diinginkan, bukan bug.
+// ============================================================
+function isBarisMasuk_(line) {
+  return /^\s*masuk\b/i.test(line);
+}
+
+function isBarisPasanganKgKode_(line) {
+  return /^[\d]+[.,]?[\d]*\s*\/\s*\S+\s*$/.test(line.trim());
+}
+
+function isBarisWarnaKgKode_(line) {
+  return /^\S.*?\s+[\d]+[.,]?[\d]*\s*kg?\s*\/\s*\S+\s*$/i.test(line.trim());
+}
+
+function isBarisLanjutanMasuk_(line) {
+  return isBarisPasanganKgKode_(line) || isBarisWarnaKgKode_(line);
+}
+
+// Ekstrak kode roll dari akhir baris. Dukung 2 format:
+//  1. Format lama, pakai kata "rol" eksplisit: "... 25,4kg - rol 0178"
+//  2. Format baru, TANPA kata "rol" sama sekali - "/" murni pemisah kg vs kode roll:
+//     "Anak putih 25,05/6097" -> kg=25,05, kode roll=6097.
+function extractKodeRoll_(line) {
+  const cleaned = line.replace(/[-\/]/g, ' ');
+  const m = cleaned.match(/\brol\.?\s*(\S+)\s*$/i);
+  if (m) return { kodeRoll: m[1].trim(), lineWithoutKode: cleaned.slice(0, m.index).trim() };
+
+  const mSlash = line.match(/^(.*[\d])\s*\/\s*(\S+)\s*$/);
+  if (mSlash) {
+    return { kodeRoll: mSlash[2].trim(), lineWithoutKode: mSlash[1].trim() };
+  }
+
+  return { kodeRoll: null, lineWithoutKode: line };
+}
+
+// Kelompokkan teks pesan jadi: blok-blok "Masuk" (tiap blok = array baris mentahnya, BUKAN
+// digabung jadi 1 string lagi - supaya warna per baris bisa dibedakan) + sisa baris produksi
+// biasa (dikembalikan gabungan, dipakai cuma buat pesan pengingat "pakai Mini App ya").
+function pisahkanBarisMasukDanProduksi_(text) {
+  const semuaBaris = String(text || '').split('\n');
+  const blokMasukList = [];
+  const barisProduksiList = [];
+  let blokAktif = null;
+
+  function baruIkutiKgKode(mulaiDari) {
+    for (let j = mulaiDari; j < semuaBaris.length; j++) {
+      const t = semuaBaris[j].trim();
+      if (!t) continue;
+      if (isBarisPasanganKgKode_(t)) return true;
+      if (isBarisMasuk_(t)) return false;
+      if (t.indexOf('/') === -1) continue;
+      return false;
+    }
+    return false;
+  }
+
+  for (let i = 0; i < semuaBaris.length; i++) {
+    const rawLine = semuaBaris[i];
+    const line = rawLine.trim();
+
+    if (!line) {
+      if (blokAktif && baruIkutiKgKode(i + 1)) continue;
+      if (blokAktif) { blokMasukList.push(blokAktif); blokAktif = null; }
+      continue;
+    }
+
+    if (isBarisMasuk_(line)) {
+      if (blokAktif) blokMasukList.push(blokAktif);
+      blokAktif = [line];
+      continue;
+    }
+
+    if (blokAktif && isBarisLanjutanMasuk_(line)) {
+      blokAktif.push(line);
+      continue;
+    }
+
+    if (blokAktif && line.indexOf('/') === -1 && baruIkutiKgKode(i + 1)) {
+      blokAktif.push(line);
+      continue;
+    }
+
+    if (blokAktif) { blokMasukList.push(blokAktif); blokAktif = null; }
+    barisProduksiList.push(rawLine);
+  }
+  if (blokAktif) blokMasukList.push(blokAktif);
+
+  return { blokMasuk: blokMasukList, barisProduksi: barisProduksiList.join('\n') };
+}
+
+// lines: ARRAY baris mentah (sudah di-trim) untuk 1 blok Masuk, baris pertama diawali "Masuk".
+function parseBarisMasuk_(lines) {
+  const headerLine = lines[0];
+  const sisaBarisLain = lines.slice(1);
+  const tanpaMasuk = headerLine.trim().replace(/^masuk\s+/i, '');
+
+  // FORMAT D: header "<warna> - <supplier>" - PEMISAH STRIP EKSPLISIT dikelilingi spasi.
+  // Contoh: "Masuk Putih 30S - Focus" / "25.43 / 6352" / "Hitam 30S" / "28.22 / 3674"
+  const headerPunyaPasangan = /[\d]+[.,]?[\d]*\s*kg?\s*\/\s*\S+/i.test(tanpaMasuk);
+  const mFormatD = !headerPunyaPasangan ? tanpaMasuk.match(/^(.+?)\s-\s(.+)$/) : null;
+  if (mFormatD && sisaBarisLain.length > 0) {
+    const warnaAwalD = mFormatD[1].trim().toUpperCase();
+    const supplierD = mFormatD[2].trim().toUpperCase();
+    if (warnaAwalD && supplierD) {
+      const hasilD = [];
+      let warnaSaatIni = warnaAwalD;
+      let semuaBarisCocokD = true;
+      for (const lineLainD of sisaBarisLain) {
+        const t = lineLainD.trim();
+        if (!t) continue;
+        const mKgKodeD = t.match(/^([\d]+[.,]?[\d]*)\s*\/\s*(\S+)\s*$/);
+        if (mKgKodeD) {
+          const kgD = parseFloat(mKgKodeD[1].replace(',', '.'));
+          const kodeD = mKgKodeD[2].trim();
+          if (isNaN(kgD)) { semuaBarisCocokD = false; break; }
+          hasilD.push({ warna: warnaSaatIni, kg: kgD, kodeRoll: kodeD, supplier: supplierD });
+          continue;
+        }
+        if (t.indexOf('/') === -1) { warnaSaatIni = t.toUpperCase(); continue; }
+        semuaBarisCocokD = false; break;
+      }
+      if (semuaBarisCocokD && hasilD.length > 0) return hasilD;
+    }
+  }
+
+  // FORMAT C: header CUMA nama supplier, tiap baris lanjutan punya WARNA+KG+KODE sendiri.
+  // Contoh: "Masuk ochim" / "Kubus 24,70kg/1615" / "Dasty 24,6kg/ 1358"
+  if (!headerPunyaPasangan && sisaBarisLain.length > 0) {
+    const supplierC = tanpaMasuk.trim().toUpperCase();
+    const hasilC = [];
+    let semuaBarisCocok = true;
+    for (const lineLain of sisaBarisLain) {
+      const mBaris = lineLain.match(/^(.*?)\s+([\d]+[.,]?[\d]*)\s*kg?\s*\/\s*(\S+)\s*$/i);
+      if (!mBaris) { semuaBarisCocok = false; break; }
+      const warnaC = mBaris[1].trim().toUpperCase();
+      const kgC = parseFloat(mBaris[2].replace(',', '.'));
+      const kodeC = mBaris[3].trim();
+      if (!warnaC || isNaN(kgC)) { semuaBarisCocok = false; break; }
+      hasilC.push({ warna: warnaC, kg: kgC, kodeRoll: kodeC, supplier: supplierC });
+    }
+    if (semuaBarisCocok && hasilC.length > 0) return hasilC;
+  }
+
+  // FORMAT B: banyak roll sekaligus, WARNA SAMA untuk semua.
+  // Contoh: "Masuk navy 24s ochim 25.10 / 0666 24.90 / 0963"
+  const tanpaMasukGabung = lines.join(' ').trim().replace(/^masuk\s+/i, '');
+  const polaPasangan = /([\d]+[.,]?[\d]*)\s*\/\s*(\S+)/g;
+  const pasangan = [];
+  let m;
+  let firstIndex = -1;
+  while ((m = polaPasangan.exec(tanpaMasukGabung)) !== null) {
+    if (firstIndex === -1) firstIndex = m.index;
+    pasangan.push({ kg: parseFloat(m[1].replace(',', '.')), kodeRoll: m[2].trim() });
+  }
+  if (pasangan.length > 0) {
+    const keterangan = tanpaMasukGabung.slice(0, firstIndex).trim();
+    const kataKeterangan = keterangan.split(/\s+/).filter(function (w) { return w; });
+    const warna = kataKeterangan.length > 0 ? kataKeterangan[0].toUpperCase() : '';
+    const supplier = kataKeterangan.length > 1 ? kataKeterangan[kataKeterangan.length - 1].toUpperCase() : '';
+    return pasangan.map(function (p) {
+      return { warna: warna, kg: p.kg, kodeRoll: p.kodeRoll, supplier: supplier };
+    });
+  }
+
+  // FORMAT A (lama, fallback): satu roll, pakai kata "rol".
+  const stripped = extractKodeRoll_(headerLine.trim());
+  const tanpaMasukLama = stripped.lineWithoutKode.replace(/^masuk\s+/i, '').trim();
+  const mLama = tanpaMasukLama.match(/^(.*?)\s*([\d]+[.,]?[\d]*)\s*(?:kg\.?)?\s*$/i);
+  if (!mLama) return [];
+  const warnaLama = mLama[1].trim().toUpperCase();
+  const kgLama = parseFloat(mLama[2].replace(',', '.'));
+  if (!warnaLama || isNaN(kgLama)) return [];
+  return [{ warna: warnaLama, kg: kgLama, kodeRoll: stripped.kodeRoll, supplier: '' }];
+}
+
+// Kirim pesan teks polos ke 1 chat Telegram - dipakai buat notifikasi error dari
+// tanganiPesanMasuk_ (parse gagal / anti-duplikat).
+async function kirimPesanTelegram_(env, chatId, teks) {
+  try {
+    await fetch('https://api.telegram.org/bot' + env.TELEGRAM_BOT_TOKEN + '/sendMessage', {
+      method: 'post',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text: teks })
+    });
+  } catch (e) {
+    // gak fatal kalau notifikasi gagal terkirim
+  }
+}
+
+// v.37 - HANDLER UTAMA "Masuk ..." - dipanggil dari handleTelegramWebhook_ SEBELUM pesan
+// diteruskan ke Apps Script (lihat routing di bawah). Menggantikan alur lama yang lewat
+// Apps Script (doPost -> tambahStokKainMasuk -> tambahStokKainMasukKeSupabase_ via HTTP ke
+// Worker) - sekarang parsing DAN tulis ke Supabase dua-duanya di Worker, gak ada lagi
+// round-trip HTTP internal ke Apps Script buat fitur ini.
+async function tanganiPesanMasuk_(env, message) {
+  const chatId = message.chat.id;
+  const teks = message.text;
+
+  // Filter user opsional (sama polanya kayak dulu di Apps Script) - kalau Script
+  // Property/env var terkait belum diisi, gak ada pembatasan (semua user diproses).
+  const blockedIds = String(env.BLOCKED_USER_IDS || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+  const senderId = message.from ? String(message.from.id) : null;
+  if (blockedIds.length > 0 && senderId && blockedIds.indexOf(senderId) !== -1) {
+    return jsonResponse({ ok: true, pesan: 'diabaikan (user diblokir)' });
+  }
+  const allowedId = env.ALLOWED_USER_ID;
+  if (allowedId && senderId !== String(allowedId)) {
+    return jsonResponse({ ok: true, pesan: 'diabaikan (bukan user diizinkan)' });
+  }
+
+  // Anti-duplikat - pakai mekanisme Supabase yang SUDAH ADA (log_anti_duplikat, dipakai juga
+  // oleh Mini App /submit-produksi), namespace key "kainmasuk_<chatId>" biar gak ketuker sama
+  // dedup Mini App. Jendela 24 jam, sama kayak versi Apps Script lama.
+  const fingerprint = await hashFingerprint_(String(teks || '').trim().replace(/\s+/g, ' ').toUpperCase());
+  const cek = await cekDanCatatDuplikat_(env, 'kainmasuk_' + chatId, fingerprint, teks.substring(0, 300));
+  if (cek.duplikat) {
+    await kirimPesanTelegram_(env, chatId, '🔁 Pesan ini sama persis kayak laporan ' + formatJarakWaktu_(cek.jarakMs) + ' lalu - dianggap kiriman ganda, tidak diproses lagi.');
+    return jsonResponse({ ok: true, pesan: 'diabaikan (duplikat)' });
+  }
+
+  const kelompok = pisahkanBarisMasukDanProduksi_(teks);
+  if (kelompok.blokMasuk.length === 0) {
+    return jsonResponse({ ok: true, pesan: 'tidak ada blok Masuk yang terdeteksi' });
+  }
+
+  let jumlahBerhasil = 0;
+  const galat = [];
+  for (const blok of kelompok.blokMasuk) {
+    const daftarMasuk = parseBarisMasuk_(blok);
+    if (!daftarMasuk || daftarMasuk.length === 0) {
+      galat.push('Gagal parsing blok: "' + blok[0] + '"');
+      continue;
+    }
+    for (const pm of daftarMasuk) {
+      try {
+        await tambahStokKainMasukSupabase_(env, { warna: pm.warna, kg: pm.kg, kodeRoll: pm.kodeRoll, supplier: pm.supplier });
+        jumlahBerhasil++;
+      } catch (e) {
+        galat.push(pm.warna + ' (' + pm.kg + 'kg): ' + e.message);
+      }
+    }
+  }
+
+  console.log('Kain masuk diproses via Worker:', jumlahBerhasil, 'berhasil,', galat.length, 'gagal. Chat:', chatId);
+
+  if (galat.length > 0) {
+    await kirimPesanTelegram_(env, chatId, '⚠️ ' + jumlahBerhasil + ' baris berhasil disimpan, tapi ada ' + galat.length + ' yang gagal:\n' + galat.join('\n'));
+  }
+
+  return jsonResponse({ ok: true, jumlahBerhasil, jumlahGagal: galat.length });
 }
 
 // ============================================================
@@ -1946,9 +2239,15 @@ async function handleTelegramWebhook_(request, env) {
     if (teksTrim === '/stok' || teksTrim === '/dashboard') {
       return await tanganiCommandCepat_(env, message, 'stok');
     }
+    // v.37: laporan "Masuk ..." (stok kain baru datang) sekarang diparsing & ditulis ke
+    // Supabase LANGSUNG di sini - migrasi dari Apps Script, lihat banner di
+    // tanganiPesanMasuk_ buat detail lengkapnya.
+    if (isBarisMasuk_(message.text.trim().split('\n')[0])) {
+      return await tanganiPesanMasuk_(env, message);
+    }
   }
 
-  // Bukan command cepat (laporan teks, foto nota, dst) - Apps Script yang proses seperti biasa.
+  // Bukan command cepat/laporan masuk (foto nota, dst) - Apps Script yang proses seperti biasa.
   return await proxyKeAppsScript_(rawBodyText, env);
 }
 
