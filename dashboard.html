@@ -1,19 +1,18 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.40
+DASHBOARD ver.41
 ============================================================
-PERUBAHAN ver.40: fitur baru tombol Hapus (🗑️) per-baris di tab REKAP QC - KHUSUS admin, sama
-pola cek-nya kayak Hapus Laporan. BEDA dari Hapus Laporan (yang hapus 1 laporan tim_potong
-LENGKAP): ini cuma membatalkan 1x SUBMIT QC-nya doang (1 baris = 1 log_qc), progress laporan
-induknya dihitung ulang otomatis dari sisa submit yang masih aktif, notifikasi Telegram QC ikut
-disinkronkan ke angka baru. Endpoint baru Worker: POST /data/hapus-log-qc.
+PERUBAHAN ver.41: perbaikan komentar (BUKAN perubahan fungsional) - catatan keamanan di bawah
+masih menyebut "GitHub Pages" padahal hosting statis file ini sudah pindah ke Cloudflare Worker
+"tim-potong-miniapp" sejak 7 Agustus 2026 (GitHub sekarang cuma source code, bukan lagi yang
+nyajiin halaman ke browser). Diperbaiki biar gak menyesatkan pembaca kode berikutnya.
 Riwayat lengkap: git log.
 ============================================================
 
 CATATAN KEAMANAN (tetap berlaku, bukan cuma soal 1 versi): token di URL SYNC_AKUNTANSI_URL di
-bawah ini KELIHATAN oleh siapapun yang buka "view source" halaman ini (file statis publik di
-GitHub Pages) - beda dari token/kunci yang cuma dipakai server-ke-server. Risikonya rendah
+bawah ini KELIHATAN oleh siapapun yang buka "view source" halaman ini (file statis publik yang
+di-serve Cloudflare Worker "tim-potong-miniapp") - beda dari token/kunci yang cuma dipakai server-ke-server. Risikonya rendah
 (sinkron aman diulang-ulang, gak merusak data), tapi kalau suatu saat kerasa perlu diganti/
 dicabut, tinggal ganti value Script Property WEBAPP_SYNC_TOKEN di project CODE SYNC AKUNTANSI,
 terus update juga string di bawah ini + deploy ulang halaman ini.
