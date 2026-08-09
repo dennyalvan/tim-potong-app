@@ -1,6 +1,21 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.37
+// CODE WORKER PRODUKSI ver.38
 // ============================================================
+// PERUBAHAN ver.38: MIGRASI fitur "baca nota" (foto struk supplier -> baca otomatis via Claude
+// Vision -> preview -> konfirmasi tombol -> simpan) dari Apps Script ke sini juga (menyusul
+// migrasi parsing teks "Masuk..." di ver.37). Sebelumnya: Worker terusin foto+callback_query
+// MENTAH-MENTAH ke Apps Script. Sekarang: Worker sendiri yang download foto dari Telegram,
+// panggil Claude Vision API, terapkan aturan bisnis (skip RIB, mapping warna KAMUS SINONIM
+// WARNA, format Kode Roll 4 digit), simpan preview sementara di Cloudflare KV (TIM_POTONG_KV,
+// TTL 30 menit, ganti CacheService Apps Script), lalu tunggu user tap tombol "Simpan"/"Batal".
+// TEMUAN PENTING sebelum migrasi ini: Script Property ANTHROPIC_API_KEY di Apps Script TERNYATA
+// KOSONG (dicek via gas-debug) - fitur ini kemungkinan sudah gak jalan dari sisi Apps Script
+// untuk sementara waktu sebelum migrasi ini. Worker sekarang pakai secret BARU ANTHROPIC_API_KEY
+// (beda tempat penyimpanan, jadi harus di-set ulang sebagai Cloudflare secret).
+// Apps Script (CODE TIM POTONG) TIDAK disentuh sama sekali untuk fitur ini juga - kodenya jadi
+// gak pernah kepanggil lagi (Worker sudah intercept duluan), sengaja dibiarkan sebagai jaring
+// pengaman.
+//
 // PERUBAHAN ver.37: MIGRASI parsing "Masuk ..." (stok kain baru datang) dari Apps Script ke sini.
 // Sebelumnya: Worker terusin MENTAH-MENTAH ke Apps Script (proxyKeAppsScript_), Apps Script yang
 // parsing teks + tulis ke Sheet STOK KAIN + panggil balik Worker (/internal/stok-masuk) buat
@@ -2126,19 +2141,24 @@ async function ambilDariSupabase_(env, path) {
 // kayak di sheet. Hasilnya: {SINONIM_ATAU_KANONIK: KANONIK}, dipakai Mini App buat translate
 // warna combo SEBELUM dicocokkan ke stok.
 // ============================================================
+async function ambilPetaWarnaKanonik_(env) {
+  const rows = await ambilDariSupabase_(env, '/rest/v1/kamus_sinonim_warna?select=kanonik,sinonim');
+  const peta = {};
+  rows.forEach(function (row) {
+    const kanonik = String(row.kanonik || '').toUpperCase();
+    if (!kanonik) return;
+    peta[kanonik] = kanonik;
+    (row.sinonim || []).forEach(function (s) {
+      const su = String(s || '').toUpperCase();
+      if (su) peta[su] = kanonik;
+    });
+  });
+  return peta;
+}
+
 async function handleWarnaKanonik_(env) {
   try {
-    const rows = await ambilDariSupabase_(env, '/rest/v1/kamus_sinonim_warna?select=kanonik,sinonim');
-    const peta = {};
-    rows.forEach(function (row) {
-      const kanonik = String(row.kanonik || '').toUpperCase();
-      if (!kanonik) return;
-      peta[kanonik] = kanonik;
-      (row.sinonim || []).forEach(function (s) {
-        const su = String(s || '').toUpperCase();
-        if (su) peta[su] = kanonik;
-      });
-    });
+    const peta = await ambilPetaWarnaKanonik_(env);
     return jsonResponse(peta);
   } catch (e) {
     return jsonResponse({ ok: false, error: e.message }, 500);
@@ -2215,6 +2235,372 @@ async function handleStokRollPerWarna_(env) {
 // dulu (kecepatan respons).
 // ============================================================
 
+// ============================================================
+// v.38 - MIGRASI FITUR "BACA NOTA" (foto struk/nota supplier -> baca otomatis pakai Claude
+// Vision -> preview -> konfirmasi tombol -> simpan ke Supabase) dari Apps Script ke Worker.
+// Port 1:1 dari parseNotaKainDenganAI_/prosesItemNota_/bangunTeksPreviewNota_/dkk di Apps
+// Script - termasuk prompt AI-nya persis sama, biar hasil baca gak berubah.
+//
+// Bedanya dari Apps Script:
+//  - CacheService (batas 6 jam, per-project) -\u003e Cloudflare KV (TIM_POTONG_KV, TTL 30 menit
+//    persis kayak sebelumnya, tapi scope-nya di Worker bukan lagi di Apps Script).
+//  - LockService TIDAK diporting - Workers gak punya masalah single-thread yang sama kayak
+//    Apps Script, jadi gak butuh lock buat tombol "Simpan" (risiko dobel-tap sangat kecil,
+//    diterima sebagai trade-off simplisitas).
+//  - Perlu secret BARU: ANTHROPIC_API_KEY di Cloudflare Worker (sebelumnya Script Property
+//    Apps Script, TERNYATA sudah lama kosong/gak keisi - fitur ini kemungkinan sempat gak
+//    jalan sebelum migrasi ini).
+// ============================================================
+
+// Ekstrak kode roll dari akhir baris. Dukung 2 format:
+//  1. Format lama, pakai kata "rol" eksplisit: "... 25,4kg - rol 0178"
+//  2. Format baru (rev.28), TANPA kata "rol" sama sekali - "/" murni pemisah kg vs kode roll.
+function ekstrakKodeRoll4Digit_(kodeRollRaw) {
+  const segmen = String(kodeRollRaw || '').trim().split('/');
+  const segmenTerakhir = segmen[segmen.length - 1] || '';
+  const angka = segmenTerakhir.replace(/[^0-9]/g, '');
+  if (!angka) return '';
+  return angka.length > 4 ? angka.slice(-4) : angka.padStart(4, '0');
+}
+
+// Ubah "DD/MM/YYYY" (atau DD-MM-YYYY / D/M/YY) dari nota jadi Date object. Fallback ke hari ini
+// kalau formatnya gak ketemu/gagal dibaca sama sekali (jangan sampai fitur ini gagal total cuma
+// gara-gara AI salah format tanggal).
+function parseTanggalNota_(str) {
+  const m = String(str || '').match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+  if (!m) return new Date();
+  let d = parseInt(m[1], 10);
+  let mo = parseInt(m[2], 10) - 1;
+  let y = parseInt(m[3], 10);
+  if (y < 100) y += 2000;
+  const tgl = new Date(y, mo, d);
+  return isNaN(tgl.getTime()) ? new Date() : tgl;
+}
+
+function formatTanggalIndoSimpel_(date) {
+  const dayName = DAYS_ID_[date.getDay()];
+  const day = date.getDate();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = String(date.getFullYear()).slice(-2);
+  return dayName + ',  ' + day + '/' + month + '/' + year;
+}
+
+function tanggalKeIso_(date) {
+  const y = date.getFullYear();
+  const mo = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return y + '-' + mo + '-' + d;
+}
+
+function arrayBufferKeBase64_(buffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+// Kirim foto nota ke Claude Vision API, minta dibaca jadi JSON terstruktur. Prompt PERSIS sama
+// dengan versi Apps Script - jangan diubah tanpa alasan kuat, sudah "dilatih" pakai banyak
+// contoh nota asli.
+async function parseNotaKainDenganAI_(env, base64Image, mimeType) {
+  const apiKey = env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return { ok: false, error: 'ANTHROPIC_API_KEY belum diset di Worker.' };
+  }
+
+  const promptTeks = [
+    'Ini foto nota/struk/invoice pembelian kain dari supplier. Formatnya BISA BEDA-BEDA tiap',
+    'supplier/toko (tabel rapi ATAU struk kasir polos) - baca isinya dengan PENGERTIAN, bukan',
+    'posisi kolom yang kaku. Baca SELURUH baris barang di nota ini dan keluarkan HANYA JSON murni',
+    '(tanpa markdown, tanpa penjelasan, tanpa ```), dengan format PERSIS:',
+    '{',
+    '  "tanggal": "DD/MM/YYYY (sesuai tanggal yang tertulis di nota)",',
+    '  "supplier": "nama supplier/toko kalau KELIHATAN JELAS (kop surat/logo/nama toko), kalau tidak ada/tidak yakin kosongkan jadi string kosong",',
+    '  "items": [',
+    '    { "jenisKain": "nama jenis kain SAJA, TANPA nama warna di belakangnya",',
+    '      "warna": "nama warna barang ini",',
+    '      "kodeRoll": "kode roll/batch APA ADANYA persis seperti tertulis (nota bisa nyebut ini KP, No. Roll, Roll, dsb - ambil utuh, JANGAN diformat ulang)",',
+    '      "qty": angka desimal qty/berat barang ini (contoh 24.14, titik sebagai desimal, TANPA pemisah ribuan),',
+    '      "harga": angka bulat harga per kg (buang semua titik/koma pemisah ribuan),',
+    '      "diskon": angka bulat diskon per kg KALAU ADA (buang pemisah ribuan) - kalau nota sama sekali gak nyebut diskon buat barang ini, HAPUS field ini (jangan isi 0) }',
+    '  ]',
+    '}',
+    'Catatan penting:',
+    '- Kalau nama warna TIDAK punya kolom sendiri, warna biasanya kata/frasa TERAKHIR di nama',
+    '  barang, contoh "SJ. COTTON CARDED 30S KUNING BUSUK" -> jenisKain "SJ. COTTON CARDED 30S",',
+    '  warna "KUNING BUSUK".',
+    '- Kalau ada baris "Diskon" TERPISAH di bawah 1 barang (bukan kolom, tapi baris sendiri dengan',
+    '  qty yang SAMA seperti barang di atasnya), itu diskon PER KG untuk barang tersebut - gabungkan',
+    '  ke item yang bersangkutan sebagai field "diskon", JANGAN dianggap barang/item baru.',
+    '- Baris seperti "Ecer"/"Eceran" itu PENANDA KATEGORI (bukan nama barang) - barang di',
+    '  bawahnya tetap dibaca sebagai item biasa.',
+    '- Sertakan SEMUA baris barang, termasuk yang namanya mengandung kata "RIB" (jangan dilewati,',
+    '  biar dipilah di sistem lain).',
+    '- Kalau header nota punya field "No. Bon", "Sales", "SPV", "Kasir" (gaya struk kasir), itu SELALU',
+    '  nota dari supplier FOCUS - isi field "supplier" dengan "FOCUS".',
+    '- Kalau nota punya logo oval "OCM" dan kolom "Banyaknya" / "Nama Barang" / "Harga" / "Jumlah"',
+    '  (nota tulisan tangan), itu SELALU nota dari supplier OCM - isi field "supplier" dengan "OCM".',
+    '  Nota tulisan tangan OCM ini punya ciri khas: kadang ADA BEBERAPA ANGKA QTY ditulis',
+    '  berdampingan/bertumpuk untuk 1 nama barang (contoh "25.10 25.10 24.90 24.90" di atas 1 nama',
+    '  barang) - artinya barang itu terdiri dari BEBERAPA ROL FISIK TERPISAH. Kalau ketemu pola',
+    '  begini, JANGAN dijumlah jadi satu qty - buat ITEM/ENTRY TERPISAH untuk MASING-MASING angka',
+    '  qty (jenisKain, warna, harga, diskon SAMA persis buat semua entry itu, cuma "qty"-nya beda',
+    '  sesuai angka masing-masing). Contoh: kalau ada 4 angka qty buat 1 nama barang, hasilnya 4',
+    '  object item terpisah di array "items", bukan 1 object dengan qty dijumlah.',
+    '  Tulisan tangannya kadang ambigu (angka "4" bisa kelihatan mirip huruf "u", desimal kadang',
+    '  gak jelas titik/komanya) - kalau ragu, VALIDASI SILANG pakai kolom "Jumlah" (Jumlah = qty x',
+    '  Harga per rol, dijumlahkan semua rol dalam 1 nama barang) buat mengoreksi angka qty/harga',
+    '  yang salah baca. Nota tulisan tangan (terutama OCM) kadang ADA CORETAN/PERBAIKAN (angka',
+    '  dicoret lalu ditulis ulang di sebelahnya/di atasnya) - pakai angka HASIL PERBAIKAN yang',
+    '  jelas dimaksud sebagai koreksi terakhir, ABAIKAN yang dicoret. Bentuk huruf/angka BISA GAK',
+    '  KONSISTEN antar baris dalam 1 nota yang sama (beda pulpen, beda buru-buru nulisnya) - baca',
+    '  TIAP ANGKA satu per satu dengan teliti, JANGAN asumsikan pola dari baris sebelumnya. Kalau',
+    '  ada angka yang tetap gak yakin walau sudah dicoba validasi silang, tetap isi dengan tebakan',
+    '  TERBAIK (jangan dikosongkan) - hasil bacaan ini akan ditinjau ulang manual sebelum benaran',
+    '  disimpan, jadi salah baca masih bisa dikoreksi/dibatalkan di tahap itu.'
+  ].join('\n');
+
+  const payload = {
+    model: 'claude-sonnet-4-5',
+    max_tokens: 4096,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64Image } },
+        { type: 'text', text: promptTeks }
+      ]
+    }]
+  };
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'post',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.error) {
+      return { ok: false, error: data.error.message || 'Claude API error.' };
+    }
+    const blokTeks = (data.content || []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('\n');
+    const bersih = blokTeks.replace(/```json/gi, '').replace(/```/g, '').trim();
+    const parsed = JSON.parse(bersih);
+    return { ok: true, data: parsed };
+  } catch (e) {
+    return { ok: false, error: 'Gagal membaca/parsing hasil AI: ' + e.message };
+  }
+}
+
+// Terapkan aturan bisnis Denny ke hasil mentah dari AI: skip baris RIB, mapping warna lewat
+// KAMUS SINONIM WARNA (peta dari ambilPetaWarnaKanonik_), format Kode Roll 4 digit.
+function prosesItemNota_(petaKanonik, parsedAI, supplierOverride) {
+  const tglBeliDate = parseTanggalNota_(parsedAI.tanggal);
+  const tglBeli = formatTanggalIndoSimpel_(tglBeliDate);
+  const tglBeliIso = tanggalKeIso_(tglBeliDate);
+
+  // supplierOverride datang dari CAPTION foto (kalau diisi) - lebih diutamakan daripada tebakan
+  // AI, soalnya gak semua nota nampilin nama supplier dengan jelas di gambarnya.
+  const supplier = (supplierOverride && supplierOverride.trim())
+    ? supplierOverride.trim().toUpperCase()
+    : (String(parsedAI.supplier || '').trim().toUpperCase() || 'TIDAK DIKETAHUI');
+
+  const rows = [];
+  let jumlahDilewati = 0;
+
+  (parsedAI.items || []).forEach(function (item) {
+    const jenisKainUpper = String(item.jenisKain || '').toUpperCase();
+    if (jenisKainUpper.indexOf('RIB') !== -1) {
+      jumlahDilewati++;
+      return; // rule: baris RIB jangan dimasukkan dulu
+    }
+
+    const warnaRaw = String(item.warna || '').trim().toUpperCase();
+    const warnaTampil = petaKanonik[warnaRaw] || warnaRaw;
+    const kodeRoll = ekstrakKodeRoll4Digit_(item.kodeRoll);
+    const kg = parseFloat(item.qty) || 0;
+    const harga = parseFloat(item.harga) || 0;
+    const diskon = (item.diskon !== undefined && item.diskon !== null) ? (parseFloat(item.diskon) || 0) : 0;
+
+    rows.push({ warna: warnaTampil, kg: kg, kodeRoll: kodeRoll, harga: harga, diskon: diskon });
+  });
+
+  return { supplier: supplier, tglBeli: tglBeli, tglBeliIso: tglBeliIso, rows: rows, jumlahDilewati: jumlahDilewati };
+}
+
+// Format ulang TOTAL sesuai contoh Denny - gaya beda buat 1 rol vs banyak rol.
+function bangunTeksPreviewNota_(hasil) {
+  const jumlah = hasil.rows.length;
+  let teks = htmlEscape_(hasil.tglBeli) + '\n';
+  teks += 'Masuk kain ' + htmlEscape_(hasil.supplier) + (jumlah > 1 ? ' :' : '') + '\n\n';
+  hasil.rows.forEach(function (r, i) {
+    const kodeKg = r.kg + ' / ' + r.kodeRoll;
+    teks += (i + 1) + '. ' + htmlEscape_(r.warna) + ' ' + (jumlah > 1 ? '(' + kodeKg + ')' : kodeKg) + '\n';
+  });
+  teks += (jumlah > 1 ? '\n' : '') + '\nTOTAL ' + jumlah + ' ROL';
+  return teks;
+}
+
+async function kirimPesanTelegramLengkap_(env, chatId, teks, opsi) {
+  opsi = opsi || {};
+  const payload = Object.assign({ chat_id: chatId, text: teks }, opsi);
+  try {
+    const res = await fetch('https://api.telegram.org/bot' + env.TELEGRAM_BOT_TOKEN + '/sendMessage', {
+      method: 'post', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    return (data.ok && data.result) ? data.result.message_id : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function hapusPesanTelegram_(env, chatId, messageId) {
+  if (!messageId) return;
+  try {
+    await fetch('https://api.telegram.org/bot' + env.TELEGRAM_BOT_TOKEN + '/deleteMessage', {
+      method: 'post', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, message_id: messageId })
+    });
+  } catch (e) { /* gak fatal kalau gagal dihapus */ }
+}
+
+async function ubahTeksPesanTelegram_(env, chatId, messageId, teksBaru) {
+  try {
+    await fetch('https://api.telegram.org/bot' + env.TELEGRAM_BOT_TOKEN + '/editMessageText', {
+      method: 'post', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, message_id: messageId, text: teksBaru, parse_mode: 'HTML', reply_markup: { inline_keyboard: [] } })
+    });
+  } catch (e) { /* gak fatal */ }
+}
+
+async function jawabCallbackQueryTelegram_(env, callbackQueryId, teks, showAlert) {
+  try {
+    await fetch('https://api.telegram.org/bot' + env.TELEGRAM_BOT_TOKEN + '/answerCallbackQuery', {
+      method: 'post', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ callback_query_id: callbackQueryId, text: teks || '', show_alert: !!showAlert })
+    });
+  } catch (e) { /* gak fatal */ }
+}
+
+// HANDLER UTAMA foto nota - dipanggil dari handleTelegramWebhook_ kalau ada foto dengan caption
+// mengandung kata "nota" (gak peduli besar/kecil huruf).
+async function handleFotoNota_(env, message) {
+  const chatId = message.chat.id;
+  const fileId = message.photo[message.photo.length - 1].file_id; // resolusi PALING BESAR
+
+  const notifMsgId = await kirimPesanTelegramLengkap_(env, chatId, '🔍 Membaca nota, mohon tunggu...');
+
+  try {
+    const getFileRes = await fetch('https://api.telegram.org/bot' + env.TELEGRAM_BOT_TOKEN + '/getFile?file_id=' + fileId);
+    const getFileData = await getFileRes.json();
+    if (!getFileData.ok) throw new Error('Gagal ambil file dari Telegram: ' + (getFileData.description || '?'));
+
+    const filePath = getFileData.result.file_path;
+    const fileRes = await fetch('https://api.telegram.org/file/bot' + env.TELEGRAM_BOT_TOKEN + '/' + filePath);
+    const fileBuffer = await fileRes.arrayBuffer();
+    const base64Image = arrayBufferKeBase64_(fileBuffer);
+
+    const hasilAI = await parseNotaKainDenganAI_(env, base64Image, 'image/jpeg');
+    if (!hasilAI.ok) throw new Error(hasilAI.error);
+
+    const petaKanonik = await ambilPetaWarnaKanonik_(env);
+    const hasil = prosesItemNota_(petaKanonik, hasilAI.data, message.caption);
+
+    if (hasil.rows.length === 0) {
+      await kirimPesanTelegramLengkap_(env, chatId, '⚠️ Tidak ada baris yang bisa dibaca dari foto ini (atau semuanya RIB).');
+      await hapusPesanTelegram_(env, chatId, notifMsgId);
+      return jsonResponse({ ok: true, pesan: 'nota kosong' });
+    }
+
+    const token = crypto.randomUUID();
+    await env.TIM_POTONG_KV.put('notaMasuk_' + token, JSON.stringify(hasil), { expirationTtl: 1800 });
+
+    const teksPreview = bangunTeksPreviewNota_(hasil);
+    await kirimPesanTelegramLengkap_(env, chatId, teksPreview, {
+      parse_mode: 'HTML',
+      reply_markup: {
+        inline_keyboard: [[
+          { text: '✅ Simpan stok', callback_data: 'simpanNota:' + token },
+          { text: '❌ Batal', callback_data: 'batalNota:' + token }
+        ]]
+      }
+    });
+    await hapusPesanTelegram_(env, chatId, notifMsgId);
+
+    console.log('Nota difoto & dibaca AI via Worker:', hasil.rows.length, 'baris (' + hasil.jumlahDilewati + ' RIB dilewati)');
+    return jsonResponse({ ok: true, jumlahBaris: hasil.rows.length });
+  } catch (err) {
+    await kirimPesanTelegramLengkap_(env, chatId, '⚠️ Gagal membaca nota: ' + err.message);
+    await hapusPesanTelegram_(env, chatId, notifMsgId);
+    return jsonResponse({ ok: false, error: err.message });
+  }
+}
+
+// HANDLER tombol konfirmasi/batal - dipanggil dari handleTelegramWebhook_ kalau callback_query
+// data-nya diawali "simpanNota:" atau "batalNota:".
+async function handleCallbackQueryNota_(env, callbackQuery) {
+  const data = String(callbackQuery.data || '');
+  const chatId = callbackQuery.message.chat.id;
+  const messageId = callbackQuery.message.message_id;
+
+  const allowedUserId = env.ALLOWED_USER_ID;
+  const senderId = callbackQuery.from ? String(callbackQuery.from.id) : null;
+  if (allowedUserId && senderId !== String(allowedUserId)) {
+    await jawabCallbackQueryTelegram_(env, callbackQuery.id, 'Bukan user yang diizinkan.', true);
+    return jsonResponse({ ok: true, pesan: 'callback ditolak (bukan user diizinkan)' });
+  }
+
+  const idxTitik = data.indexOf(':');
+  const aksi = idxTitik === -1 ? data : data.substring(0, idxTitik);
+  const token = idxTitik === -1 ? '' : data.substring(idxTitik + 1);
+  const kvKey = 'notaMasuk_' + token;
+
+  if (aksi === 'batalNota') {
+    await env.TIM_POTONG_KV.delete(kvKey);
+    await jawabCallbackQueryTelegram_(env, callbackQuery.id, 'Dibatalkan.');
+    await ubahTeksPesanTelegram_(env, chatId, messageId, '❌ <b>Dibatalkan</b> - data nota tidak disimpan.');
+    return jsonResponse({ ok: true, pesan: 'nota dibatalkan' });
+  }
+
+  let rawKv = null;
+  try {
+    const kvResult = await env.TIM_POTONG_KV.get(kvKey);
+    rawKv = kvResult;
+  } catch (e) {
+    rawKv = null;
+  }
+
+  if (!rawKv) {
+    await jawabCallbackQueryTelegram_(env, callbackQuery.id, 'Data sudah kadaluarsa (lewat 30 menit), kirim ulang fotonya.', true);
+    await ubahTeksPesanTelegram_(env, chatId, messageId, '⚠️ <b>Kadaluarsa</b> - kirim ulang fotonya, data preview cuma disimpan 30 menit.');
+    return jsonResponse({ ok: true, pesan: 'nota kadaluarsa' });
+  }
+
+  // v.38: toast langsung ditembak DULUAN (sebelum tulis Supabase) - biar user langsung lihat
+  // respon instan pas tap tombol, gak nunggu proses simpan selesai dulu.
+  await jawabCallbackQueryTelegram_(env, callbackQuery.id, 'Menyimpan ke Stok Kain...');
+
+  try {
+    const hasil = JSON.parse(rawKv);
+    for (const r of hasil.rows) {
+      await tambahStokKainMasukSupabase_(env, {
+        warna: r.warna, kg: r.kg, kodeRoll: r.kodeRoll, supplier: hasil.supplier,
+        tglBeli: hasil.tglBeliIso, harga: r.harga, diskon: r.diskon
+      });
+    }
+    await env.TIM_POTONG_KV.delete(kvKey);
+    await ubahTeksPesanTelegram_(env, chatId, messageId, '✅ <b>Tersimpan</b> - ' + hasil.rows.length + ' baris ditambahkan ke STOK KAIN (' + htmlEscape_(hasil.supplier) + ', ' + htmlEscape_(hasil.tglBeli) + ').');
+    console.log('Nota disimpan ke Stok Kain via Worker:', hasil.rows.length, 'baris, supplier', hasil.supplier);
+    return jsonResponse({ ok: true, jumlahBaris: hasil.rows.length });
+  } catch (err) {
+    await ubahTeksPesanTelegram_(env, chatId, messageId, '⚠️ <b>Gagal menyimpan</b>: ' + htmlEscape_(err.message));
+    return jsonResponse({ ok: false, error: err.message });
+  }
+}
+
 async function handleTelegramWebhook_(request, env) {
   const rawBodyText = await request.text();
   let update;
@@ -2224,13 +2610,30 @@ async function handleTelegramWebhook_(request, env) {
     return jsonResponse({ ok: true }); // body aneh, jangan sampai Telegram terus-terusan retry
   }
 
-  // Tombol konfirmasi/batal nota (baca nota AI) - logic-nya (CacheService, dst) cuma ada di Apps
-  // Script, gak diporting - teruskan apa adanya.
+  // v.38: tombol konfirmasi/batal nota (baca nota AI) - dicegat di sini, SEBELUM callback_query
+  // lain (kalau ada) diteruskan ke Apps Script.
   if (update.callback_query) {
+    const dataCb = String(update.callback_query.data || '');
+    if (dataCb.indexOf('simpanNota:') === 0 || dataCb.indexOf('batalNota:') === 0) {
+      return await handleCallbackQueryNota_(env, update.callback_query);
+    }
     return await proxyKeAppsScript_(rawBodyText, env);
   }
 
   const message = update.message;
+
+  // v.38: foto nota (fitur baca nota kain otomatis) - dicegat di sini, SEBELUM pengecekan
+  // message.text di bawah (foto gak punya field .text sama sekali). WAJIB ada kata "nota" di
+  // CAPTION foto (gak peduli besar/kecil huruf) baru diproses sebagai nota - foto tanpa
+  // caption/gak ada kata "nota" DIABAIKAN DIAM-DIAM, sama seperti perilaku lama.
+  if (message && message.photo && message.photo.length > 0) {
+    const captionFoto = (message.caption || '').toLowerCase();
+    if (captionFoto.indexOf('nota') === -1) {
+      return jsonResponse({ ok: true, pesan: 'foto tanpa caption nota, diabaikan' });
+    }
+    return await handleFotoNota_(env, message);
+  }
+
   if (message && message.text) {
     const teksTrim = message.text.trim().toLowerCase().split('@')[0];
     if (teksTrim === '/produksi' || teksTrim === '/isiproduksi') {
