@@ -246,6 +246,25 @@ body {
   font-size: 11px; font-weight: 600; text-align: center;
 }
 
+/* ── SEARCH ── */
+.search-wrap {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--ios-surface); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 10px 14px; margin: 10px 0 0;
+}
+.search-icon { font-size: 13px; opacity: .55; flex-shrink: 0; }
+.search-input {
+  flex: 1; border: none; background: transparent; outline: none;
+  font-family: inherit; font-size: 13px; color: var(--ios-label); min-width: 0;
+}
+.search-input::placeholder { color: var(--ios-label2); }
+.search-clear {
+  border: none; background: var(--ios-surface2); color: var(--ios-label2);
+  width: 20px; height: 20px; border-radius: 50%; cursor: pointer; font-size: 10px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.search-clear:active { transform: scale(0.9); }
+
 /* ── TAB CHIPS — 3 tombol terpisah dengan icon, masing-masing box sendiri ── */
 .segment-wrap { display: flex; gap: 8px; margin: 14px 0 0; }
 .seg-btn {
@@ -319,13 +338,11 @@ body {
   border-radius: 10px; background: var(--accent-bg); color: var(--accent);
 }
 
-/* ── VARIAN CARDS (masonry — no wasted vertical space) ── */
-.varian-grid { column-width: 280px; column-gap: 10px; }
+/* ── VARIAN CARDS — grid horizontal (row-major), biar urutan sort kebaca kiri-ke-kanan ── */
+.varian-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
 .vcard {
   background: var(--ios-surface); border-radius: var(--radius);
   box-shadow: var(--shadow); overflow: hidden;
-  break-inside: avoid; -webkit-column-break-inside: avoid;
-  margin-bottom: 10px; display: inline-block; width: 100%;
 }
 .vcard-header {
   padding: 12px 14px 10px;
@@ -627,6 +644,13 @@ body {
     <div class="time-filter-badge" id="timeFilterBadge" style="display:none"></div>
   </div>
 
+  <!-- SEARCH -->
+  <div class="search-wrap">
+    <span class="search-icon">🔍</span>
+    <input type="text" id="searchInput" class="search-input" placeholder="Cari nama varian, warna, atau karakter..." oninput="applySearch()">
+    <button class="search-clear" id="searchClearBtn" onclick="clearSearch()" style="display:none">✕</button>
+  </div>
+
   <!-- SEGMENT CONTROL -->
   <div class="segment-wrap">
     <button class="seg-btn active" data-tab="varian" onclick="switchTab('varian', this)"><span class="seg-icon">🏷️</span> Varian</button>
@@ -706,6 +730,7 @@ let duplicateInfo = { count: 0 };
 let lastFileResults = [];      // hasil ekstrak mentah (blm difilter waktu), disimpan buat re-filter tanpa upload ulang
 let activeDateRange = null;    // {field:'kirim'|'bayar', start:Date, end:Date} | null
 let calState = { field: null, viewYear: null, viewMonth: null, rangeStart: null, rangeEnd: null, hoverDate: null, datesWithData: null };
+let searchQuery = '';
 let activeTimeFilter = null;   // {field:'kirim'|'bayar', bucket:'before'|'after'} | null
 let varianMode = 'qty_desc', karMode = 'qty_desc', resiMode = 'default';
 const GROUP_COLORS = ['tag-0','tag-1','tag-2','tag-3','tag-4','tag-5','tag-6','tag-7','tag-8'];
@@ -743,6 +768,11 @@ function handleFiles(fileList) {
       const calPopup = document.getElementById('calPopup');
       if (calPopup) calPopup.style.display = 'none';
       updateTimeFilterUI();
+      searchQuery = '';
+      const si = document.getElementById('searchInput');
+      if (si) si.value = '';
+      const scb = document.getElementById('searchClearBtn');
+      if (scb) scb.style.display = 'none';
       buildRekap(results);
       if (failedFiles.length) showError(`${failedFiles.length} file dilewati (gagal parse): ` + failedFiles.join(' | '));
     })
@@ -993,6 +1023,20 @@ function buildRekap(fileResults) {
 }
 
 // ── FILTER WAKTU (Pengiriman Diatur / Pembayaran Dilakukan — sebelum/setelah jam 12) ──
+// ── SEARCH ──
+function applySearch() {
+  const val = document.getElementById('searchInput').value.trim();
+  searchQuery = val.toLowerCase();
+  document.getElementById('searchClearBtn').style.display = val ? 'flex' : 'none';
+  renderVarian(); renderKarakter();
+}
+function clearSearch() {
+  document.getElementById('searchInput').value = '';
+  searchQuery = '';
+  document.getElementById('searchClearBtn').style.display = 'none';
+  renderVarian(); renderKarakter();
+}
+
 function setTimeFilter(field, bucket) {
   if (!lastFileResults.length) return; // belum ada data, gak ngapa-ngapain
   if (activeTimeFilter && activeTimeFilter.field === field && activeTimeFilter.bucket === bucket) {
@@ -1202,6 +1246,11 @@ function doClear() {
   const calPopup = document.getElementById('calPopup');
   if (calPopup) calPopup.style.display = 'none';
   updateTimeFilterUI();
+  searchQuery = '';
+  const si = document.getElementById('searchInput');
+  if (si) si.value = '';
+  const scb = document.getElementById('searchClearBtn');
+  if (scb) scb.style.display = 'none';
   document.getElementById('subtitle').textContent = 'Shopee · Perlu Dikirim';
   renderVarian(); renderKarakter(); renderResi();
 }
@@ -1259,7 +1308,18 @@ function renderVarian() {
     el.innerHTML = '<div class="empty"><div class="empty-emoji">📂</div><div class="empty-title">Belum Ada Data</div><div class="empty-sub">Upload file Excel untuk memulai</div></div>';
     grand.innerHTML = ''; return;
   }
-  const sortedGroups = sortGroups(varianData, varianMode);
+  let sortedGroups = sortGroups(varianData, varianMode);
+  if (searchQuery) {
+    sortedGroups = sortedGroups.map(g => {
+      const groupMatches = g.group.toLowerCase().includes(searchQuery);
+      const filteredItems = groupMatches ? g.items : g.items.filter(it => it.name.toLowerCase().includes(searchQuery));
+      return { ...g, items: filteredItems, total: filteredItems.reduce((s,it)=>s+it.qty,0) };
+    }).filter(g => g.items.length > 0);
+  }
+  if (!sortedGroups.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-emoji">🔍</div><div class="empty-title">Tidak Ada Hasil</div><div class="empty-sub">Gak ketemu untuk "${searchQuery}"</div></div>`;
+    grand.innerHTML = ''; return;
+  }
   el.innerHTML = sortedGroups.map(g => {
     const color = GROUP_COLORS[g.colorIdx % GROUP_COLORS.length];
     const items = sortItems(g.items, varianMode);
@@ -1275,11 +1335,11 @@ function renderVarian() {
         <span class="vcard-total">${g.total} <span>pcs</span></span>
       </div>${rows}</div>`;
   }).join('');
-  const total = varianData.reduce((s,g)=>s+g.total,0);
+  const total = sortedGroups.reduce((s,g)=>s+g.total,0);
   grand.innerHTML = `<div class="footer-total">
     ${excludedInfo.count > 0 ? `<span class="ft-item" style="color:var(--red)">⚠ ${excludedInfo.count} pesanan (${excludedInfo.qty} pcs) dikecualikan — status pembatalan</span>` : ''}
     ${duplicateInfo.count > 0 ? `<span class="ft-item" style="color:var(--orange)">⚠ ${duplicateInfo.count} No. Pesanan muncul di lebih dari 1 file — kemungkinan overlap tanggal, qty digabung</span>` : ''}
-    <span class="ft-item">Grand Total: <strong>${total} pcs</strong></span>
+    <span class="ft-item">${searchQuery ? 'Hasil Pencarian' : 'Grand Total'}: <strong>${total} pcs</strong></span>
   </div>`;
 }
 
@@ -1291,8 +1351,13 @@ function renderKarakter() {
     el.innerHTML = '<div class="empty"><div class="empty-emoji">🎭</div><div class="empty-title">Belum Ada Data</div><div class="empty-sub">Upload file Excel untuk memulai</div></div>';
     grand.innerHTML = ''; return;
   }
-  const items = sortItems(karakterData, karMode);
-  const total = karakterData.reduce((s,i)=>s+i.qty,0);
+  let items = sortItems(karakterData, karMode);
+  if (searchQuery) items = items.filter(it => it.name.toLowerCase().includes(searchQuery));
+  if (!items.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-emoji">🔍</div><div class="empty-title">Tidak Ada Hasil</div><div class="empty-sub">Gak ketemu untuk "${searchQuery}"</div></div>`;
+    grand.innerHTML = ''; return;
+  }
+  const total = items.reduce((s,i)=>s+i.qty,0);
   el.innerHTML = `<div class="list-section">
     <div class="list-section-header">
       <span class="list-section-title">Karakter</span>
@@ -1306,7 +1371,7 @@ function renderKarakter() {
         <span class="kar-chip">${it.qty}</span>
       </div>`).join('')}
   </div>`;
-  grand.innerHTML = `<div class="footer-total"><span class="ft-item">Total Karakter: <strong>${total} pcs</strong></span></div>`;
+  grand.innerHTML = `<div class="footer-total"><span class="ft-item">${searchQuery ? 'Hasil Pencarian' : 'Total Karakter'}: <strong>${total} pcs</strong></span></div>`;
 }
 
 // ── RENDER RESI ──
