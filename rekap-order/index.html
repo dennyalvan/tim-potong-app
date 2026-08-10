@@ -956,7 +956,7 @@ function buildRekap(fileResults) {
     const ukuran = varRaw.slice(lastComma+1).trim().replace(/[()]/g,'');
     const upper = varName.toUpperCase();
     if (WARNA_PLAIN.has(upper)) return;
-    if (REG_PREFIXES.some(p => upper.startsWith(p.trim().toUpperCase()))) return;
+    if (REG_PREFIXES.some(p => upper.startsWith(p.toUpperCase()))) return;
     if (!karMap[varName]) karMap[varName] = {};
     karMap[varName][ukuran] = (karMap[varName][ukuran] || 0) + qty;
   });
