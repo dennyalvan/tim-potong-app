@@ -1265,26 +1265,43 @@ function parseCellDate(val) {
 // bareng di buildRekap, tiap kali filter waktu diganti tanpa perlu upload ulang. ──
 function extractFileData(buffer, filename) {
   const wb = XLSX.read(buffer, { type: 'arraybuffer', cellDates: true });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
 
-  let headerRow = -1, colN = -1, colO = -1, colR = -1, colStatus = -1, colResi = -1, colPesanan = -1, colKirim = -1, colBayar = -1;
-  for (let i = 0; i < Math.min(10, rows.length); i++) {
-    const r = rows[i];
-    for (let j = 0; j < r.length; j++) {
-      const v = String(r[j] || '');
-      if (v.includes('Nomor Referensi SKU')) colN = j;
-      if (v.includes('Nama Variasi')) colO = j;
-      if (v === 'Jumlah') colR = j;
-      if (v === 'Status Pesanan') colStatus = j;
-      if (v.includes('No. Resi')) colResi = j;
-      if (v === 'No. Pesanan') colPesanan = j;
-      if (v === 'Waktu Pengiriman Diatur') colKirim = j;
-      if (v === 'Waktu Pembayaran Dilakukan') colBayar = j;
+  // Cari sheet yang BENERAN punya kolom yang kita butuhin — jangan cuma percaya
+  // sheet pertama, soalnya kadang ada sheet lain (kosong / beda format, mis.
+  // "Advance Fulfilment") yang nyempil duluan atau belakangan.
+  let rows = null, headerRow = -1;
+  let colN = -1, colO = -1, colR = -1, colStatus = -1, colResi = -1, colPesanan = -1, colKirim = -1, colBayar = -1, colProduk = -1;
+  const checkedSheets = [];
+
+  for (const sheetName of wb.SheetNames) {
+    const ws = wb.Sheets[sheetName];
+    const candidateRows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
+    let cN=-1, cO=-1, cR=-1, cStatus=-1, cResi=-1, cPesanan=-1, cKirim=-1, cBayar=-1, cProduk=-1, hRow=-1;
+    for (let i = 0; i < Math.min(10, candidateRows.length); i++) {
+      const r = candidateRows[i];
+      for (let j = 0; j < r.length; j++) {
+        const v = String(r[j] || '');
+        if (v.includes('Nomor Referensi SKU')) cN = j;
+        if (v.includes('Nama Variasi')) cO = j;
+        if (v === 'Jumlah') cR = j;
+        if (v === 'Status Pesanan') cStatus = j;
+        if (v.includes('No. Resi')) cResi = j;
+        if (v === 'No. Pesanan') cPesanan = j;
+        if (v === 'Waktu Pengiriman Diatur') cKirim = j;
+        if (v === 'Waktu Pembayaran Dilakukan') cBayar = j;
+        if (v === 'Nama Produk') cProduk = j;
+      }
+      if (cN >= 0 && cO >= 0 && cR >= 0) { hRow = i; break; }
     }
-    if (colN >= 0 && colO >= 0 && colR >= 0) { headerRow = i; break; }
+    checkedSheets.push(sheetName);
+    if (hRow >= 0) {
+      rows = candidateRows; headerRow = hRow;
+      colN=cN; colO=cO; colR=cR; colStatus=cStatus; colResi=cResi; colPesanan=cPesanan;
+      colKirim=cKirim; colBayar=cBayar; colProduk=cProduk;
+      break; // ketemu sheet yang cocok, berhenti cari
+    }
   }
-  if (headerRow < 0) throw new Error('kolom header tidak ditemukan');
+  if (headerRow < 0) throw new Error(`kolom header tidak ditemukan di sheet manapun (dicek: ${checkedSheets.join(', ')})`);
 
   const rawRows = rows.slice(headerRow + 1).filter(r => r[colN] || r[colO]);
   const parsedRows = [];
@@ -1295,6 +1312,7 @@ function extractFileData(buffer, filename) {
     parsedRows.push({
       sku: String(r[colN] || '').trim(),
       variasi: String(r[colO] || '').trim(),
+      produk: colProduk >= 0 ? String(r[colProduk] || '').trim() : '',
       qty,
       pesanan: colPesanan >= 0 ? String(r[colPesanan] || '').trim() : '',
       resi: colResi >= 0 ? String(r[colResi] || '').trim() : '',
@@ -1399,13 +1417,18 @@ function buildRekap(fileResults) {
     return {group: label, total: items.reduce((a,b)=>a+b.qty,0), items, colorIdx: idx};
   });
 
-  // KARAKTER
+  // KARAKTER — buang item POLOS (bukan karakter/print) dari daftar ini.
+  // Sinyal paling akurat: "Nama Produk" mengandung kata "Polos" — jauh lebih
+  // reliable daripada nebak dari daftar nama warna yang gak akan pernah lengkap.
+  // Daftar WARNA_PLAIN/REG_PREFIXES tetap dipertahankan sbg fallback kalau
+  // kolom Nama Produk gak ada di file (export lama).
   const WARNA_PLAIN = new Set(['HITAM','NAVY','MERAH','CREAM','PINK','MUSTARD','ST. BLUE','STEEL NAVY','BIRU','HIJAU TUA','ALMOND','UNGU','TERRACOTTA','TERACOTA','SAGE','PUTIH','WHITE','BLACK','MUSTARD NAVY','NAVY CREAM','CREAM SAGE','NAVY WHITE','DUSTY','MIX']);
   const karMap = {};
   allRows.forEach(row => {
     const varRaw = row.variasi;
     const qty = row.qty;
     if (!varRaw || qty === 0) return;
+    if (row.produk && /polos/i.test(row.produk)) return; // <- sinyal utama
     const lastComma = varRaw.lastIndexOf(',');
     if (lastComma < 0) return;
     const varName = varRaw.slice(0, lastComma).trim();
