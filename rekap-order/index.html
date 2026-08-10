@@ -21,6 +21,7 @@
   --ios-label2: rgba(60,60,67,0.6);
   --ios-label3: rgba(60,60,67,0.3);
   --ios-label4: rgba(60,60,67,0.18);
+  --detail-gray: #58585c;
 
   /* iOS System Colors */
   --blue:   #007AFF; --blue-bg:   rgba(0,122,255,0.10);
@@ -55,6 +56,7 @@
   --ios-label2: rgba(235,235,245,0.6);
   --ios-label3: rgba(235,235,245,0.3);
   --ios-label4: rgba(235,235,245,0.18);
+  --detail-gray: #b8b8bd;
 
   --blue:   #0A84FF; --blue-bg:   rgba(10,132,255,0.15);
   --green:  #30D158; --green-bg:  rgba(48,209,88,0.15);
@@ -376,7 +378,7 @@ body {
 }
 .vcard-item:last-child { border-bottom: none; }
 .vcard-name { font-size: 13px; color: var(--ios-label); flex: 1; }
-.vcard-detail { font-size: 11px; color: var(--ios-label2); margin: 0 10px; }
+.vcard-detail { font-size: 11px; color: var(--detail-gray); margin: 0 10px; }
 .vcard-qty {
   font-size: 13px; font-weight: 700;
   min-width: 28px; text-align: right; color: var(--ios-label);
@@ -401,7 +403,7 @@ body {
 .kar-row:last-child { border-bottom: none; }
 .kar-num { font-size: 12px; font-weight: 600; color: var(--ios-label3); min-width: 22px; }
 .kar-name { font-size: 14px; color: var(--ios-label); flex: 1; font-weight: 400; }
-.kar-detail { font-size: 11px; color: var(--ios-label2); margin: 0 10px; }
+.kar-detail { font-size: 11px; color: var(--detail-gray); margin: 0 10px; }
 .kar-chip {
   font-size: 12px; font-weight: 700; padding: 3px 10px;
   border-radius: 10px; background: var(--ios-surface2); color: var(--ios-label);
