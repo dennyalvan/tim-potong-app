@@ -608,7 +608,7 @@ body {
   <div class="upload-label" id="uploadLabel">Klik atau seret file Excel</div>
   <div class="upload-hint" id="uploadHint">Format .xlsx · Bisa pilih beberapa file sekaligus, otomatis digabung</div>
 </div>
-<input type="file" id="fileInput" accept=".xlsx" multiple onchange="handleFiles(this.files)">
+<input type="file" id="fileInput" accept=".xlsx,.csv" multiple onchange="handleFiles(this.files)">
 
 <!-- MODAL -->
 <div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)closeModal()">
@@ -1196,8 +1196,8 @@ function handleFiles(fileList) {
   if (!fileList || !fileList.length) return;
   const files = Array.from(fileList); // urutan sesuai pemilihan/drop, JANGAN diacak/sort
 
-  const invalid = files.find(f => !f.name.endsWith('.xlsx'));
-  if (invalid) { showError(`"${invalid.name}" bukan file .xlsx`); return; }
+  const invalid = files.find(f => !f.name.endsWith('.xlsx') && !f.name.endsWith('.csv'));
+  if (invalid) { showError(`"${invalid.name}" bukan file .xlsx atau .csv`); return; }
 
   hideError();
   setUploadProcessing(true, files.length);
@@ -1282,6 +1282,7 @@ function extractFileData(buffer, filename) {
       for (let j = 0; j < r.length; j++) {
         const v = String(r[j] || '');
         if (v.includes('Nomor Referensi SKU')) cN = j;
+        else if (v === 'SKU') cN = j; // format BigSeller ("SKU" polos, bukan "Nomor Referensi SKU")
         if (v.includes('Nama Variasi')) cO = j;
         if (v === 'Jumlah') cR = j;
         if (v === 'Status Pesanan') cStatus = j;
