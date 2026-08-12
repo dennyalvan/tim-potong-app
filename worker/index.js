@@ -1,6 +1,18 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.38
+// CODE WORKER PRODUKSI ver.39
 // ============================================================
+// PERUBAHAN ver.39: pesan teks yang gak dikenali (BUKAN /produksi, /stok, atau "Masuk...")
+// SEKARANG DIABAIKAN DIAM-DIAM, tidak diproxy ke Apps Script lagi. Sebelumnya proxyKeAppsScript_
+// meneruskan SEMUA teks yang gak cocok pola apapun ke Apps Script, yang otomatis membalas
+// pengingat "Input produksi via teks manual sudah tidak diproses lagi" untuk teks APAPUN -
+// termasuk obrolan biasa yang gak ada hubungannya sama input produksi sama sekali, jadi berisik
+// di grup TIM KONVEKSI. Dimatikan atas permintaan Denny (9 Agustus 2026). proxyKeAppsScript_
+// TETAP ADA (masih dipakai jalur callback_query non-nota) - cuma pemanggilannya di ujung
+// handleTelegramWebhook_ untuk pesan teks polos yang dihapus. Kalau suatu saat mau diaktifkan
+// lagi (atau diganti versi yang lebih pintar - cuma balas kalau teksnya KELIHATAN kayak upaya
+// input produksi manual, bukan blanket semua teks), tinggal kembalikan baris
+// "return await proxyKeAppsScript_(...)" di akhir handleTelegramWebhook_.
+//
 // PERUBAHAN ver.38: MIGRASI fitur "baca nota" (foto struk supplier -> baca otomatis via Claude
 // Vision -> preview -> konfirmasi tombol -> simpan) dari Apps Script ke sini juga (menyusul
 // migrasi parsing teks "Masuk..." di ver.37). Sebelumnya: Worker terusin foto+callback_query
@@ -2650,8 +2662,12 @@ async function handleTelegramWebhook_(request, env) {
     }
   }
 
-  // Bukan command cepat/laporan masuk (foto nota, dst) - Apps Script yang proses seperti biasa.
-  return await proxyKeAppsScript_(rawBodyText, env);
+  // v.39: pesan teks lain (obrolan biasa, dll di grup) - DIABAIKAN DIAM-DIAM, TIDAK diproxy ke
+  // Apps Script lagi. Sebelumnya diteruskan ke Apps Script yang otomatis membalas pengingat
+  // "input manual dihentikan" untuk SEMUA teks yang gak dikenali, termasuk obrolan biasa yang
+  // gak ada hubungannya sama input produksi - berisik di grup. Dimatikan atas permintaan Denny
+  // (9 Agustus 2026). Lihat banner di atas kalau mau diaktifkan lagi.
+  return jsonResponse({ ok: true, pesan: 'pesan teks tidak dikenali, diabaikan' });
 }
 
 async function proxyKeAppsScript_(rawBodyText, env) {
