@@ -411,7 +411,7 @@
           <span class="footnote" id="variantsCount" style="margin:0;">–</span>
         </div>
 
-        <div class="card chart-card" style="margin-bottom:16px; height:340px;">
+        <div class="card chart-card" style="margin-bottom:16px; height:520px;">
           <h3>15 Varian Produk Teratas</h3>
           <div class="card-sub">Total seluruh ukuran per produk</div>
           <canvas id="chartTopProduk"></canvas>
@@ -775,6 +775,7 @@ function recompute(){
   const dStdSizes = new Set();
   let dHasCustom = false;
   rows.forEach(row=>{
+    if(row.produk && row.produk.trim().toUpperCase()==='SABLON CUSTOM') return; // bukan varian produk beneran, jangan masuk ranking
     if(!dpivot.has(row.produk)) dpivot.set(row.produk, { produk:row.produk, sizes:{}, custom:{}, total:0 });
     const p = dpivot.get(row.produk);
     const szU = row.ukuran.toUpperCase();
