@@ -1,6 +1,18 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.39
+// CODE WORKER PRODUKSI ver.40
 // ============================================================
+// PERUBAHAN ver.40: fix bug di handleHapusLogQC_ - kalau SEMUA submission QC aktif untuk 1
+// laporan dibatalkan (progress balik ke 0 selesai + 0 reject), status tim_potong SEBELUMNYA
+// nyangkut jadi teks "PROSES 0/Y (0 reject)" alih-alih balik ke string kosong seperti laporan
+// yang belum pernah disentuh QC sama sekali. Ditemukan Denny lewat Table Editor Supabase
+// (9 Agustus 2026) - laporan RFL MERAH id=1004 kelihatan beda ("PROSES 0/169") dari laporan lain
+// yang belum diproses ("EMPTY"/kosong), padahal secara efektif kondisinya sama (belum ada
+// progress QC aktif). Fix: statusBaru sekarang eksplisit dikembalikan ke '' kalau
+// totalSelesai+totalReject == 0 setelah pembatalan, BUKAN dihitung sebagai "PROSES 0/Y" lagi.
+// Data lama yang sudah kejadian (status nyangkut) TIDAK ikut dibetulkan otomatis oleh fix ini -
+// sudah dibetulkan manual utk id=1004 lewat UPDATE langsung, laporan lain (kalau ada) perlu
+// dicek manual juga kalau ketemu.
+//
 // PERUBAHAN ver.39: pesan teks yang gak dikenali (BUKAN /produksi, /stok, atau "Masuk...")
 // SEKARANG DIABAIKAN DIAM-DIAM, tidak diproxy ke Apps Script lagi. Sebelumnya proxyKeAppsScript_
 // meneruskan SEMUA teks yang gak cocok pola apapun ke Apps Script, yang otomatis membalas
@@ -427,7 +439,14 @@ async function handleHapusLogQC_(body, env) {
     const perUkuranBaru = DAFTAR_UKURAN_TIMPOTONG.filter(function (u) { return perUkuranMap[u]; }).map(function (u) { return { ukuran: u, selesai: perUkuranMap[u] }; });
 
     const sudahSelesaiSemua = (totalSelesai + totalReject) >= tp.jumlah;
-    const statusBaru = sudahSelesaiSemua ? 'SELESAI' : ('PROSES ' + totalSelesai + '/' + tp.jumlah + ' (' + totalReject + ' reject)');
+    // v.40 FIX: kalau SEMUA log_qc aktif buat laporan ini dibatalkan (rowsSisaAktif kosong,
+    // totalSelesai+totalReject balik ke 0), status harus balik jadi STRING KOSONG (sama kayak
+    // laporan yang belum pernah disentuh QC sama sekali) - BUKAN "PROSES 0/Y (0 reject)". Bug
+    // lama: rumus di bawah selalu bikin teks "PROSES x/y (z reject)" walau x=0 dan z=0,
+    // nyangkut jadi keterangan status yang beda dari laporan lain yang emang belum diproses.
+    const statusBaru = sudahSelesaiSemua
+      ? 'SELESAI'
+      : ((totalSelesai + totalReject) === 0 ? '' : ('PROSES ' + totalSelesai + '/' + tp.jumlah + ' (' + totalReject + ' reject)'));
 
     await fetch(env.SUPABASE_URL + '/rest/v1/tim_potong?id=eq.' + timPotongId, {
       method: 'PATCH',
