@@ -1,16 +1,10 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.42
+// CODE WORKER PRODUKSI ver.43
 // ============================================================
-// PERUBAHAN ver.42 (Fase 3+4 dari fitur Edit, lanjutan ver.41, atas permintaan Denny): endpoint
-// admin-only baru /data/edit-log-qc (edit 1x submit QC - secara internal batalkan baris lama
-// append-only lewat handleHapusLogQC_ lalu submit ulang angka terkoreksi lewat handleSubmitQC_,
-// jejak audit total_bayar tetap utuh) dan /data/edit-produksi (edit data dasar tim_potong -
-// nama/jumlah/ukuran/kode roll/kg pemakaian, buat kebutuhan stok opname Denny. Kode roll/kg yang
-// berubah otomatis hapus log_pemakaian_kain lama - trigger yang sudah ada balikin kg_terpakai -
-// lalu potong ulang pakai kurangiStokKain_ yang sama dipakai submit produksi biasa, jadi nyakup
-// laporan yang sudah PERNAH maupun BELUM PERNAH kesentuh stok dengan 1 mekanisme. Guardrail:
-// jumlah/ukuran diblokir kalau laporan udah punya progres QC; item kombinasi/ref_stok belum
-// didukung buat edit kode roll/kg di v1).
+// PERUBAHAN ver.43: /data/writeoff-kain sekarang ikut nyimpen kode_roll & warna sebagai SNAPSHOT
+// (kolom teks baru di log_writeoff_kain, bukan live lookup lewat stok_kain_id) - biar Denny
+// gampang nge-scan langsung di Table Editor Supabase tanpa follow FK. Sama pola kayak
+// log_pemakaian_kain.warna. 6 baris lama sudah di-backfill manual lewat SQL.
 //
 // Riwayat versi lengkap: git log.
 //
@@ -1565,7 +1559,7 @@ async function handleWriteoffKain_(body, env) {
   if (!(kg > 0)) return jsonResponse({ ok: false, error: 'Kg write-off harus diisi angka > 0.' }, 400);
 
   try {
-    const rows = await ambilDariSupabase_(env, '/rest/v1/stok_kain?select=id,kg_terpakai,kg_sisa&id=eq.' + stokKainId);
+    const rows = await ambilDariSupabase_(env, '/rest/v1/stok_kain?select=id,kg_terpakai,kg_sisa,kode_roll,warna&id=eq.' + stokKainId);
     if (!rows || rows.length === 0) return jsonResponse({ ok: false, error: 'Roll id=' + stokKainId + ' tidak ditemukan.' }, 404);
     const s = rows[0];
     const kgSisa = parseFloat(s.kg_sisa) || 0;
@@ -1576,7 +1570,11 @@ async function handleWriteoffKain_(body, env) {
     const resInsert = await fetch(env.SUPABASE_URL + '/rest/v1/log_writeoff_kain', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', apikey: env.SUPABASE_SECRET_KEY, Authorization: 'Bearer ' + env.SUPABASE_SECRET_KEY, Prefer: 'return=representation' },
-      body: JSON.stringify([{ stok_kain_id: stokKainId, kg: kg, catatan: body.catatan || null, status: 'aktif' }])
+      // v.45: sertakan kode_roll & warna sebagai SNAPSHOT (teks biasa, bukan live lookup lewat
+      // stok_kain_id) - biar gampang di-scan langsung di Table Editor Supabase tanpa follow FK
+      // (request Denny). Sama pola kayak log_pemakaian_kain.warna - kalau roll di-rename
+      // belakangan, baris write-off lama tetap nyimpen kode/warna yang lama.
+      body: JSON.stringify([{ stok_kain_id: stokKainId, kg: kg, catatan: body.catatan || null, status: 'aktif', kode_roll: s.kode_roll, warna: s.warna }])
     });
     if (resInsert.status >= 300) return jsonResponse({ ok: false, error: 'Gagal simpan write-off: HTTP ' + resInsert.status + ' ' + (await resInsert.text()).substring(0, 300) }, 500);
     const writeoffBaru = (await resInsert.json())[0];
