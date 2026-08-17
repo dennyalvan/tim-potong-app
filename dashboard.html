@@ -1,12 +1,19 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.41
+DASHBOARD ver.42
 ============================================================
-PERUBAHAN ver.41: perbaikan komentar (BUKAN perubahan fungsional) - catatan keamanan di bawah
-masih menyebut "GitHub Pages" padahal hosting statis file ini sudah pindah ke Cloudflare Worker
-"tim-potong-miniapp" sejak 7 Agustus 2026 (GitHub sekarang cuma source code, bukan lagi yang
-nyajiin halaman ke browser). Diperbaiki biar gak menyesatkan pembaca kode berikutnya.
+PERUBAHAN ver.42 (fitur Edit/Write-off, atas permintaan Denny, 4 fase):
+- Tab Stok Kain: tombol ✏️ admin-only per roll (termasuk di "Stok Habis") buka modal Edit
+  (tgl_beli/supplier/warna/kg/kode_roll/harga/diskon, harga & subtotal SENGAJA cuma kebuka lewat
+  endpoint admin) + Write-off Manual (kg partial + catatan, tercatat sebagai histori, bisa
+  dibatalkan). Grid utama auto-refresh lewat Realtime yang sudah ada, gak perlu fetch manual.
+- Tab Rekap QC: tombol ✏️ admin-only per baris - koreksi Selesai/Reject 1x submit (di baliknya:
+  batalkan baris lama + submit ulang, jejak audit tetap ada). Mode Ringkas doang di v1 - lihat
+  catatan di bukaModalEditLogQC_.
+- Tab Proses & QC: tombol "✏️ Edit Data Produksi" admin-only per laporan - nama item/kode
+  roll/kg pemakaian/jumlah. Kode roll/kg yang berubah otomatis potong-ulang stok. Jumlah dikunci
+  kalau laporan udah ada progres QC. Ukuran per-size belum ada form-nya di v1.
 Riwayat lengkap: git log.
 ============================================================
 
@@ -163,6 +170,7 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
 
   .btn-tambah-antrian { width: 100%; background: var(--indigo); color: #fff; border: none; border-radius: 10px; padding: 10px; font-weight: 700; font-size: 13.5px; cursor: pointer; }
   .btn-hapus-laporan { width: 100%; background: #fff; color: #dc2626; border: 1.5px solid #dc2626; border-radius: 10px; padding: 9px; font-weight: 700; font-size: 13px; cursor: pointer; margin-top: 8px; }
+  .btn-edit-produksi { width: 100%; background: #fff; color: var(--indigo); border: 1.5px solid var(--indigo); border-radius: 10px; padding: 9px; font-weight: 700; font-size: 13px; cursor: pointer; margin-top: 8px; }
   .rekap-hapus-btn { background: none; border: none; cursor: pointer; font-size: 14px; padding: 4px; line-height: 1; opacity: .55; }
   .rekap-hapus-btn:active { opacity: 1; }
 
@@ -195,6 +203,11 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .warna-detail { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px; }
   .warna-detail .roll-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700; padding: 8px 2px 8px 16px; border-bottom: 1px dashed #f1f4f9; cursor: pointer; }
   .warna-detail .roll-row .roll-kiri { display: flex; align-items: center; gap: 6px; }
+  /* v.42: kolom kanan roll-row (kg + tombol edit) digabung 1 wrapper flex, biar space-between
+     tetap kebagi 2 kelompok (kiri vs kanan) walau sekarang ada 2 elemen di kanan. */
+  .warna-detail .roll-row .roll-kanan { display: flex; align-items: center; gap: 4px; }
+  .btn-edit-roll { background: none; border: none; cursor: pointer; font-size: 13px; padding: 4px 5px; line-height: 1; opacity: .55; }
+  .btn-edit-roll:active { opacity: 1; }
   .warna-detail .roll-row .chev { font-size: 9px; color: var(--gray-label); transition: transform 0.15s; margin-left: -14px; }
   .warna-detail .roll-row.terbuka .chev { transform: rotate(90deg); }
   .warna-detail .roll-row .jumlah-pakai { font-size: 10px; font-weight: 600; color: var(--indigo); margin-left: 6px; }
@@ -246,6 +259,32 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
 
   .toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); background: #1c1c1e; color: #fff; padding: 10px 18px; border-radius: 10px; font-size: 13px; z-index: 999; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
   .toast.show { opacity: 1; }
+
+  /* v.42: modal Edit Stok Kain (admin) + Write-off manual - satu-satunya modal di file ini,
+     dibangun sederhana (overlay + box), gak pakai library. */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(20,20,30,0.45); display: flex; align-items: flex-end; justify-content: center; z-index: 1000; }
+  .modal-box { background: var(--bg); width: 100%; max-width: 520px; max-height: 88vh; overflow-y: auto; border-radius: 18px 18px 0 0; padding: 18px 16px 24px; }
+  .modal-box h2 { font-size: 15px; margin: 0 0 12px; }
+  .modal-box h3 { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--gray-label); margin: 18px 0 8px; }
+  .modal-close { position: absolute; top: 14px; right: 16px; background: none; border: none; font-size: 20px; cursor: pointer; color: var(--gray-text); line-height: 1; }
+  .modal-loading, .modal-error { text-align: center; padding: 30px 10px; color: var(--gray-text); font-size: 13px; }
+  .mf-row { display: flex; gap: 8px; margin-bottom: 8px; }
+  .mf-field { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+  .mf-field label { font-size: 11px; font-weight: 700; color: var(--gray-label); }
+  .mf-field input { border: 1px solid var(--border); border-radius: 10px; padding: 9px 10px; font-size: 13.5px; font-family: inherit; background: #fff; }
+  .mf-subtotal { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; margin: 10px 0; }
+  .mf-subtotal b { font-size: 15px; }
+  .mf-save-btn { width: 100%; background: var(--indigo); color: #fff; border: none; border-radius: 10px; padding: 11px; font-weight: 700; font-size: 13.5px; cursor: pointer; margin-top: 6px; }
+  .mf-writeoff-btn { width: 100%; background: #fff; color: var(--danger); border: 1.5px solid var(--danger); border-radius: 10px; padding: 10px; font-weight: 700; font-size: 13px; cursor: pointer; margin-top: 4px; }
+  .wo-item { background: #fff; border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; font-size: 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .wo-item.dibatalkan { opacity: .5; }
+  .wo-item .wo-info { flex: 1; min-width: 0; }
+  .wo-item .wo-kg { font-weight: 700; color: var(--danger); }
+  .wo-item .wo-catatan { color: var(--gray-text); font-size: 11px; margin-top: 1px; }
+  .wo-item .wo-waktu { color: var(--gray-label); font-size: 10px; margin-top: 1px; }
+  .wo-item .btn-batal-wo { background: none; border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; font-size: 10.5px; font-weight: 700; color: var(--gray-text); cursor: pointer; flex-shrink: 0; }
+  .wo-kosong { text-align: center; padding: 10px; color: var(--gray-text); font-size: 11.5px; }
+  .mf-peringatan { background: #FDF3E3; color: var(--orange-link); border-radius: 10px; padding: 9px 10px; font-size: 11.5px; font-weight: 600; margin-top: 8px; }
 </style>
 </head>
 <body>
@@ -417,7 +456,9 @@ if (tg && tg.initData) {
     .then(function (r) { return r.json(); })
     .then(function (data) {
       isAdmin = !!(data.ok && data.isAdmin);
-      if (isAdmin) { renderDaftarLaporan(); renderRekapQC(); } // re-render biar tombol Hapus langsung muncul kalau daftar/rekap udah kepampang duluan
+      // v.42: renderWarnaGrid ditambahin ke daftar re-render - biar tombol Edit Stok Kain
+      // langsung muncul kalau tab Stok Kain udah kebuka duluan sebelum status admin kekonfirmasi.
+      if (isAdmin) { renderDaftarLaporan(); renderRekapQC(); if (stokUtuhData) renderWarnaGrid(); }
     })
     .catch(function () { /* diamkan - anggap bukan admin */ });
 }
@@ -726,6 +767,7 @@ function renderLaporanExpand(r) {
 
   html += '<button class="btn-tambah-antrian" data-tambah="' + r.id + '">+ Tambah ke Daftar</button>';
   if (isAdmin) {
+    html += '<button class="btn-edit-produksi" data-editproduksi="' + r.id + '">✏️ Edit Data Produksi</button>';
     html += '<button class="btn-hapus-laporan" data-hapuslaporan="' + r.id + '">🗑️ Hapus Laporan</button>';
   }
   html += '</div>';
@@ -751,6 +793,17 @@ function pasangEventLaporanCard() {
     el.addEventListener('click', function (e) {
       e.stopPropagation();
       tambahKeAntrian(parseInt(el.dataset.tambah, 10));
+    });
+  });
+  // v.42: tombol Edit Data Produksi (admin) - buka modal nama item/kode roll/kg pemakaian/jumlah,
+  // buat kebutuhan stok opname. jumlah dikunci kalau laporan ini udah ada progres QC (server
+  // ngecek ulang juga - ini cuma UX biar gak nunggu error dari server).
+  document.querySelectorAll('[data-editproduksi]').forEach(function (el) {
+    el.addEventListener('click', function (e) {
+      e.stopPropagation();
+      const id = parseInt(el.dataset.editproduksi, 10);
+      const r = daftarLaporanData.find(function (x) { return x.id === id; });
+      if (r) bukaModalEditProduksi_(r);
     });
   });
   // v.32: tombol Hapus Laporan (khusus admin, lihat isAdmin) - konfirmasi native dulu (aksi
@@ -836,6 +889,63 @@ function pasangEventLaporanCard() {
       });
       tampilkanToast('✓ "' + r.jenisWarnaBaju + '" ditambahkan ke antrian (selesaikan semua sisa) - cek dulu di daftar antrian sebelum Kirim Rekap.');
     });
+  });
+}
+
+// ------------------------------------------------------------
+// MODAL EDIT DATA PRODUKSI (admin only, v.42) - nama item/kode roll/kg pemakaian/jumlah, buat
+// stok opname. Ukuran per-size SENGAJA belum ada form-nya di v1 (server sebenarnya sudah
+// dukung lewat body.ukuran kalau nanti perlu ditambah).
+// ------------------------------------------------------------
+function bukaModalEditProduksi_(r) {
+  if (!tg || !tg.initData) { tampilkanToast('Harus dibuka lewat Telegram.'); return; }
+  const adaProgresQC = (r.totalSelesai + r.totalReject) > 0;
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay';
+  ov.id = 'modalEditProduksi';
+  ov.innerHTML = '<div class="modal-box">' +
+    '<button class="modal-close" data-tutupmodal>✕</button>' +
+    '<h2>Edit Data Produksi</h2>' +
+    '<div class="mf-row"><div class="mf-field" style="flex:2"><label>Nama Item</label><input type="text" id="epNama" value="' + escapeAttr(r.jenisWarnaBaju || '') + '"></div>' +
+    '<div class="mf-field"><label>Kode Roll</label><input type="text" id="epKodeRoll" value="' + escapeAttr(r.kodeRoll || '') + '"></div></div>' +
+    '<div class="mf-row"><div class="mf-field"><label>Kg Pemakaian</label><input type="number" step="0.01" id="epKg" value="' + (r.pemakaianKainKg || '') + '"></div>' +
+    '<div class="mf-field"><label>Jumlah (pcs)</label><input type="number" id="epJumlah" value="' + r.jumlah + '"' + (adaProgresQC ? ' disabled' : '') + '></div></div>' +
+    (adaProgresQC ? '<div class="mf-peringatan">⚠️ Jumlah dikunci karena laporan ini udah punya progres QC (' + r.totalSelesai + ' selesai, ' + r.totalReject + ' reject). Batalkan submit QC terkait dulu kalau memang perlu ubah jumlah.</div>' : '') +
+    '<div class="mf-peringatan" style="background:var(--surface-2);color:var(--gray-text)">ℹ️ Ganti Kode Roll/Kg Pemakaian otomatis potong-ulang stok kain (potongan lama dikembalikan, dipotong lagi pakai nilai baru).</div>' +
+    '<button class="mf-save-btn" data-simpaneditproduksi>💾 Simpan Perubahan</button>' +
+    '</div>';
+  document.body.appendChild(ov);
+  ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
+  ov.querySelector('[data-tutupmodal]').addEventListener('click', function () { ov.remove(); });
+  ov.querySelector('[data-simpaneditproduksi]').addEventListener('click', function () {
+    const payload = {
+      initData: tg.initData,
+      id: r.id,
+      jenisWarnaBaju: document.getElementById('epNama').value,
+      kodeRoll: document.getElementById('epKodeRoll').value,
+      pemakaianKainKg: document.getElementById('epKg').value
+    };
+    if (!adaProgresQC) payload.jumlah = document.getElementById('epJumlah').value;
+    const btn = ov.querySelector('[data-simpaneditproduksi]');
+    btn.disabled = true; btn.textContent = 'Menyimpan...';
+    fetch(WORKER_URL + '/data/edit-produksi', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+    })
+      .then(function (r2) { return r2.json(); })
+      .then(function (data) {
+        if (!data.ok) {
+          btn.disabled = false; btn.textContent = '💾 Simpan Perubahan';
+          tampilkanToast('Gagal simpan: ' + data.error);
+          return;
+        }
+        ov.remove();
+        tampilkanToast((data.peringatanStok && data.peringatanStok.length) ? '✓ Tersimpan, TAPI stok gak kepotong: ' + data.peringatanStok.join('; ') : '✓ Data produksi diperbarui.');
+        muatDaftarLaporan();
+      })
+      .catch(function (e) {
+        btn.disabled = false; btn.textContent = '💾 Simpan Perubahan';
+        tampilkanToast('Gagal simpan: ' + e.message);
+      });
   });
 }
 
@@ -1063,8 +1173,9 @@ function muatStokHabis() {
       }
       document.getElementById('stokHabisList').innerHTML = list.map(function (x) {
         return '<div class="stok-habis-item"><span class="nama">' + escapeHtml(x.warna) + '</span>' +
-          '<span class="roll">Roll ' + (x.kodeRoll ? escapeHtml(x.kodeRoll) : '-') + '</span></div>';
+          '<span class="roll">Roll ' + (x.kodeRoll ? escapeHtml(x.kodeRoll) : '-') + '</span>' + tombolEditRoll_(x) + '</div>';
       }).join('');
+      if (isAdmin) pasangEventEditStok_();
     })
     .catch(function (e) { tampilkanToast('Gagal memuat stok habis: ' + e.message); });
 }
@@ -1203,6 +1314,7 @@ function renderWarnaGrid() {
       if (!riwayatTimPotongData) muatRiwayatTimPotong_();
     });
   });
+  if (isAdmin) pasangEventEditStok_();
 
   // v.35: hasil search di-scroll ke pandangan + kasih flash highlight sebentar
   if (rollHighlightKunci) {
@@ -1217,10 +1329,16 @@ function renderWarnaGrid() {
 
 // v.34: 1 roll = 1 baris, bisa diklik buat buka/tutup panel "Riwayat Pemakaian". Roll yang
 // kode-nya kosong/null gak bisa diklik (gak ada cara nyari riwayatnya tanpa kode).
+// v.42: tombol edit (✏️) admin-only - dipakai di 3 varian roll-row di bawah.
+function tombolEditRoll_(r) {
+  if (!isAdmin) return '';
+  return '<button class="btn-edit-roll" data-editstok="' + r.id + '" title="Edit / Write-off">✏️</button>';
+}
+
 function renderBarisRoll_(w, r) {
   const kode = r.kodeRoll;
   if (!kode) {
-    return '<div class="roll-row" style="cursor:default"><span>Roll -</span><span>' + formatAngka(r.kg) + ' kg</span></div>';
+    return '<div class="roll-row" style="cursor:default"><span>Roll -</span><div class="roll-kanan"><span>' + formatAngka(r.kg) + ' kg</span>' + tombolEditRoll_(r) + '</div></div>';
   }
   // v.38: koreksi ver.37 - yang dimaksud Denny sejak awal itu BENAR panah expand HARUS
   // hilang total (bukan cuma isi panelnya) buat roll yang belum pernah kepakai - biar tampilan
@@ -1236,7 +1354,7 @@ function renderBarisRoll_(w, r) {
   const kunci = kunciRoll_(w, r);
   if (jumlahPakai === 0) {
     const disorotBersih = (rollHighlightKunci === kunci);
-    return '<div class="roll-row' + (disorotBersih ? ' disorot' : '') + '" style="cursor:default" data-rollkey="' + escapeAttr(kunci) + '"><span>Roll ' + escapeHtml(kode) + '</span><span>' + formatAngka(r.kg) + ' kg</span></div>';
+    return '<div class="roll-row' + (disorotBersih ? ' disorot' : '') + '" style="cursor:default" data-rollkey="' + escapeAttr(kunci) + '"><span>Roll ' + escapeHtml(kode) + '</span><div class="roll-kanan"><span>' + formatAngka(r.kg) + ' kg</span>' + tombolEditRoll_(r) + '</div></div>';
   }
   const terbuka = (rollTerbukaKunci === kunci);
   const disorot = (rollHighlightKunci === kunci);
@@ -1244,7 +1362,7 @@ function renderBarisRoll_(w, r) {
   const hintPakai = !terbuka ? '<span class="jumlah-pakai">' + jumlahPakai + 'X</span>' : '';
   let html = '<div class="roll-row' + (terbuka ? ' terbuka' : '') + (disorot ? ' disorot' : '') + '" data-rolltoggle="' + escapeAttr(kunci) + '">' +
     '<div class="roll-kiri"><span class="chev">▶</span><span>Roll ' + escapeHtml(kode) + '</span>' + hintPakai + '</div>' +
-    '<span>' + formatAngka(r.kg) + ' kg</span></div>';
+    '<div class="roll-kanan"><span>' + formatAngka(r.kg) + ' kg</span>' + tombolEditRoll_(r) + '</div></div>';
   if (terbuka) html += renderRiwayatPanel_(kode, r.kg);
   return html;
 }
@@ -1278,6 +1396,182 @@ function renderRiwayatPanel_(kode, kgSisa) {
   html += '</div>';
   return html;
 }
+
+// ------------------------------------------------------------
+// MODAL EDIT STOK KAIN & WRITE-OFF MANUAL (admin only, v.42)
+// v.42: harga_rp_kg/diskon_rp_kg/subtotal SENGAJA cuma kebuka lewat endpoint admin-only
+// (/data/detail-stok-kain) - gak pernah lewat /data/stok-utuh yang publik. Perubahan kg/harga
+// dst di sini otomatis kekirim ke Supabase lewat Worker, dan grid utama (renderWarnaGrid) OTOMATIS
+// ke-refresh sendiri lewat Realtime yang udah ada (setupRealtime, langganan tabel stok_kain) -
+// gak perlu manggil ulang muatStokUtuh secara manual di sini. Stok Habis (bukan bagian realtime,
+// cuma dimuat manual pas toggle dibuka) tetap di-refresh manual kalau lagi kebuka.
+// ------------------------------------------------------------
+let modalStokDetail = null;
+
+function pasangEventEditStok_() {
+  document.querySelectorAll('[data-editstok]').forEach(function (el) {
+    el.addEventListener('click', function (e) {
+      e.stopPropagation();
+      bukaModalEditStok_(parseInt(el.dataset.editstok, 10));
+    });
+  });
+}
+
+function tutupModalEditStok_() {
+  const ov = document.getElementById('modalEditStok');
+  if (ov) ov.remove();
+  modalStokDetail = null;
+}
+
+function bukaModalEditStok_(id) {
+  if (!tg || !tg.initData) { tampilkanToast('Harus dibuka lewat Telegram.'); return; }
+  tutupModalEditStok_();
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay';
+  ov.id = 'modalEditStok';
+  ov.innerHTML = '<div class="modal-box"><button class="modal-close" data-tutupmodal>✕</button><h2>Edit Stok Kain</h2><div class="modal-loading">⏳ Memuat detail...</div></div>';
+  document.body.appendChild(ov);
+  ov.addEventListener('click', function (e) { if (e.target === ov) tutupModalEditStok_(); });
+  ov.querySelector('[data-tutupmodal]').addEventListener('click', tutupModalEditStok_);
+
+  fetch(WORKER_URL + '/data/detail-stok-kain', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ initData: tg.initData, id: id })
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (!data.ok) { tampilkanModalError_(data.error); return; }
+      modalStokDetail = data;
+      renderModalEditStok_();
+    })
+    .catch(function (e) { tampilkanModalError_(e.message); });
+}
+
+function tampilkanModalError_(pesan) {
+  const box = document.querySelector('#modalEditStok .modal-box');
+  if (box) box.innerHTML += '<div class="modal-error">Gagal memuat: ' + escapeHtml(pesan) + '</div>';
+}
+
+function renderModalEditStok_() {
+  const d = modalStokDetail;
+  const box = document.querySelector('#modalEditStok .modal-box');
+  if (!box || !d) return;
+
+  const riwayatHtml = (d.riwayatWriteoff && d.riwayatWriteoff.length)
+    ? d.riwayatWriteoff.map(function (w) {
+        return '<div class="wo-item' + (w.status !== 'aktif' ? ' dibatalkan' : '') + '">' +
+          '<div class="wo-info"><span class="wo-kg">-' + formatAngka(w.kg) + ' kg</span>' +
+          (w.catatan ? '<div class="wo-catatan">' + escapeHtml(w.catatan) + '</div>' : '') +
+          '<div class="wo-waktu">' + escapeHtml(w.waktu_wib || '') + (w.status !== 'aktif' ? ' · dibatalkan' : '') + '</div></div>' +
+          (w.status === 'aktif' ? '<button class="btn-batal-wo" data-batalwo="' + w.id + '">Batal</button>' : '') +
+          '</div>';
+      }).join('')
+    : '<div class="wo-kosong">Belum ada write-off buat roll ini.</div>';
+
+  box.innerHTML =
+    '<button class="modal-close" data-tutupmodal>✕</button>' +
+    '<h2>Edit Stok Kain' + (d.kodeRoll ? ' · Roll ' + escapeHtml(d.kodeRoll) : '') + '</h2>' +
+    '<div class="mf-row"><div class="mf-field"><label>Tanggal Beli</label><input type="date" id="mfTglBeli" value="' + escapeAttr(d.tglBeli || '') + '"></div>' +
+    '<div class="mf-field"><label>Supplier</label><input type="text" id="mfSupplier" value="' + escapeAttr(d.supplier || '') + '"></div></div>' +
+    '<div class="mf-row"><div class="mf-field"><label>Warna</label><input type="text" id="mfWarna" value="' + escapeAttr(d.warna || '') + '"></div>' +
+    '<div class="mf-field"><label>Kode Roll</label><input type="text" id="mfKodeRoll" value="' + escapeAttr(d.kodeRoll || '') + '"></div></div>' +
+    '<div class="mf-row"><div class="mf-field"><label>Kg (total dibeli)</label><input type="number" step="0.01" id="mfKg" value="' + d.kg + '"></div>' +
+    '<div class="mf-field"><label>Kg Sisa</label><input type="text" value="' + formatAngka(d.kgSisa) + '" disabled></div></div>' +
+    '<div class="mf-row"><div class="mf-field"><label>Harga Beli (Rp/kg)</label><input type="number" step="1" id="mfHarga" value="' + (d.hargaRpKg || '') + '"></div>' +
+    '<div class="mf-field"><label>Diskon (Rp/kg)</label><input type="number" step="1" id="mfDiskon" value="' + (d.diskonRpKg || '') + '"></div></div>' +
+    '<div class="mf-subtotal"><span>Subtotal (nilai sisa stok)</span><b>Rp ' + formatAngka(d.subtotal) + '</b></div>' +
+    '<button class="mf-save-btn" data-simpanedit>💾 Simpan Perubahan</button>' +
+    '<h3>Write-off Manual</h3>' +
+    '<div class="mf-row"><div class="mf-field"><label>Kg (maks ' + formatAngka(d.kgSisa) + ')</label><input type="number" step="0.01" id="woKg" placeholder="0"></div>' +
+    '<div class="mf-field"><label>Catatan (opsional)</label><input type="text" id="woCatatan" placeholder="mis. rusak, hilang"></div></div>' +
+    '<button class="mf-writeoff-btn" data-submitwriteoff>➖ Catat Write-off</button>' +
+    '<h3>Riwayat Write-off</h3>' + riwayatHtml;
+
+  box.querySelector('[data-tutupmodal]').addEventListener('click', tutupModalEditStok_);
+  box.querySelector('[data-simpanedit]').addEventListener('click', simpanEditStok_);
+  box.querySelector('[data-submitwriteoff]').addEventListener('click', submitWriteoff_);
+  box.querySelectorAll('[data-batalwo]').forEach(function (el) {
+    el.addEventListener('click', function () { batalWriteoff_(parseInt(el.dataset.batalwo, 10)); });
+  });
+}
+
+function simpanEditStok_() {
+  const btn = document.querySelector('#modalEditStok [data-simpanedit]');
+  const payload = {
+    initData: tg.initData,
+    id: modalStokDetail.id,
+    tglBeli: document.getElementById('mfTglBeli').value,
+    supplier: document.getElementById('mfSupplier').value,
+    warna: document.getElementById('mfWarna').value,
+    kg: document.getElementById('mfKg').value,
+    kodeRoll: document.getElementById('mfKodeRoll').value,
+    hargaRpKg: document.getElementById('mfHarga').value,
+    diskonRpKg: document.getElementById('mfDiskon').value
+  };
+  btn.disabled = true; btn.textContent = 'Menyimpan...';
+  fetch(WORKER_URL + '/data/edit-stok-kain', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (!data.ok) {
+        btn.disabled = false; btn.textContent = '💾 Simpan Perubahan';
+        tampilkanToast('Gagal simpan: ' + data.error);
+        return;
+      }
+      tampilkanToast('✓ Perubahan tersimpan.');
+      if (stokHabisDimuat) muatStokHabis();
+      bukaModalEditStok_(payload.id); // reload detail biar subtotal & peringatan (kalau ada) ke-update
+    })
+    .catch(function (e) {
+      btn.disabled = false; btn.textContent = '💾 Simpan Perubahan';
+      tampilkanToast('Gagal simpan: ' + e.message);
+    });
+}
+
+function submitWriteoff_() {
+  const kg = parseFloat(document.getElementById('woKg').value);
+  if (!(kg > 0)) { tampilkanToast('Isi kg write-off dulu (harus lebih dari 0).'); return; }
+  if (!confirm('Catat write-off ' + kg + ' kg dari roll ini?\n\nKg ini dianggap terpakai di luar laporan produksi, dan mengurangi kg sisa. Bisa dibatalkan lagi dari riwayat kalau salah.')) return;
+  const catatan = document.getElementById('woCatatan').value;
+  const btn = document.querySelector('#modalEditStok [data-submitwriteoff]');
+  btn.disabled = true; btn.textContent = 'Menyimpan...';
+  fetch(WORKER_URL + '/data/writeoff-kain', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ initData: tg.initData, stokKainId: modalStokDetail.id, kg: kg, catatan: catatan })
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (!data.ok) {
+        btn.disabled = false; btn.textContent = '➖ Catat Write-off';
+        tampilkanToast('Gagal write-off: ' + data.error);
+        return;
+      }
+      tampilkanToast('✓ Write-off tersimpan.');
+      if (stokHabisDimuat) muatStokHabis();
+      bukaModalEditStok_(modalStokDetail.id);
+    })
+    .catch(function (e) {
+      btn.disabled = false; btn.textContent = '➖ Catat Write-off';
+      tampilkanToast('Gagal write-off: ' + e.message);
+    });
+}
+
+function batalWriteoff_(writeoffId) {
+  if (!confirm('Batalkan write-off ini? Kg-nya akan dikembalikan ke stok.')) return;
+  fetch(WORKER_URL + '/data/batal-writeoff', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ initData: tg.initData, writeoffId: writeoffId })
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (!data.ok) { tampilkanToast('Gagal batalkan: ' + data.error); return; }
+      tampilkanToast('✓ Write-off dibatalkan, kg dikembalikan.');
+      if (stokHabisDimuat) muatStokHabis();
+      bukaModalEditStok_(modalStokDetail.id);
+    })
+    .catch(function (e) { tampilkanToast('Gagal batalkan: ' + e.message); });
+}
+
 document.getElementById('searchWarna').addEventListener('input', function () {
   searchWarnaQuery = this.value;
   // v.35: cari & auto-expand+highlight roll yang cocok - dijalanin SEKALI DI SINI (pas user
@@ -1388,7 +1682,8 @@ function renderRekapQC() {
 
   // v.34: kolom tambahan buat tombol Hapus, CUMA muncul buat admin (lihat isAdmin) - biar user
   // biasa gak ada ruang kosong yang gak kepakai di tabelnya.
-  const LEBAR_WAKTU = 92, LEBAR_WARNA = 110, LEBAR_VARIAN = 118, LEBAR_UKURAN = 40, LEBAR_ANGKA = 60, LEBAR_HAPUS = 36;
+  // v.42: kolom ini sekarang muat 2 tombol (✏️ Edit + 🗑️ Hapus) - dilebarin dari 36 ke 62px.
+  const LEBAR_WAKTU = 92, LEBAR_WARNA = 110, LEBAR_VARIAN = 118, LEBAR_UKURAN = 40, LEBAR_ANGKA = 60, LEBAR_HAPUS = 62;
   const templateKolom = LEBAR_WAKTU + 'px ' + LEBAR_WARNA + 'px ' + LEBAR_VARIAN + 'px ' +
     ukuranDipakai.map(function () { return LEBAR_UKURAN + 'px'; }).join(' ') +
     ' ' + LEBAR_ANGKA + 'px ' + LEBAR_ANGKA + 'px' + (isAdmin ? ' ' + LEBAR_HAPUS + 'px' : '');
@@ -1422,7 +1717,7 @@ function renderRekapQC() {
       ukuranDipakai.map(function (u) { return '<div class="rekap-num">' + (petaUkuran[u] ? petaUkuran[u] : '<span class="rekap-muted">–</span>') + '</div>'; }).join('') +
       '<div class="rekap-selesai">' + it.total + '</div>' +
       '<div class="' + (it.rejectTotal > 0 ? 'rekap-reject' : 'rekap-num rekap-muted') + '">' + it.rejectTotal + '</div>' +
-      (isAdmin ? '<div><button class="rekap-hapus-btn" data-hapuslogqc="' + it.id + '" title="Hapus submit ini">🗑️</button></div>' : '') +
+      (isAdmin ? '<div style="display:flex;gap:2px"><button class="rekap-hapus-btn" data-editlogqc="' + it.id + '" data-total="' + it.total + '" data-reject="' + it.rejectTotal + '" title="Edit submit ini">✏️</button><button class="rekap-hapus-btn" data-hapuslogqc="' + it.id + '" title="Hapus submit ini">🗑️</button></div>' : '') +
       '</div>';
   }).join('');
 
@@ -1473,10 +1768,72 @@ function renderRekapQC() {
     });
   });
 
+  // v.42: tombol Edit per-baris (khusus admin) - buka modal kecil (mode Ringkas doang, prefill
+  // Selesai/Reject dari submission INI, bukan agregat semua submission laporan) lalu panggil
+  // /data/edit-log-qc. CATATAN: karena mode-nya selalu Ringkas, kalau submission aslinya dulu
+  // dikirim mode Rincian (per-ukuran manual), hasil koreksi bisa realokasi ke ukuran yang beda
+  // urutan (server yang nentuin, sama kayak submit Ringkas biasa) - TOTAL-nya tetap benar, cuma
+  // sebaran per-ukurannya mungkin gak persis sama distribusi asli. Cukup buat v1.
+  list.querySelectorAll('[data-editlogqc]').forEach(function (el) {
+    el.addEventListener('click', function (e) {
+      e.stopPropagation();
+      bukaModalEditLogQC_(parseInt(el.dataset.editlogqc, 10), parseFloat(el.dataset.total) || 0, parseFloat(el.dataset.reject) || 0);
+    });
+  });
+
   const totalSel = items.reduce(function (s, it) { return s + it.total; }, 0);
   const totalRej = items.reduce(function (s, it) { return s + it.rejectTotal; }, 0);
   document.getElementById('rekapFoot').innerHTML =
     '<span>Total selesai: <b>' + totalSel + '</b></span><span>Total reject: <b>' + totalRej + '</b></span>';
+}
+
+// ------------------------------------------------------------
+// MODAL EDIT SUBMIT QC (admin only, v.42) - reuse CSS modal-overlay/modal-box/mf-row/mf-field
+// yang sudah ada buat modal Edit Stok Kain.
+// ------------------------------------------------------------
+function bukaModalEditLogQC_(logQcId, totalLama, rejectLama) {
+  if (!tg || !tg.initData) { tampilkanToast('Harus dibuka lewat Telegram.'); return; }
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay';
+  ov.id = 'modalEditLogQC';
+  ov.innerHTML = '<div class="modal-box">' +
+    '<button class="modal-close" data-tutupmodal>✕</button>' +
+    '<h2>Edit Submit QC</h2>' +
+    '<div class="mf-row"><div class="mf-field"><label>Selesai</label><input type="number" min="0" id="eqSelesai" value="' + totalLama + '"></div>' +
+    '<div class="mf-field"><label>Reject</label><input type="number" min="0" id="eqReject" value="' + rejectLama + '"></div></div>' +
+    '<button class="mf-save-btn" data-simpaneditqc>💾 Simpan Koreksi</button>' +
+    '</div>';
+  document.body.appendChild(ov);
+  ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
+  ov.querySelector('[data-tutupmodal]').addEventListener('click', function () { ov.remove(); });
+  ov.querySelector('[data-simpaneditqc]').addEventListener('click', function () {
+    const selesai = parseFloat(document.getElementById('eqSelesai').value) || 0;
+    const reject = parseFloat(document.getElementById('eqReject').value) || 0;
+    if (selesai <= 0 && reject <= 0) { tampilkanToast('Isi minimal 1 angka Selesai/Reject.'); return; }
+    if (!confirm('Ganti submit QC ini jadi Selesai ' + selesai + ', Reject ' + reject + '?')) return;
+    const btn = ov.querySelector('[data-simpaneditqc]');
+    btn.disabled = true; btn.textContent = 'Menyimpan...';
+    fetch(WORKER_URL + '/data/edit-log-qc', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initData: tg.initData, logQcId: logQcId, dataBaru: { mode: 'ringkas', ringkas: { selesai: selesai, reject: reject } } })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data.ok) {
+          btn.disabled = false; btn.textContent = '💾 Simpan Koreksi';
+          tampilkanToast('Gagal simpan: ' + data.error);
+          return;
+        }
+        ov.remove();
+        tampilkanToast('✓ Submit QC dikoreksi.');
+        muatRekapQC();
+        muatDaftarLaporan(); // progress laporan induknya ikut berubah
+      })
+      .catch(function (e) {
+        btn.disabled = false; btn.textContent = '💾 Simpan Koreksi';
+        tampilkanToast('Gagal simpan: ' + e.message);
+      });
+  });
 }
 
 // ------------------------------------------------------------

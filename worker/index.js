@@ -1,65 +1,16 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.40
+// CODE WORKER PRODUKSI ver.42
 // ============================================================
-// PERUBAHAN ver.40: fix bug di handleHapusLogQC_ - kalau SEMUA submission QC aktif untuk 1
-// laporan dibatalkan (progress balik ke 0 selesai + 0 reject), status tim_potong SEBELUMNYA
-// nyangkut jadi teks "PROSES 0/Y (0 reject)" alih-alih balik ke string kosong seperti laporan
-// yang belum pernah disentuh QC sama sekali. Ditemukan Denny lewat Table Editor Supabase
-// (9 Agustus 2026) - laporan RFL MERAH id=1004 kelihatan beda ("PROSES 0/169") dari laporan lain
-// yang belum diproses ("EMPTY"/kosong), padahal secara efektif kondisinya sama (belum ada
-// progress QC aktif). Fix: statusBaru sekarang eksplisit dikembalikan ke '' kalau
-// totalSelesai+totalReject == 0 setelah pembatalan, BUKAN dihitung sebagai "PROSES 0/Y" lagi.
-// Data lama yang sudah kejadian (status nyangkut) TIDAK ikut dibetulkan otomatis oleh fix ini -
-// sudah dibetulkan manual utk id=1004 lewat UPDATE langsung, laporan lain (kalau ada) perlu
-// dicek manual juga kalau ketemu.
-//
-// PERUBAHAN ver.39: pesan teks yang gak dikenali (BUKAN /produksi, /stok, atau "Masuk...")
-// SEKARANG DIABAIKAN DIAM-DIAM, tidak diproxy ke Apps Script lagi. Sebelumnya proxyKeAppsScript_
-// meneruskan SEMUA teks yang gak cocok pola apapun ke Apps Script, yang otomatis membalas
-// pengingat "Input produksi via teks manual sudah tidak diproses lagi" untuk teks APAPUN -
-// termasuk obrolan biasa yang gak ada hubungannya sama input produksi sama sekali, jadi berisik
-// di grup TIM KONVEKSI. Dimatikan atas permintaan Denny (9 Agustus 2026). proxyKeAppsScript_
-// TETAP ADA (masih dipakai jalur callback_query non-nota) - cuma pemanggilannya di ujung
-// handleTelegramWebhook_ untuk pesan teks polos yang dihapus. Kalau suatu saat mau diaktifkan
-// lagi (atau diganti versi yang lebih pintar - cuma balas kalau teksnya KELIHATAN kayak upaya
-// input produksi manual, bukan blanket semua teks), tinggal kembalikan baris
-// "return await proxyKeAppsScript_(...)" di akhir handleTelegramWebhook_.
-//
-// PERUBAHAN ver.38: MIGRASI fitur "baca nota" (foto struk supplier -> baca otomatis via Claude
-// Vision -> preview -> konfirmasi tombol -> simpan) dari Apps Script ke sini juga (menyusul
-// migrasi parsing teks "Masuk..." di ver.37). Sebelumnya: Worker terusin foto+callback_query
-// MENTAH-MENTAH ke Apps Script. Sekarang: Worker sendiri yang download foto dari Telegram,
-// panggil Claude Vision API, terapkan aturan bisnis (skip RIB, mapping warna KAMUS SINONIM
-// WARNA, format Kode Roll 4 digit), simpan preview sementara di Cloudflare KV (TIM_POTONG_KV,
-// TTL 30 menit, ganti CacheService Apps Script), lalu tunggu user tap tombol "Simpan"/"Batal".
-// TEMUAN PENTING sebelum migrasi ini: Script Property ANTHROPIC_API_KEY di Apps Script TERNYATA
-// KOSONG (dicek via gas-debug) - fitur ini kemungkinan sudah gak jalan dari sisi Apps Script
-// untuk sementara waktu sebelum migrasi ini. Worker sekarang pakai secret BARU ANTHROPIC_API_KEY
-// (beda tempat penyimpanan, jadi harus di-set ulang sebagai Cloudflare secret).
-// Apps Script (CODE TIM POTONG) TIDAK disentuh sama sekali untuk fitur ini juga - kodenya jadi
-// gak pernah kepanggil lagi (Worker sudah intercept duluan), sengaja dibiarkan sebagai jaring
-// pengaman.
-//
-// PERUBAHAN ver.37: MIGRASI parsing "Masuk ..." (stok kain baru datang) dari Apps Script ke sini.
-// Sebelumnya: Worker terusin MENTAH-MENTAH ke Apps Script (proxyKeAppsScript_), Apps Script yang
-// parsing teks + tulis ke Sheet STOK KAIN + panggil balik Worker (/internal/stok-masuk) buat
-// sinkron ke Supabase. Sekarang: Worker sendiri yang parsing (isBarisMasuk_/parseBarisMasuk_/dkk,
-// port 1:1 dari Apps Script) DAN tulis langsung ke Supabase (tambahStokKainMasukSupabase_) - gak
-// ada lagi round-trip ke Apps Script/HTTP internal buat fitur ini. Apps Script (CODE TIM POTONG)
-// TIDAK disentuh sama sekali - kodenya jadi gak pernah kepanggil lagi buat alur ini (mati
-// otomatis karena Worker sudah intercept duluan), tapi sengaja DIBIARKAN dulu sebagai jaring
-// pengaman, belum dihapus.
-// DAMPAK PENTING: tab Sheet "STOK KAIN" TIDAK LAGI auto-nambah baris tiap ada laporan masuk baru
-// (Worker gak punya akses tulis Sheets). Sheet-nya sekarang murni "snapshot stok aktif", di-
-// refresh manual lewat SYNC AKUNTANSI - sudah dikonfirmasi Denny ini memang perilaku yang mau.
-// Fitur foto-nota-AI (baca struk supplier via Claude Vision) TIDAK ikut dimigrasi - itu tetap di
-// Apps Script apa adanya (di luar scope "parsing via teks").
-//
-// PERUBAHAN ver.36: optimasi kecepatan respon /produksi & /stok - tanganiCommandCepat_ sekarang
-// jalanin hapusPasanganSebelumnya_ (hapus pesan lama) & kirimTombolMiniApp_/kirimTombolDashboard_
-// (kirim tombol baru) secara PARALEL (Promise.all), bukan berurutan kayak sebelumnya. Dua-duanya
-// gak saling bergantung, jadi user cuma nunggu 1x round-trip terlama ke Telegram, bukan jumlah
-// dua-duanya. Gak ada perubahan logika/hasil, murni urutan eksekusi.
+// PERUBAHAN ver.42 (Fase 3+4 dari fitur Edit, lanjutan ver.41, atas permintaan Denny): endpoint
+// admin-only baru /data/edit-log-qc (edit 1x submit QC - secara internal batalkan baris lama
+// append-only lewat handleHapusLogQC_ lalu submit ulang angka terkoreksi lewat handleSubmitQC_,
+// jejak audit total_bayar tetap utuh) dan /data/edit-produksi (edit data dasar tim_potong -
+// nama/jumlah/ukuran/kode roll/kg pemakaian, buat kebutuhan stok opname Denny. Kode roll/kg yang
+// berubah otomatis hapus log_pemakaian_kain lama - trigger yang sudah ada balikin kg_terpakai -
+// lalu potong ulang pakai kurangiStokKain_ yang sama dipakai submit produksi biasa, jadi nyakup
+// laporan yang sudah PERNAH maupun BELUM PERNAH kesentuh stok dengan 1 mekanisme. Guardrail:
+// jumlah/ukuran diblokir kalau laporan udah punya progres QC; item kombinasi/ref_stok belum
+// didukung buat edit kode roll/kg di v1).
 //
 // Riwayat versi lengkap: git log.
 //
@@ -180,6 +131,61 @@ export default {
     // (request Denny - dipisah dari /data/stok-utuh yang emang sengaja cuma nampilin sisa > 0)
     if (url.pathname === '/data/stok-habis' && request.method === 'GET') {
       return await handleStokHabis_(env);
+    }
+
+    // v.41 - detail 1 roll KHUSUS admin: harga_rp_kg, diskon_rp_kg, subtotal (nilai SISA stok =
+    // kg_sisa x harga bersih diskon), plus riwayat write-off manual. Dipakai buka form Edit di
+    // dashboard. Info harga SENGAJA gak pernah lewat /data/stok-utuh (endpoint publik) - baru
+    // kebuka lewat endpoint ini setelah initData divalidasi & terbukti admin.
+    if (url.pathname === '/data/detail-stok-kain' && request.method === 'POST') {
+      let body;
+      try { body = await request.json(); } catch (e) { return jsonResponse({ ok: false, error: 'Body harus JSON.' }, 400); }
+      return await handleDetailStokKainAdmin_(body, env);
+    }
+
+    // v.41 - edit field stok_kain (tgl_beli/supplier/warna/kg/kode_roll/harga/diskon), admin-only.
+    if (url.pathname === '/data/edit-stok-kain' && request.method === 'POST') {
+      let body;
+      try { body = await request.json(); } catch (e) { return jsonResponse({ ok: false, error: 'Body harus JSON.' }, 400); }
+      return await handleEditStokKain_(body, env);
+    }
+
+    // v.41 - write-off manual: tandai sejumlah kg (boleh partial) sebagai terpakai TANPA lewat
+    // laporan produksi (misal rusak/hilang/sisa gak kepake), admin-only, tercatat di
+    // log_writeoff_kain sebagai histori (gak pernah dihapus fisik).
+    if (url.pathname === '/data/writeoff-kain' && request.method === 'POST') {
+      let body;
+      try { body = await request.json(); } catch (e) { return jsonResponse({ ok: false, error: 'Body harus JSON.' }, 400); }
+      return await handleWriteoffKain_(body, env);
+    }
+
+    // v.41 - batal 1 write-off (soft-cancel, status='dibatalkan' - BUKAN dihapus fisik biar
+    // histori tetap ada), balikin kg_terpakai ke stok_kain, admin-only.
+    if (url.pathname === '/data/batal-writeoff' && request.method === 'POST') {
+      let body;
+      try { body = await request.json(); } catch (e) { return jsonResponse({ ok: false, error: 'Body harus JSON.' }, 400); }
+      return await handleBatalWriteoff_(body, env);
+    }
+
+    // v.42 - edit 1x submit QC (log_qc) yang udah masuk: batalkan baris lama (append-only,
+    // reuse persis logic /data/hapus-log-qc) lalu submit ulang angka terkoreksi lewat jalur
+    // /submit-qc yang sama, admin-only.
+    if (url.pathname === '/data/edit-log-qc' && request.method === 'POST') {
+      let body;
+      try { body = await request.json(); } catch (e) { return jsonResponse({ ok: false, error: 'Body harus JSON.' }, 400); }
+      return await handleEditLogQC_(body, env);
+    }
+
+    // v.42 - edit data dasar laporan produksi (tim_potong): nama item/jumlah/ukuran, TERMASUK
+    // kode roll & kg pemakaian buat stok opname. Kode roll/kg yang berubah otomatis potong-ulang
+    // stok (hapus potongan lama -> trigger yang sudah ada balikin kg_terpakai -> potong lagi
+    // pakai nilai baru, reuse kurangiStokKain_ yang sama dipakai submit produksi). Item kombinasi
+    // (ref_stok) belum didukung buat field ini di v1. jumlah/ukuran diblokir kalau laporan udah
+    // punya progres QC (status != kosong) - admin-only.
+    if (url.pathname === '/data/edit-produksi' && request.method === 'POST') {
+      let body;
+      try { body = await request.json(); } catch (e) { return jsonResponse({ ok: false, error: 'Body harus JSON.' }, 400); }
+      return await handleEditProduksi_(body, env);
     }
 
     // v.13 (Dashboard Tahap 4) - arsip laporan yang sudah SELESAI, N hari terakhir
@@ -494,6 +500,110 @@ async function handleHapusLogQC_(body, env) {
     }
 
     return jsonResponse({ ok: true, timPotongId: timPotongId, statusBaru: statusBaru, pesanQCTerhapus: pesanQCTerhapus });
+  } catch (e) {
+    return jsonResponse({ ok: false, error: e.message }, 500);
+  }
+}
+
+// v.42 - edit 1x submit QC: secara internal batalkan baris log_qc lama (persis logic
+// handleHapusLogQC_ - status jadi 'dibatalkan', BUKAN dihapus fisik, progress dihitung ulang dari
+// sisa yang aktif) lalu submit ulang dengan angka terkoreksi lewat handleSubmitQC_ yang sama
+// dipakai submit biasa. Dari sisi admin di dashboard keliatan 1 aksi "Edit", tapi di database
+// jejaknya tetap 2 baris (lama dibatalkan + baru aktif) - audit trail total_bayar tetap utuh.
+async function handleEditLogQC_(body, env) {
+  const logQcId = parseInt(body.logQcId, 10);
+  if (!logQcId) return jsonResponse({ ok: false, error: 'logQcId wajib diisi.' }, 400);
+
+  const resBatal = await handleHapusLogQC_({ initData: body.initData, logQcId: logQcId }, env);
+  const dataBatal = await resBatal.json();
+  if (!dataBatal.ok) return jsonResponse({ ok: false, error: 'Gagal batalkan data lama: ' + dataBatal.error }, resBatal.status);
+  if (!dataBatal.timPotongId) return jsonResponse({ ok: false, error: 'Data lama dibatalkan, tapi laporan induknya sudah gak ada - gak bisa submit ulang.' }, 400);
+
+  const bodySubmitBaru = Object.assign({ initData: body.initData, timPotongId: dataBatal.timPotongId }, body.dataBaru || {});
+  return await handleSubmitQC_(bodySubmitBaru, env);
+}
+
+// v.42 - edit data dasar laporan produksi (tim_potong), termasuk kode roll/kg buat stok opname
+// (request Denny). Kode roll/kg/nama yang berubah -> hapus SEMUA log_pemakaian_kain lama punya
+// laporan ini (trigger trg_kembalikan_stok_kain_saat_hapus_log_pemakaian yang SUDAH ADA otomatis
+// balikin kg_terpakai ke roll lama - kalau laporan ini belum pernah kesentuh stok, DELETE 0 baris,
+// gak masalah) -> potong ulang pakai kurangiStokKain_ yang SAMA PERSIS dipakai submit produksi.
+// 1 mekanisme ini otomatis nyakup laporan yang sudah PERNAH & yang BELUM PERNAH kesentuh stok.
+async function handleEditProduksi_(body, env) {
+  const validasi = await validasiInitData_(body.initData, env);
+  if (!validasi.ok) return jsonResponse(validasi, 401);
+  if (!cekAdmin_(validasi.userId, env)) {
+    return jsonResponse({ ok: false, error: 'Kamu tidak punya izin mengedit data produksi.' }, 403);
+  }
+
+  const id = parseInt(body.id, 10);
+  if (!id) return jsonResponse({ ok: false, error: 'id wajib diisi.' }, 400);
+
+  try {
+    const rows = await ambilDariSupabase_(env, '/rest/v1/tim_potong?select=*&id=eq.' + id);
+    if (!rows || rows.length === 0) return jsonResponse({ ok: false, error: 'Laporan id=' + id + ' tidak ditemukan.' }, 404);
+    const tp = rows[0];
+
+    // Guardrail: jumlah/ukuran diblokir kalau laporan ini udah punya progres QC (status != '') -
+    // ubah kuantitas setelah QC jalan bisa bikin hitungan yang udah lapor jadi gak konsisten.
+    const jumlahBaru = body.jumlah !== undefined ? parseInt(body.jumlah, 10) : tp.jumlah;
+    const ubahJumlah = jumlahBaru !== tp.jumlah;
+    let ubahUkuran = false;
+    if (body.ukuran) {
+      DAFTAR_UKURAN_TIMPOTONG.forEach(function (u) {
+        const kolom = KOLOM_UKURAN_MAP[u];
+        if (body.ukuran[u] !== undefined && (parseFloat(body.ukuran[u]) || 0) !== (parseFloat(tp[kolom]) || 0)) ubahUkuran = true;
+      });
+    }
+    if ((ubahJumlah || ubahUkuran) && tp.status) {
+      return jsonResponse({ ok: false, error: 'Laporan ini sudah punya progres QC (status: "' + tp.status + '") - jumlah/ukuran gak bisa diubah lewat sini karena bisa bikin hitungan QC yang udah jalan jadi gak konsisten. Batalkan dulu submit QC terkait kalau memang perlu diubah.' }, 400);
+    }
+
+    const namaBaru = body.jenisWarnaBaju !== undefined ? String(body.jenisWarnaBaju).trim() : tp.jenis_warna_baju;
+    const kodeRollBaru = body.kodeRoll !== undefined ? (body.kodeRoll ? String(body.kodeRoll).trim() : null) : tp.kode_roll;
+    const kgBaru = body.pemakaianKainKg !== undefined ? (parseFloat(body.pemakaianKainKg) || 0) : (parseFloat(tp.pemakaian_kain_kg) || 0);
+    if (!namaBaru) return jsonResponse({ ok: false, error: 'Nama item wajib diisi.' }, 400);
+
+    const perluPotongUlang = (namaBaru !== tp.jenis_warna_baju) || (kodeRollBaru !== tp.kode_roll) || (kgBaru !== (parseFloat(tp.pemakaian_kain_kg) || 0));
+    const itemKombinasi = Array.isArray(tp.ref_stok) && tp.ref_stok.length > 0;
+    if (perluPotongUlang && itemKombinasi) {
+      return jsonResponse({ ok: false, error: 'Item ini kombinasi (2-3 warna) - edit nama/kode roll/kg belum didukung lewat sini (v1), soalnya breakdown warna ke-2/ke-3-nya (ref_stok) ikut kepotong terpisah dan belum ada form buat itu. Kasih tau saya kalau perlu, atau edit field lain (jumlah/ukuran) yang gak nyentuh stok.' }, 400);
+    }
+
+    if (perluPotongUlang) {
+      const rowsLogLama = await ambilDariSupabase_(env, '/rest/v1/log_pemakaian_kain?select=id&tim_potong_id=eq.' + id);
+      if (rowsLogLama.length > 0) {
+        const resDel = await fetch(env.SUPABASE_URL + '/rest/v1/log_pemakaian_kain?tim_potong_id=eq.' + id, {
+          method: 'DELETE',
+          headers: { apikey: env.SUPABASE_SECRET_KEY, Authorization: 'Bearer ' + env.SUPABASE_SECRET_KEY, Prefer: 'return=minimal' }
+        });
+        if (resDel.status >= 300) return jsonResponse({ ok: false, error: 'Gagal hapus potongan stok lama: HTTP ' + resDel.status }, 500);
+      }
+    }
+
+    const payload = { jenis_warna_baju: namaBaru, kode_roll: kodeRollBaru, pemakaian_kain_kg: kgBaru };
+    if (body.jumlah !== undefined) payload.jumlah = jumlahBaru;
+    if (body.ukuran) {
+      DAFTAR_UKURAN_TIMPOTONG.forEach(function (u) {
+        if (body.ukuran[u] !== undefined) payload[KOLOM_UKURAN_MAP[u]] = parseFloat(body.ukuran[u]) || null;
+      });
+    }
+
+    const resUpdate = await fetch(env.SUPABASE_URL + '/rest/v1/tim_potong?id=eq.' + id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', apikey: env.SUPABASE_SECRET_KEY, Authorization: 'Bearer ' + env.SUPABASE_SECRET_KEY, Prefer: 'return=minimal' },
+      body: JSON.stringify(payload)
+    });
+    if (resUpdate.status >= 300) return jsonResponse({ ok: false, error: 'Gagal update laporan: HTTP ' + resUpdate.status + ' ' + (await resUpdate.text()).substring(0, 300) }, 500);
+
+    let peringatanStok = [];
+    if (perluPotongUlang && kgBaru > 0) {
+      const kamusMap = await ambilKamusSinonimWarnaMap_(env);
+      const hasilStok = await kurangiStokKain_(env, namaBaru, kgBaru, kodeRollBaru, id, kamusMap);
+      if (!hasilStok.matched) peringatanStok.push(hasilStok.keterangan);
+    }
+
+    return jsonResponse({ ok: true, peringatanStok: peringatanStok });
   } catch (e) {
     return jsonResponse({ ok: false, error: e.message }, 500);
   }
@@ -1252,7 +1362,7 @@ async function handleArsipSelesai_(env, hari) {
 async function handleStokUtuh_(env) {
   try {
     const [rowsStok, rowsKamus] = await Promise.all([
-      ambilDariSupabase_(env, '/rest/v1/stok_kain?select=warna,kode_roll,kg_sisa&kg_sisa=gt.0'),
+      ambilDariSupabase_(env, '/rest/v1/stok_kain?select=id,warna,kode_roll,kg_sisa&kg_sisa=gt.0'),
       ambilDariSupabase_(env, '/rest/v1/kamus_sinonim_warna?select=kanonik,sinonim')
     ]);
 
@@ -1264,7 +1374,7 @@ async function handleStokUtuh_(env) {
       (row.sinonim || []).forEach(function (s) { const su = String(s || '').toUpperCase(); if (su) petaKanonik[su] = kanonik; });
     });
 
-    const grup = {}; // { WARNA_KANONIK: { totalKg, rolls: [{kodeRoll, kg}] } }
+    const grup = {}; // { WARNA_KANONIK: { totalKg, rolls: [{id, kodeRoll, kg}] } }
     rowsStok.forEach(function (row) {
       const warnaRaw = String(row.warna || '').trim();
       const kodeRoll = String(row.kode_roll || '').trim();
@@ -1278,7 +1388,9 @@ async function handleStokUtuh_(env) {
       const kanonik = petaKanonik[warnaRaw.toUpperCase()] || warnaRaw.toUpperCase();
       if (!grup[kanonik]) grup[kanonik] = { totalKg: 0, rolls: [] };
       grup[kanonik].totalKg += kg;
-      grup[kanonik].rolls.push({ kodeRoll: kodeRoll || null, kg: kg });
+      // v.41: sertakan id (stok_kain.id) per roll - dibutuhkan tombol Edit/Write-off admin,
+      // bukan cuma tampilan (id bukan data sensitif, aman ikut ke endpoint publik ini).
+      grup[kanonik].rolls.push({ id: row.id, kodeRoll: kodeRoll || null, kg: kg });
     });
 
     let totalKgSemua = 0, totalRollSemua = 0;
@@ -1308,7 +1420,7 @@ async function handleStokUtuh_(env) {
 async function handleStokHabis_(env) {
   try {
     const [rowsStok, rowsKamus] = await Promise.all([
-      ambilDariSupabase_(env, '/rest/v1/stok_kain?select=warna,kode_roll,kg_sisa&kg_sisa=lte.0&order=kode_roll.desc'),
+      ambilDariSupabase_(env, '/rest/v1/stok_kain?select=id,warna,kode_roll,kg_sisa&kg_sisa=lte.0&order=kode_roll.desc'),
       ambilDariSupabase_(env, '/rest/v1/kamus_sinonim_warna?select=kanonik,sinonim')
     ]);
     const petaKanonik = {};
@@ -1323,10 +1435,200 @@ async function handleStokHabis_(env) {
         const warnaRaw = String(row.warna || '').trim();
         if (!warnaRaw) return null;
         const kanonik = petaKanonik[warnaRaw.toUpperCase()] || warnaRaw.toUpperCase();
-        return { warna: kanonik, kodeRoll: row.kode_roll || null };
+        // v.41: sertakan id - dibutuhkan buat fitur batal write-off (roll yang jadi habis
+        // KARENA write-off tetap harus bisa dibuka form-nya buat dibatalkan).
+        return { id: row.id, warna: kanonik, kodeRoll: row.kode_roll || null };
       })
       .filter(function (x) { return x; });
     return jsonResponse(hasil);
+  } catch (e) {
+    return jsonResponse({ ok: false, error: e.message }, 500);
+  }
+}
+
+// ============================================================
+// v.41 - Stok Kain: detail admin (harga, subtotal, riwayat write-off) + edit + write-off manual
+// ============================================================
+
+async function handleDetailStokKainAdmin_(body, env) {
+  const validasi = await validasiInitData_(body.initData, env);
+  if (!validasi.ok) return jsonResponse(validasi, 401);
+  if (!cekAdmin_(validasi.userId, env)) {
+    return jsonResponse({ ok: false, error: 'Kamu tidak punya izin melihat detail ini.' }, 403);
+  }
+
+  const id = parseInt(body.id, 10);
+  if (!id) return jsonResponse({ ok: false, error: 'id wajib diisi.' }, 400);
+
+  try {
+    const rows = await ambilDariSupabase_(env, '/rest/v1/stok_kain?select=*&id=eq.' + id);
+    if (!rows || rows.length === 0) return jsonResponse({ ok: false, error: 'Roll id=' + id + ' tidak ditemukan.' }, 404);
+    const s = rows[0];
+
+    const [riwayatPakai, riwayatWriteoff] = await Promise.all([
+      ambilDariSupabase_(env, '/rest/v1/log_pemakaian_kain?select=id&stok_kain_id=eq.' + id),
+      ambilDariSupabase_(env, '/rest/v1/log_writeoff_kain?select=id,kg,catatan,status,waktu_wib&stok_kain_id=eq.' + id + '&order=waktu.desc')
+    ]);
+
+    const harga = parseFloat(s.harga_rp_kg) || 0;
+    const diskon = parseFloat(s.diskon_rp_kg) || 0;
+    const kgSisa = parseFloat(s.kg_sisa) || 0;
+    // Subtotal = nilai SISA stok (bukan nilai total dibeli) - kesepakatan sama Denny.
+    const subtotal = Math.round(kgSisa * Math.max(harga - diskon, 0));
+
+    return jsonResponse({
+      ok: true,
+      id: s.id,
+      tglBeli: s.tgl_beli,
+      supplier: s.supplier,
+      warna: s.warna,
+      kg: parseFloat(s.kg) || 0,
+      kodeRoll: s.kode_roll,
+      kgTerpakai: parseFloat(s.kg_terpakai) || 0,
+      kgSisa: kgSisa,
+      hargaRpKg: harga,
+      diskonRpKg: diskon,
+      subtotal: subtotal,
+      jumlahRiwayatPakai: riwayatPakai.length,
+      riwayatWriteoff: riwayatWriteoff
+    });
+  } catch (e) {
+    return jsonResponse({ ok: false, error: e.message }, 500);
+  }
+}
+
+async function handleEditStokKain_(body, env) {
+  const validasi = await validasiInitData_(body.initData, env);
+  if (!validasi.ok) return jsonResponse(validasi, 401);
+  if (!cekAdmin_(validasi.userId, env)) {
+    return jsonResponse({ ok: false, error: 'Kamu tidak punya izin mengedit stok kain.' }, 403);
+  }
+
+  const id = parseInt(body.id, 10);
+  if (!id) return jsonResponse({ ok: false, error: 'id wajib diisi.' }, 400);
+
+  try {
+    const rows = await ambilDariSupabase_(env, '/rest/v1/stok_kain?select=id,kode_roll,kg_terpakai&id=eq.' + id);
+    if (!rows || rows.length === 0) return jsonResponse({ ok: false, error: 'Roll id=' + id + ' tidak ditemukan.' }, 404);
+    const existing = rows[0];
+
+    const kgBaru = parseFloat(body.kg);
+    if (!(kgBaru >= 0)) return jsonResponse({ ok: false, error: 'Kg harus diisi angka >= 0.' }, 400);
+    const kgTerpakaiSekarang = parseFloat(existing.kg_terpakai) || 0;
+    if (kgBaru < kgTerpakaiSekarang) {
+      return jsonResponse({ ok: false, error: 'Kg baru (' + kgBaru + ') gak boleh lebih kecil dari kg yang sudah terpakai (' + kgTerpakaiSekarang + '). Kalau maksudnya menandai sisa kain gak kepake, pakai fitur Write-off, bukan turunin angka Kg di sini.' }, 400);
+    }
+
+    const kodeRollBaru = body.kodeRoll !== undefined ? (body.kodeRoll ? String(body.kodeRoll).trim() : null) : existing.kode_roll;
+    let peringatan = null;
+    if (kodeRollBaru !== existing.kode_roll) {
+      const cekRiwayat = await ambilDariSupabase_(env, '/rest/v1/log_pemakaian_kain?select=id&stok_kain_id=eq.' + id + '&limit=1');
+      if (cekRiwayat.length > 0) {
+        peringatan = 'Kode roll diganti dari "' + (existing.kode_roll || '-') + '" ke "' + (kodeRollBaru || '-') + '". Roll ini sudah punya riwayat pemakaian - laporan produksi LAMA tetap nyimpen kode roll LAMA (teks biasa, bukan link), jadi "Riwayat Pemakaian" di tab ini untuk kode baru gak akan nunjukin riwayat lama itu.';
+      }
+    }
+
+    const payload = {
+      tgl_beli: body.tglBeli || null,
+      supplier: body.supplier || 'TIDAK DIKETAHUI',
+      warna: String(body.warna || '').trim(),
+      kg: kgBaru,
+      kode_roll: kodeRollBaru,
+      harga_rp_kg: (body.hargaRpKg === '' || body.hargaRpKg === undefined || body.hargaRpKg === null) ? null : parseFloat(body.hargaRpKg),
+      diskon_rp_kg: (body.diskonRpKg === '' || body.diskonRpKg === undefined || body.diskonRpKg === null) ? null : parseFloat(body.diskonRpKg)
+    };
+    if (!payload.warna) return jsonResponse({ ok: false, error: 'Warna wajib diisi.' }, 400);
+
+    const res = await fetch(env.SUPABASE_URL + '/rest/v1/stok_kain?id=eq.' + id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', apikey: env.SUPABASE_SECRET_KEY, Authorization: 'Bearer ' + env.SUPABASE_SECRET_KEY, Prefer: 'return=minimal' },
+      body: JSON.stringify(payload)
+    });
+    if (res.status >= 300) return jsonResponse({ ok: false, error: 'Gagal update: HTTP ' + res.status + ' ' + (await res.text()).substring(0, 300) }, 500);
+
+    return jsonResponse({ ok: true, peringatan: peringatan });
+  } catch (e) {
+    return jsonResponse({ ok: false, error: e.message }, 500);
+  }
+}
+
+async function handleWriteoffKain_(body, env) {
+  const validasi = await validasiInitData_(body.initData, env);
+  if (!validasi.ok) return jsonResponse(validasi, 401);
+  if (!cekAdmin_(validasi.userId, env)) {
+    return jsonResponse({ ok: false, error: 'Kamu tidak punya izin melakukan write-off.' }, 403);
+  }
+
+  const stokKainId = parseInt(body.stokKainId, 10);
+  const kg = parseFloat(body.kg);
+  if (!stokKainId) return jsonResponse({ ok: false, error: 'stokKainId wajib diisi.' }, 400);
+  if (!(kg > 0)) return jsonResponse({ ok: false, error: 'Kg write-off harus diisi angka > 0.' }, 400);
+
+  try {
+    const rows = await ambilDariSupabase_(env, '/rest/v1/stok_kain?select=id,kg_terpakai,kg_sisa&id=eq.' + stokKainId);
+    if (!rows || rows.length === 0) return jsonResponse({ ok: false, error: 'Roll id=' + stokKainId + ' tidak ditemukan.' }, 404);
+    const s = rows[0];
+    const kgSisa = parseFloat(s.kg_sisa) || 0;
+    if (kg > kgSisa) {
+      return jsonResponse({ ok: false, error: 'Kg write-off (' + kg + ') gak boleh lebih besar dari kg sisa saat ini (' + kgSisa + ').' }, 400);
+    }
+
+    const resInsert = await fetch(env.SUPABASE_URL + '/rest/v1/log_writeoff_kain', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: env.SUPABASE_SECRET_KEY, Authorization: 'Bearer ' + env.SUPABASE_SECRET_KEY, Prefer: 'return=representation' },
+      body: JSON.stringify([{ stok_kain_id: stokKainId, kg: kg, catatan: body.catatan || null, status: 'aktif' }])
+    });
+    if (resInsert.status >= 300) return jsonResponse({ ok: false, error: 'Gagal simpan write-off: HTTP ' + resInsert.status + ' ' + (await resInsert.text()).substring(0, 300) }, 500);
+    const writeoffBaru = (await resInsert.json())[0];
+
+    const kgTerpakaiBaru = (parseFloat(s.kg_terpakai) || 0) + kg;
+    const resUpdate = await fetch(env.SUPABASE_URL + '/rest/v1/stok_kain?id=eq.' + stokKainId, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', apikey: env.SUPABASE_SECRET_KEY, Authorization: 'Bearer ' + env.SUPABASE_SECRET_KEY, Prefer: 'return=minimal' },
+      body: JSON.stringify({ kg_terpakai: kgTerpakaiBaru })
+    });
+    if (resUpdate.status >= 300) return jsonResponse({ ok: false, error: 'Write-off tersimpan tapi gagal update kg_terpakai: HTTP ' + resUpdate.status }, 500);
+
+    return jsonResponse({ ok: true, writeoffId: writeoffBaru.id });
+  } catch (e) {
+    return jsonResponse({ ok: false, error: e.message }, 500);
+  }
+}
+
+async function handleBatalWriteoff_(body, env) {
+  const validasi = await validasiInitData_(body.initData, env);
+  if (!validasi.ok) return jsonResponse(validasi, 401);
+  if (!cekAdmin_(validasi.userId, env)) {
+    return jsonResponse({ ok: false, error: 'Kamu tidak punya izin membatalkan write-off.' }, 403);
+  }
+
+  const writeoffId = parseInt(body.writeoffId, 10);
+  if (!writeoffId) return jsonResponse({ ok: false, error: 'writeoffId wajib diisi.' }, 400);
+
+  try {
+    const rows = await ambilDariSupabase_(env, '/rest/v1/log_writeoff_kain?select=id,stok_kain_id,kg,status&id=eq.' + writeoffId);
+    if (!rows || rows.length === 0) return jsonResponse({ ok: false, error: 'Data write-off id=' + writeoffId + ' tidak ditemukan.' }, 404);
+    const w = rows[0];
+    if (w.status !== 'aktif') return jsonResponse({ ok: false, error: 'Write-off ini sudah dibatalkan sebelumnya.' }, 400);
+
+    // Soft-cancel (bukan dihapus fisik) - biar histori tetap kelihatan, sama pola log_qc.
+    await fetch(env.SUPABASE_URL + '/rest/v1/log_writeoff_kain?id=eq.' + writeoffId, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', apikey: env.SUPABASE_SECRET_KEY, Authorization: 'Bearer ' + env.SUPABASE_SECRET_KEY, Prefer: 'return=minimal' },
+      body: JSON.stringify({ status: 'dibatalkan' })
+    });
+
+    const rowsStok = await ambilDariSupabase_(env, '/rest/v1/stok_kain?select=id,kg_terpakai&id=eq.' + w.stok_kain_id);
+    if (rowsStok.length > 0) {
+      const kgTerpakaiBaru = Math.max((parseFloat(rowsStok[0].kg_terpakai) || 0) - (parseFloat(w.kg) || 0), 0);
+      await fetch(env.SUPABASE_URL + '/rest/v1/stok_kain?id=eq.' + w.stok_kain_id, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', apikey: env.SUPABASE_SECRET_KEY, Authorization: 'Bearer ' + env.SUPABASE_SECRET_KEY, Prefer: 'return=minimal' },
+        body: JSON.stringify({ kg_terpakai: kgTerpakaiBaru })
+      });
+    }
+
+    return jsonResponse({ ok: true });
   } catch (e) {
     return jsonResponse({ ok: false, error: e.message }, 500);
   }
