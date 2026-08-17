@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+DASHBOARD ver.44
+============================================================
+PERUBAHAN ver.44: modal Edit Stok Kain sekarang OTOMATIS TERTUTUP (balik ke tampilan dashboard
+Stok Kain) setelah "Simpan Perubahan" atau "Catat Write-off" berhasil - sebelumnya modal reload
+ulang nampilin detail yang sama (request Denny). Grid utama tetap auto-refresh sendiri lewat
+Realtime yang sudah ada. Batal Write-off TIDAK ikut diubah (modal tetap kebuka biar riwayatnya
+kelihatan) - cuma 2 aksi yang diminta. Riwayat lengkap: git log.
+============================================================
 DASHBOARD ver.43
 ============================================================
 PERUBAHAN ver.43: checkbox "Terpakai habis" di modal Write-off tab Stok Kain (request Denny) -
@@ -1544,7 +1552,10 @@ function simpanEditStok_() {
       }
       tampilkanToast('✓ Perubahan tersimpan.');
       if (stokHabisDimuat) muatStokHabis();
-      bukaModalEditStok_(payload.id); // reload detail biar subtotal & peringatan (kalau ada) ke-update
+      // v.44: sebelumnya reload modal (bukaModalEditStok_ ulang) - sekarang modal ditutup,
+      // balik ke tampilan dashboard Stok Kain (request Denny). Grid utama tetap auto-refresh
+      // sendiri lewat Realtime yang sudah ada (langganan tabel stok_kain).
+      tutupModalEditStok_();
     })
     .catch(function (e) {
       btn.disabled = false; btn.textContent = '💾 Simpan Perubahan';
@@ -1572,7 +1583,8 @@ function submitWriteoff_() {
       }
       tampilkanToast('✓ Write-off tersimpan.');
       if (stokHabisDimuat) muatStokHabis();
-      bukaModalEditStok_(modalStokDetail.id);
+      // v.44: sama kayak simpanEditStok_ - tutup modal, balik ke dashboard Stok Kain.
+      tutupModalEditStok_();
     })
     .catch(function (e) {
       btn.disabled = false; btn.textContent = '➖ Catat Write-off';
