@@ -1,7 +1,20 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.44
+DASHBOARD ver.45
+============================================================
+PERUBAHAN ver.45 (4 poin, request Denny, tab Stok Kain):
+1. Kartu warna & tombol edit sebelumnya pasang ulang event listener tiap render
+   (querySelectorAll+forEach di dalam renderWarnaGrid, dipanggil ulang tiap toggle/refresh) -
+   diduga penyebab kartu kadang butuh 2x klik & tombol edit di Stok Habis ke-attach berkali-kali
+   kalau render numpuk (misal Realtime + klik hampir bersamaan). Diganti event delegation (1x
+   pasang di #warnaGrid & #stokHabisList, gak pernah dipasang ulang) - listener-nya cuma ada 1
+   selamanya, gak mungkin dobel lagi.
+2. Pemisah "/" antara kode roll & kg di tiap baris roll.
+3. Accordion - buka 1 kartu warna otomatis nutup yang lain (dulu bisa beberapa kebuka
+   bebarengan). warnaTerbuka (object) diganti warnaTerbukaSatu (1 nilai).
+4. Baris roll lebih compact - padding 8px->6px, garis putus-putus di akhir baris dibuang.
+Riwayat lengkap: git log.
 ============================================================
 PERUBAHAN ver.44: modal Edit Stok Kain sekarang OTOMATIS TERTUTUP (balik ke tampilan dashboard
 Stok Kain) setelah "Simpan Perubahan" atau "Catat Write-off" berhasil - sebelumnya modal reload
@@ -213,12 +226,16 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .warna-card .nama { font-weight: 700; font-size: 13px; flex: 1; }
   .warna-card .kg { font-weight: 800; font-size: 13px; }
   .warna-card .roll-count { font-size: 11px; color: var(--gray-text); margin-top: 2px; }
-  .warna-detail { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px; }
-  .warna-detail .roll-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700; padding: 8px 2px 8px 16px; border-bottom: 1px dashed #f1f4f9; cursor: pointer; }
+  .warna-detail { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 5px; }
+  /* v.45: lebih compact (request Denny poin 4) - padding vertikal dirapatkan 8px->6px, garis
+     putus-putus di akhir baris DIBUANG (sebelumnya border-bottom dashed). */
+  .warna-detail .roll-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700; padding: 6px 2px 6px 16px; cursor: pointer; }
   .warna-detail .roll-row .roll-kiri { display: flex; align-items: center; gap: 6px; }
   /* v.42: kolom kanan roll-row (kg + tombol edit) digabung 1 wrapper flex, biar space-between
      tetap kebagi 2 kelompok (kiri vs kanan) walau sekarang ada 2 elemen di kanan. */
   .warna-detail .roll-row .roll-kanan { display: flex; align-items: center; gap: 4px; }
+  /* v.45: pemisah garis miring antara kode roll & kg (request Denny poin 2) */
+  .warna-detail .roll-row .pemisah { color: var(--gray-label); font-weight: 400; margin-right: 1px; }
   .btn-edit-roll { background: none; border: none; cursor: pointer; font-size: 13px; padding: 4px 5px; line-height: 1; opacity: .55; }
   .btn-edit-roll:active { opacity: 1; }
   .warna-detail .roll-row .chev { font-size: 9px; color: var(--gray-label); transition: transform 0.15s; margin-left: -14px; }
@@ -493,7 +510,10 @@ let stokUtuhData = null;
 let sortWarna = 'kg';
 let searchWarnaQuery = '';
 let searchRekapQuery = '';
-let warnaTerbuka = {};
+// v.45: sebelumnya object {warna: true/false} - beberapa card warna bisa kebuka BARENGAN.
+// Sekarang single value (null = semua tertutup) - accordion, buka 1 card otomatis nutup yang
+// lain (request Denny poin 3).
+let warnaTerbukaSatu = null;
 // v.34: fitur "Riwayat Pemakaian" per roll (mockup udah disetujui Denny) - riwayatTimPotongData
 // di-cache SEKALI aja (fetch pas roll PERTAMA kali di-tap), dipakai ulang buat semua roll biar
 // gak nembak network tiap buka/tutup roll yang beda-beda.
@@ -1193,7 +1213,6 @@ function muatStokHabis() {
         return '<div class="stok-habis-item"><span class="nama">' + escapeHtml(x.warna) + '</span>' +
           '<span class="roll">Roll ' + (x.kodeRoll ? escapeHtml(x.kodeRoll) : '-') + '</span>' + tombolEditRoll_(x) + '</div>';
       }).join('');
-      if (isAdmin) pasangEventEditStok_();
     })
     .catch(function (e) { tampilkanToast('Gagal memuat stok habis: ' + e.message); });
 }
@@ -1291,7 +1310,7 @@ function renderWarnaGrid() {
   else if (sortWarna === 'roll') list.sort(function (a, b) { return b.jumlahRoll - a.jumlahRoll; });
 
   document.getElementById('warnaGrid').innerHTML = list.map(function (w, i) {
-    const terbuka = !!warnaTerbuka[w.warna];
+    const terbuka = (warnaTerbukaSatu === w.warna);
     const hexWarna = warnaKeHex_(w.warna);
     let html = '<div class="warna-card" style="border-left:4px solid ' + hexWarna + '" data-warnatoggle="' + escapeAttr(w.warna) + '">' +
       '<div class="warna-card-top"><span class="swatch" style="background:' + hexWarna + '"></span>' +
@@ -1313,26 +1332,11 @@ function renderWarnaGrid() {
     return html;
   }).join('');
 
-  document.querySelectorAll('[data-warnatoggle]').forEach(function (el) {
-    el.addEventListener('click', function (e) {
-      if (e.target.closest('[data-rolltoggle]')) return; // v.34: klik roll di dalamnya jangan ikut nutup kartu warnanya
-      const w = el.dataset.warnatoggle;
-      warnaTerbuka[w] = !warnaTerbuka[w];
-      renderWarnaGrid();
-    });
-  });
-  document.querySelectorAll('[data-rolltoggle]').forEach(function (el) {
-    el.addEventListener('click', function (e) {
-      e.stopPropagation();
-      const kunci = el.dataset.rolltoggle;
-      rollHighlightKunci = null; // v.35: klik manual matiin mode highlight bekas search
-      if (rollTerbukaKunci === kunci) { rollTerbukaKunci = null; renderWarnaGrid(); return; }
-      rollTerbukaKunci = kunci; // v.35: cuma 1 roll aktif sekaligus - yang lain auto-collapse
-      renderWarnaGrid();
-      if (!riwayatTimPotongData) muatRiwayatTimPotong_();
-    });
-  });
-  if (isAdmin) pasangEventEditStok_();
+  // v.45: listener klik SENGAJA gak dipasang ulang di sini lagi (dulu querySelectorAll+forEach
+  // tiap render, salah satu dugaan penyebab kartu warna butuh 2x klik & tombol edit ke-attach
+  // dobel kalau ke-render bareng Stok Habis). Sekarang cuma event delegation 1x di luar fungsi
+  // ini (lihat bawah, listener di #warnaGrid) - elemennya sendiri gak pernah diganti, cuma
+  // isinya, jadi listener yang dipasang sekali tetap nempel ke render manapun.
 
   // v.35: hasil search di-scroll ke pandangan + kasih flash highlight sebentar
   if (rollHighlightKunci) {
@@ -1356,7 +1360,7 @@ function tombolEditRoll_(r) {
 function renderBarisRoll_(w, r) {
   const kode = r.kodeRoll;
   if (!kode) {
-    return '<div class="roll-row" style="cursor:default"><span>Roll -</span><div class="roll-kanan"><span>' + formatAngka(r.kg) + ' kg</span>' + tombolEditRoll_(r) + '</div></div>';
+    return '<div class="roll-row" style="cursor:default"><span>Roll -</span><div class="roll-kanan"><span class="pemisah">/</span><span>' + formatAngka(r.kg) + ' kg</span>' + tombolEditRoll_(r) + '</div></div>';
   }
   // v.38: koreksi ver.37 - yang dimaksud Denny sejak awal itu BENAR panah expand HARUS
   // hilang total (bukan cuma isi panelnya) buat roll yang belum pernah kepakai - biar tampilan
@@ -1372,7 +1376,7 @@ function renderBarisRoll_(w, r) {
   const kunci = kunciRoll_(w, r);
   if (jumlahPakai === 0) {
     const disorotBersih = (rollHighlightKunci === kunci);
-    return '<div class="roll-row' + (disorotBersih ? ' disorot' : '') + '" style="cursor:default" data-rollkey="' + escapeAttr(kunci) + '"><span>Roll ' + escapeHtml(kode) + '</span><div class="roll-kanan"><span>' + formatAngka(r.kg) + ' kg</span>' + tombolEditRoll_(r) + '</div></div>';
+    return '<div class="roll-row' + (disorotBersih ? ' disorot' : '') + '" style="cursor:default" data-rollkey="' + escapeAttr(kunci) + '"><span>Roll ' + escapeHtml(kode) + '</span><div class="roll-kanan"><span class="pemisah">/</span><span>' + formatAngka(r.kg) + ' kg</span>' + tombolEditRoll_(r) + '</div></div>';
   }
   const terbuka = (rollTerbukaKunci === kunci);
   const disorot = (rollHighlightKunci === kunci);
@@ -1380,7 +1384,7 @@ function renderBarisRoll_(w, r) {
   const hintPakai = !terbuka ? '<span class="jumlah-pakai">' + jumlahPakai + 'X</span>' : '';
   let html = '<div class="roll-row' + (terbuka ? ' terbuka' : '') + (disorot ? ' disorot' : '') + '" data-rolltoggle="' + escapeAttr(kunci) + '">' +
     '<div class="roll-kiri"><span class="chev">▶</span><span>Roll ' + escapeHtml(kode) + '</span>' + hintPakai + '</div>' +
-    '<div class="roll-kanan"><span>' + formatAngka(r.kg) + ' kg</span>' + tombolEditRoll_(r) + '</div></div>';
+    '<div class="roll-kanan"><span class="pemisah">/</span><span>' + formatAngka(r.kg) + ' kg</span>' + tombolEditRoll_(r) + '</div></div>';
   if (terbuka) html += renderRiwayatPanel_(kode, r.kg);
   return html;
 }
@@ -1425,15 +1429,6 @@ function renderRiwayatPanel_(kode, kgSisa) {
 // cuma dimuat manual pas toggle dibuka) tetap di-refresh manual kalau lagi kebuka.
 // ------------------------------------------------------------
 let modalStokDetail = null;
-
-function pasangEventEditStok_() {
-  document.querySelectorAll('[data-editstok]').forEach(function (el) {
-    el.addEventListener('click', function (e) {
-      e.stopPropagation();
-      bukaModalEditStok_(parseInt(el.dataset.editstok, 10));
-    });
-  });
-}
 
 function tutupModalEditStok_() {
   const ov = document.getElementById('modalEditStok');
@@ -1608,6 +1603,44 @@ function batalWriteoff_(writeoffId) {
     .catch(function (e) { tampilkanToast('Gagal batalkan: ' + e.message); });
 }
 
+// v.45: event delegation - dipasang SEKALI di sini (bukan di dalam renderWarnaGrid yang
+// kepanggil berkali-kali), karena #warnaGrid sendiri elemennya stabil (gak pernah diganti,
+// cuma isi innerHTML-nya). Pola lama (querySelectorAll+forEach tiap render) berisiko listener
+// nempel dobel kalau render ke-trigger bareng-bareng (misal Realtime + klik nyaris bersamaan) -
+// diduga jadi salah satu penyebab kartu warna kadang butuh 2x klik & tombol edit di Stok Habis
+// ke-attach berkali-kali (request Denny poin 1). Prioritas cek: tombol edit dulu (paling
+// spesifik/di dalam), baru toggle roll, baru toggle kartu warna (paling luar) - biar klik di
+// tombol edit gak ikut kebaca sebagai toggle roll/warna.
+document.getElementById('warnaGrid').addEventListener('click', function (e) {
+  const btnEdit = e.target.closest('[data-editstok]');
+  if (btnEdit) {
+    e.stopPropagation();
+    bukaModalEditStok_(parseInt(btnEdit.dataset.editstok, 10));
+    return;
+  }
+  const btnRoll = e.target.closest('[data-rolltoggle]');
+  if (btnRoll) {
+    e.stopPropagation();
+    const kunci = btnRoll.dataset.rolltoggle;
+    rollHighlightKunci = null; // v.35: klik manual matiin mode highlight bekas search
+    if (rollTerbukaKunci === kunci) { rollTerbukaKunci = null; renderWarnaGrid(); return; }
+    rollTerbukaKunci = kunci; // v.35: cuma 1 roll aktif sekaligus - yang lain auto-collapse
+    renderWarnaGrid();
+    if (!riwayatTimPotongData) muatRiwayatTimPotong_();
+    return;
+  }
+  const kartu = e.target.closest('[data-warnatoggle]');
+  if (kartu) {
+    const w = kartu.dataset.warnatoggle;
+    warnaTerbukaSatu = (warnaTerbukaSatu === w) ? null : w; // v.45: accordion (poin 3)
+    renderWarnaGrid();
+  }
+});
+document.getElementById('stokHabisList').addEventListener('click', function (e) {
+  const btnEdit = e.target.closest('[data-editstok]');
+  if (btnEdit) bukaModalEditStok_(parseInt(btnEdit.dataset.editstok, 10));
+});
+
 document.getElementById('searchWarna').addEventListener('input', function () {
   searchWarnaQuery = this.value;
   // v.35: cari & auto-expand+highlight roll yang cocok - dijalanin SEKALI DI SINI (pas user
@@ -1621,7 +1654,7 @@ document.getElementById('searchWarna').addEventListener('input', function () {
       const w = stokUtuhData.perWarna[i];
       const rollCocok = w.rolls.find(function (r) { return r.kodeRoll && String(r.kodeRoll).toLowerCase().indexOf(q) !== -1; });
       if (rollCocok) {
-        warnaTerbuka[w.warna] = true;
+        warnaTerbukaSatu = w.warna;
         rollTerbukaKunci = kunciRoll_(w, rollCocok);
         rollHighlightKunci = rollTerbukaKunci;
         if (!riwayatTimPotongData) muatRiwayatTimPotong_();
