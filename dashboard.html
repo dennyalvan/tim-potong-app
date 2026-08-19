@@ -1,7 +1,20 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.48
+DASHBOARD ver.49
+============================================================
+PERUBAHAN ver.49: fix bug FUNDAMENTAL di "Riwayat Pemakaian" - dibuktikan langsung ke Supabase
+(Denny lapor screenshot: STEEL BLUE roll 1608 & MUSTARD roll 1863 nampilin "kg awal estimasi"
+>40kg padahal kg_terpakai KEDUANYA 0.00 di database - jadi riwayat yang tampil BUKAN milik roll
+itu, dan keduanya SEHARUSNYA gak muncul di "Terpakai Sebagian" karena memang belum pernah
+kesentuh). Root cause: kode_roll TERNYATA gak unik sama sekali (dibuktikan query: kode "7046"
+dipakai 10 roll MERAH BERBEDA sekaligus, dst) - fix ver.48 (cocokkan kode_roll+warna) gak cukup
+buat kasus 2 roll warna SAMA yang kebetulan kode-nya sama juga. Sumber data diganti total dari
+/data/export-tim-potong (filter teks) ke /data/riwayat-pemakaian-kain (Worker ver.45,
+log_pemakaian_kain - FK stok_kain_id asli, exact match, gak mungkin ketuker lagi). Variabel &
+fungsi terkait di-rename (riwayatTimPotongData -> riwayatPemakaianData, dst) biar nyambung sama
+sumber datanya yang baru.
+Riwayat lengkap: git log.
 ============================================================
 PERUBAHAN ver.48 (request Denny, 2 hal):
 1. Filter "Terpakai Sebagian" DIPINDAH dari section terpisah (ver.47) jadi chip di baris filter
@@ -542,10 +555,12 @@ let searchRekapQuery = '';
 // Sekarang single value (null = semua tertutup) - accordion, buka 1 card otomatis nutup yang
 // lain (request Denny poin 3).
 let warnaTerbukaSatu = null;
-// v.34: fitur "Riwayat Pemakaian" per roll (mockup udah disetujui Denny) - riwayatTimPotongData
+// v.34: fitur "Riwayat Pemakaian" per roll (mockup udah disetujui Denny) - riwayatPemakaianData
 // di-cache SEKALI aja (fetch pas roll PERTAMA kali di-tap), dipakai ulang buat semua roll biar
 // gak nembak network tiap buka/tutup roll yang beda-beda.
-let riwayatTimPotongData = null;
+// v.45: sumbernya diganti dari /data/export-tim-potong (filter teks kode_roll, TERBUKTI salah -
+// kode_roll gak unik) ke /data/riwayat-pemakaian-kain (log_pemakaian_kain, FK stok_kain_id asli).
+let riwayatPemakaianData = null;
 let sedangMuatRiwayat = false;
 // v.35: cuma 1 roll bisa ke-expand sekaligus (request Denny) - dari object jadi 1 variabel
 // kunci tunggal, dan kuncinya sekarang warna+kode+kg (bukan cuma kode) biar roll dgn kode
@@ -1309,7 +1324,7 @@ function muatStokUtuh(percobaan, manual) {
     // v.38: fetch riwayat pemakaian SEKALIAN dari awal (paralel sama fetch stok), bukan nunggu
     // roll pertama di-tap lagi (request Denny) - biar pas roll dirender, statusnya "ada
     // riwayat/gak" udah PASTI dari awal, gak ada lagi transisi "kedip lalu ilang".
-    muatRiwayatTimPotong_();
+    muatRiwayatPemakaian_();
     if (!stokUtuhData) {
       const cache = ambilCacheDashboard_('stok_utuh');
       if (cache && cache.data) {
@@ -1341,17 +1356,17 @@ function muatStokUtuh(percobaan, manual) {
     });
 }
 
-// v.34: pakai endpoint YANG UDAH ADA /data/export-tim-potong (dibuat buat sync AUTOREKAP) -
-// gak perlu bikin endpoint Worker baru, tinggal filter kodeRoll di sisi dashboard. bulan=6
-// (6 bulan ke belakang) cukup buat kebanyakan roll, roll yang jauh lebih tua dari itu riwayat
-// awalnya mungkin gak kebaca lengkap - trade-off yang wajar drpd narik SEMUA histori tiap buka.
-function muatRiwayatTimPotong_() {
-  if (riwayatTimPotongData || sedangMuatRiwayat) return;
+// v.45: sumber diganti dari export-tim-potong (filter teks kode_roll, TERBUKTI salah - lihat
+// catatan panjang di Worker) ke /data/riwayat-pemakaian-kain (log_pemakaian_kain, FK asli).
+// Dataset ini masih kecil (38 baris per 19 Agustus 2026, murni dari migrasi ver.37 baru-baru
+// ini) - diambil semua sekaligus, gak perlu batas bulan kayak sebelumnya.
+function muatRiwayatPemakaian_() {
+  if (riwayatPemakaianData || sedangMuatRiwayat) return;
   sedangMuatRiwayat = true;
-  fetch(WORKER_URL + '/data/export-tim-potong?bulan=6')
+  fetch(WORKER_URL + '/data/riwayat-pemakaian-kain')
     .then(function (r) { return r.json(); })
     .then(function (data) {
-      riwayatTimPotongData = Array.isArray(data) ? data : [];
+      riwayatPemakaianData = Array.isArray(data) ? data : [];
       sedangMuatRiwayat = false;
       renderWarnaGrid();
     })
@@ -1447,16 +1462,12 @@ function renderBarisRoll_(w, r) {
   if (!kode) {
     return '<div class="roll-row" style="cursor:default"><span>Roll -</span><div class="roll-kanan"><span class="pemisah">/</span><span>' + formatAngka(r.kg) + ' kg</span>' + tombolEditRoll_(r) + '</div></div>';
   }
-  // v.38: koreksi ver.37 - yang dimaksud Denny sejak awal itu BENAR panah expand HARUS
-  // hilang total (bukan cuma isi panelnya) buat roll yang belum pernah kepakai - biar tampilan
-  // clean, cuma "Roll XXXX  Ykg" doang. Akar masalah ver.36 yang bikin ini jadi bug BUKAN soal
-  // nyembunyiin chevron-nya, tapi TIMING-nya (chevron nongol dulu 1 render pas riwayat belum
-  // kebaca, BARU ilang begitu kebaca - kesannya "kedip lalu ilang"). Sekarang dibikin SEARAH
-  // (cuma nambah, gak pernah nyabut): sebelum riwayatTimPotongData kebaca ATAU kalau ternyata
-  // 0 pemakaian, render CLEAN dari awal (gak pernah nampilin chevron sama sekali). Begitu
-  // kebaca dan TERNYATA ada pemakaian, baru "naik level" jadi bisa diklik.
-  const jumlahPakai = riwayatTimPotongData
-    ? riwayatTimPotongData.filter(function (x) { return cocokRiwayatRoll_(x, kode, w.warna); }).length
+  // v.45: sebelumnya dicocokkan by kode_roll teks (+warna sejak ver.48) - SEKARANG dicocokkan
+  // EXACT by stok_kain id (r.id) lewat riwayatPemakaianData.stokKainId, gak ada lagi celah
+  // ketuker sama sekali karena ini row database asli, bukan ketikan bebas. Lihat catatan
+  // panjang soal root cause bug ini di banner Worker & muatRiwayatPemakaian_.
+  const jumlahPakai = riwayatPemakaianData
+    ? riwayatPemakaianData.filter(function (x) { return x.stokKainId === r.id; }).length
     : 0;
   const kunci = kunciRoll_(w, r);
   if (jumlahPakai === 0) {
@@ -1470,51 +1481,33 @@ function renderBarisRoll_(w, r) {
   let html = '<div class="roll-row' + (terbuka ? ' terbuka' : '') + (disorot ? ' disorot' : '') + '" data-rolltoggle="' + escapeAttr(kunci) + '">' +
     '<div class="roll-kiri"><span class="chev">▶</span><span>Roll ' + escapeHtml(kode) + '</span>' + hintPakai + '</div>' +
     '<div class="roll-kanan"><span class="pemisah">/</span><span>' + formatAngka(r.kg) + ' kg</span>' + tombolEditRoll_(r) + '</div></div>';
-  if (terbuka) html += renderRiwayatPanel_(kode, r.kg, w.warna);
+  if (terbuka) html += renderRiwayatPanel_(r.id, r.kg);
   return html;
 }
 
-// v.48: fix bug nyata (screenshot Denny, 18 Agustus 2026) - riwayat pemakaian roll SEBELUMNYA
-// cuma dicocokkan lewat kode_roll doang. kode_roll TERNYATA BISA SAMA di 2 warna yang beda
-// sekaligus (bukan cuma di 1 warna kayak dugaan awal ver.35 - lihat kunciRoll_) - makanya kartu
-// COKLAT roll 0002 nampilin riwayat punya HITAM (kode roll HITAM yang beda fisik kebetulan juga
-// "0002"). Sekarang WAJIB dicocokkan JUGA nama warnanya, gak cuma kode. Nama item produksi
-// (mis. "TS HITAM") DICEK MENGANDUNG nama warna kanonik roll ini (mis. "HITAM"), bukan exact-
-// match, karena nama item formatnya "[jenis produk] [warna]", bukan warna doang.
-// CATATAN soal "kg" yang juga diminta Denny buat dicocokkan: kg di riwayat itu KG YANG DIPAKAI
-// buat 1 laporan produksi (biasanya cuma sebagian dari roll), BUKAN kg roll itu sendiri - jadi
-// gak bisa dicocokkan exact ke kg roll (sengaja beda angka, itu bukan bug). kode_roll+warna
-// sudah cukup buat mastiin roll fisik yang bener; kg di riwayat murni buat ditampilkan/dijumlah.
-function cocokRiwayatRoll_(x, kode, warnaKanonik) {
-  if (String(x.kodeRoll || '') !== String(kode)) return false;
-  const nama = String(x.jenisWarnaBaju || '').toUpperCase();
-  return nama.indexOf(String(warnaKanonik || '').toUpperCase()) !== -1;
-}
-
-function renderRiwayatPanel_(kode, kgSisa, warnaKanonik) {
+function renderRiwayatPanel_(rollId, kgSisa) {
   if (sedangMuatRiwayat) {
     return '<div class="riwayat-wrap"><div class="riwayat-loading">⏳ Memuat riwayat pemakaian...</div></div>';
   }
-  if (!riwayatTimPotongData) {
+  if (!riwayatPemakaianData) {
     return '<div class="riwayat-wrap"><div class="riwayat-kosong">Gagal memuat riwayat - coba tap lagi.</div></div>';
   }
-  const cocok = riwayatTimPotongData.filter(function (x) { return cocokRiwayatRoll_(x, kode, warnaKanonik); })
-    .sort(function (a, b) { return b.tanggal.localeCompare(a.tanggal) || (b.id - a.id); });
+  const cocok = riwayatPemakaianData.filter(function (x) { return x.stokKainId === rollId; })
+    .sort(function (a, b) { return String(b.tanggal || '').localeCompare(String(a.tanggal || '')) || (b.id - a.id); });
   // v.37: kalau roll ini ternyata masih fresh/belum pernah kepakai (request Denny) - JANGAN
   // tampilin apa-apa sama sekali (bukan pesan "belum ada laporan"), chevron-nya tetap bisa
   // diklik seperti biasa cuma emang gak ada yang muncul di bawahnya.
   if (cocok.length === 0) return '';
-  const totalTerpakai = cocok.reduce(function (sum, x) { return sum + (parseFloat(x.pemakaianKainKg) || 0); }, 0);
+  const totalTerpakai = cocok.reduce(function (sum, x) { return sum + (parseFloat(x.kg) || 0); }, 0);
   const kgAwalEstimasi = kgSisa + totalTerpakai;
 
   let html = '<div class="riwayat-wrap">' +
     '<div class="riwayat-meta"><span>Kg awal (estimasi): <b>' + formatAngka(kgAwalEstimasi) + ' kg</b></span><span>Sisa sekarang: <b>' + formatAngka(kgSisa) + ' kg</b></span></div>';
   html += cocok.map(function (x) {
-    const totalQty = Object.keys(x.ukuran || {}).reduce(function (s, u) { return s + x.ukuran[u]; }, 0);
     return '<div class="riwayat-item">' +
-      '<div class="riwayat-item-top"><span class="nama-item">' + escapeHtml(x.jenisWarnaBaju) + '</span>' +
-      '<span class="kg-terpakai">-' + formatAngka(x.pemakaianKainKg) + ' kg</span></div>' +
-      '<div class="sub"><span>' + formatTanggalPendek(x.tanggal) + '</span><span class="qty">' + totalQty + ' pcs</span></div>' +
+      '<div class="riwayat-item-top"><span class="nama-item">' + escapeHtml(x.namaItem || '-') + '</span>' +
+      '<span class="kg-terpakai">-' + formatAngka(x.kg) + ' kg</span></div>' +
+      '<div class="sub"><span>' + (x.tanggal ? formatTanggalPendek(x.tanggal) : '-') + '</span><span class="qty">' + (x.jumlah != null ? x.jumlah : '-') + ' pcs</span></div>' +
       '</div>';
   }).join('');
   html += '</div>';
@@ -1731,7 +1724,7 @@ document.getElementById('warnaGrid').addEventListener('click', function (e) {
     if (rollTerbukaKunci === kunci) { rollTerbukaKunci = null; renderWarnaGrid(); return; }
     rollTerbukaKunci = kunci; // v.35: cuma 1 roll aktif sekaligus - yang lain auto-collapse
     renderWarnaGrid();
-    if (!riwayatTimPotongData) muatRiwayatTimPotong_();
+    if (!riwayatPemakaianData) muatRiwayatPemakaian_();
     return;
   }
   const kartu = e.target.closest('[data-warnatoggle]');
@@ -1772,7 +1765,7 @@ document.getElementById('searchWarna').addEventListener('input', function () {
         warnaTerbukaSatu = w.warna;
         rollTerbukaKunci = kunciRoll_(w, rollCocok);
         rollHighlightKunci = rollTerbukaKunci;
-        if (!riwayatTimPotongData) muatRiwayatTimPotong_();
+        if (!riwayatPemakaianData) muatRiwayatPemakaian_();
         break;
       }
     }

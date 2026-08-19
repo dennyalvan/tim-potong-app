@@ -1,11 +1,15 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.44
+// CODE WORKER PRODUKSI ver.45
 // ============================================================
-// PERUBAHAN ver.44: endpoint baru GET /data/stok-terpakai-sebagian - roll yang udah kepake
-// SEBAGIAN tapi belum habis (kg_terpakai>0 & kg_sisa>0), kategori terpisah dari grid utama
-// (semua roll kg_sisa>0, campur fresh & udah kesentuh) dan dari Stok Habis (kg_sisa<=0).
-// Struktur & pola sama persis handleStokHabis_, cuma filter beda + tetap sertain kg (kg_sisa,
-// karena di sini angkanya berarti - beda dari Stok Habis yang selalu ~0). Request Denny.
+// PERUBAHAN ver.45: fix bug FUNDAMENTAL di fitur "Riwayat Pemakaian" (dashboard) - dibuktikan
+// langsung ke Supabase (Denny lapor screenshot: STEEL BLUE roll 1608 & MUSTARD roll 1863
+// nampilin "kg awal estimasi" >40kg padahal kg_terpakai KEDUANYA = 0.00 di database, riwayat yang
+// tampil sebenarnya milik roll LAIN). Root cause: kode_roll TERNYATA gak unik sama sekali - query
+// pembuktian nemu kode "7046" dipakai 10 roll MERAH BERBEDA sekaligus, "0002" dipakai HITAM &
+// COKLAT bareng, dst. Endpoint lama /data/export-tim-potong (filter teks kode_roll, ver.48
+// sempat ditambah cek warna) gak akan PERNAH 100% benar selama itu masih text-matching. Endpoint
+// baru GET /data/riwayat-pemakaian-kain - sumbernya log_pemakaian_kain (stok_kain_id = FK asli
+// ke stok_kain.id, gak mungkin salah karena itu row database, bukan ketikan bebas).
 //
 // Riwayat versi lengkap: git log.
 //
@@ -220,6 +224,19 @@ export default {
     if (url.pathname === '/data/export-tim-potong' && request.method === 'GET') {
       const bulan = parseInt(url.searchParams.get('bulan'), 10) || 6;
       return await handleExportTimPotongMentah_(env, bulan);
+    }
+
+    // v.45 - riwayat pemakaian kain per roll, dipakai fitur "Riwayat Pemakaian" di dashboard.
+    // SUMBERNYA log_pemakaian_kain (FK stok_kain_id ASLI ke stok_kain.id) - BUKAN tim_potong
+    // di-filter teks kode_roll kayak sebelumnya. Root cause bug yang ditemukan Denny (roll warna
+    // lain nyasar tampil, "kg awal estimasi" ngaco >40kg padahal roll max ~30kg): kode_roll
+    // TERNYATA gak unik sama sekali - bisa dobel di warna SAMA (mis. 10 roll MERAH beda semua
+    // pake kode "7046") maupun warna BEDA (kode "0002" dipake HITAM & COKLAT sekaligus). Text-
+    // matching (kode_roll, atau kode_roll+warna) gak akan pernah 100% benar selama itu bisa
+    // tabrakan - FK stok_kain_id yang gak mungkin salah, karena itu row database asli, bukan
+    // ketikan bebas. Cuma 38 baris (2026-08-19) - diambil semua sekaligus, gak perlu filter bulan.
+    if (url.pathname === '/data/riwayat-pemakaian-kain' && request.method === 'GET') {
+      return await handleRiwayatPemakaianKain_(env);
     }
 
     // v.28 - export log_qc MENTAH TERMASUK harga_jait/total_bayar (beda dari /data/rekap-qc
@@ -933,8 +950,32 @@ async function handleExportTimPotongMentah_(env, bulan) {
 }
 
 // ============================================================
-// v.28 - EXPORT LOG QC MENTAH TERMASUK harga_jait/total_bayar - dipakai CODE SYNC
-// AKUNTANSI.js buat sinkron sheet "LOG QC" (append-only, HARUS lewatin baris 1-2 karena baris
+// v.45 - RIWAYAT PEMAKAIAN KAIN per roll (dashboard, fitur "Riwayat Pemakaian" tab Stok Kain) -
+// dari log_pemakaian_kain (stok_kain_id = FK asli), JOIN tim_potong (embed PostgREST lewat FK
+// tim_potong_id) buat ambil jumlah pcs & tanggal laporan produksi terkait. Lihat catatan panjang
+// di routing di atas soal kenapa ini gantiin pendekatan lama (filter tim_potong by teks
+// kode_roll) - itu APPROACH YANG SALAH SECARA FUNDAMENTAL karena kode_roll gak dijamin unik.
+// ============================================================
+async function handleRiwayatPemakaianKain_(env) {
+  try {
+    const rows = await ambilDariSupabase_(env, '/rest/v1/log_pemakaian_kain?select=id,stok_kain_id,kg,item_produksi,waktu_wib,tim_potong(jumlah,tanggal)&order=waktu.desc');
+    const hasil = rows.map(function (r) {
+      return {
+        id: r.id,
+        stokKainId: r.stok_kain_id,
+        namaItem: r.item_produksi,
+        kg: parseFloat(r.kg) || 0,
+        tanggal: r.tim_potong ? r.tim_potong.tanggal : null,
+        jumlah: r.tim_potong ? r.tim_potong.jumlah : null
+      };
+    });
+    return jsonResponse(hasil);
+  } catch (e) {
+    return jsonResponse({ ok: false, error: e.message }, 500);
+  }
+}
+
+
 // 2 punya formula SUBTOTAL yang dikelola manual Denny - JANGAN PERNAH ditulis ulang otomatis).
 // ============================================================
 async function handleExportLogQCMentah_(env, bulan) {
