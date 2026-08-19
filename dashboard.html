@@ -1,7 +1,16 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.49
+DASHBOARD ver.50
+============================================================
+PERUBAHAN ver.50 (request Denny, tab Stok Kain, 2 hal):
+1. FIX: chip filter (Kg terbanyak/Nama A-Z/Roll terbanyak/Terpakai Sebagian) sebelumnya bisa
+   AKTIF BARENGAN (sort chip + "Terpakai Sebagian" independen) - screenshot Denny nunjukin 2
+   chip nyala bareng. Sekarang SEMUA chip disatukan 1 state (chipStokAktif), single-select
+   murni kayak radio button - klik salah satu otomatis matiin yang lain, gak mungkin dobel lagi.
+2. Chip baru "👔 Kain Polo" - filter warna yang namanya diawali "POLO " (mis. POLO MAROON, POLO
+   ST. BLUE, dst - 19 warna per 19 Agustus 2026), murni client-side, gak perlu endpoint baru.
+Riwayat lengkap: git log.
 ============================================================
 PERUBAHAN ver.49: fix bug FUNDAMENTAL di "Riwayat Pemakaian" - dibuktikan langsung ke Supabase
 (Denny lapor screenshot: STEEL BLUE roll 1608 & MUSTARD roll 1863 nampilin "kg awal estimasi"
@@ -421,10 +430,11 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
     <div class="section-label">STOK TERSISA PER WARNA</div>
     <input type="text" class="search-box" id="searchWarna" placeholder="Cari nama kain/warna/kode roll...">
     <div class="filter-chips">
-      <div class="chip active" data-sortwarna="kg">Kg terbanyak</div>
-      <div class="chip" data-sortwarna="nama">Nama A-Z</div>
-      <div class="chip" data-sortwarna="roll">Roll terbanyak</div>
-      <div class="chip" id="chipTerpakaiSebagian">🔄 Terpakai Sebagian</div>
+      <div class="chip active" data-chip="kg">Kg terbanyak</div>
+      <div class="chip" data-chip="nama">Nama A-Z</div>
+      <div class="chip" data-chip="roll">Roll terbanyak</div>
+      <div class="chip" data-chip="terpakai-sebagian">🔄 Terpakai Sebagian</div>
+      <div class="chip" data-chip="polo">👔 Kain Polo</div>
     </div>
     <div class="warna-grid" id="warnaGrid"></div>
 
@@ -1260,12 +1270,11 @@ function muatStokHabis() {
     .catch(function (e) { tampilkanToast('Gagal memuat stok habis: ' + e.message); });
 }
 
-// v.48: "Terpakai Sebagian" dipindah dari section terpisah (ver.47) jadi FILTER CHIP di baris
-// atas, sejajar sort (request Denny) - lebih cepat diakses, gak perlu scroll ke bawah. Data flat
-// per-roll dari /data/stok-terpakai-sebagian DIKELOMPOKKAN ULANG jadi struktur per-warna yang
-// SAMA PERSIS kayak stokUtuhData.perWarna, biar renderWarnaGrid() yang sama persis bisa dipakai
-// ulang (search/sort/card/edit/riwayat semua otomatis ikut, gak perlu logic render terpisah).
-let filterTerpakaiSebagianAktif = false;
+// v.50: SEBELUMNYA sort chip (kg/nama/roll) dan chip "Terpakai Sebagian" independen -
+// bisa dua-duanya aktif bareng (request Denny: itu salah, harus single-select kayak radio
+// button). Sekarang SEMUA chip filter (termasuk "Kain Polo" baru) digabung 1 state
+// chipStokAktif - klik salah satu OTOMATIS matiin yang lain, gak pernah dobel/gak ada yang aktif.
+let chipStokAktif = 'kg'; // 'kg' | 'nama' | 'roll' | 'terpakai-sebagian' | 'polo'
 let stokTerpakaiSebagianRaw = null; // cache: array flat {id,warna,kodeRoll,kg}
 let sedangMuatTerpakaiSebagian = false;
 
@@ -1283,8 +1292,12 @@ function kelompokkanPerWarna_(flatRolls) {
 // dasar list SEBELUM search/sort - dipakai renderWarnaGrid() DAN listener search (biar auto-
 // scroll+highlight hasil pencarian juga ngikutin filter yang lagi aktif, bukan selalu list penuh).
 function daftarWarnaAktif_() {
-  if (filterTerpakaiSebagianAktif) return stokTerpakaiSebagianRaw ? kelompokkanPerWarna_(stokTerpakaiSebagianRaw) : null;
-  return stokUtuhData ? stokUtuhData.perWarna : null;
+  if (chipStokAktif === 'terpakai-sebagian') return stokTerpakaiSebagianRaw ? kelompokkanPerWarna_(stokTerpakaiSebagianRaw) : null;
+  if (!stokUtuhData) return null;
+  // v.50: "Kain Polo" - filter client-side doang (gak perlu endpoint baru), warna yang namanya
+  // DIAWALI "POLO " (mis. "POLO MAROON", "POLO ST. BLUE") - request Denny.
+  if (chipStokAktif === 'polo') return stokUtuhData.perWarna.filter(function (w) { return w.warna.toUpperCase().indexOf('POLO ') === 0; });
+  return stokUtuhData.perWarna;
 }
 
 function muatStokTerpakaiSebagianGrid_() {
@@ -1307,7 +1320,7 @@ function muatStokTerpakaiSebagianGrid_() {
 // ulang begitu filter ini aktif lagi (atau langsung kalau lagi aktif pas itu juga).
 function segarkanTerpakaiSebagian_() {
   stokTerpakaiSebagianRaw = null;
-  if (filterTerpakaiSebagianAktif) muatStokTerpakaiSebagianGrid_();
+  if (chipStokAktif === 'terpakai-sebagian') muatStokTerpakaiSebagianGrid_();
 }
 
 // ------------------------------------------------------------
@@ -1387,7 +1400,7 @@ function kunciRoll_(w, r) {
 function renderWarnaGrid() {
   const listDasar = daftarWarnaAktif_();
   if (listDasar === null) {
-    if (filterTerpakaiSebagianAktif) {
+    if (chipStokAktif === 'terpakai-sebagian') {
       document.getElementById('warnaGrid').innerHTML = '<div class="riwayat-loading" style="grid-column:1/-1">⏳ Memuat...</div>';
       muatStokTerpakaiSebagianGrid_();
     }
@@ -1738,15 +1751,6 @@ document.getElementById('stokHabisList').addEventListener('click', function (e) 
   const btnEdit = e.target.closest('[data-editstok]');
   if (btnEdit) bukaModalEditStok_(parseInt(btnEdit.dataset.editstok, 10));
 });
-document.getElementById('chipTerpakaiSebagian').addEventListener('click', function () {
-  filterTerpakaiSebagianAktif = !filterTerpakaiSebagianAktif;
-  this.classList.toggle('active', filterTerpakaiSebagianAktif);
-  // v.48: tutup kartu/roll yang lagi kebuka pas ganti sumber data - biar gak nyasar (state
-  // nunjuk ke warna yang mungkin gak ada di dataset yang baru dipilih).
-  warnaTerbukaSatu = null;
-  rollTerbukaKunci = null;
-  renderWarnaGrid();
-});
 
 document.getElementById('searchWarna').addEventListener('input', function () {
   searchWarnaQuery = this.value;
@@ -1776,11 +1780,22 @@ document.getElementById('searchRekap').addEventListener('input', function () {
   searchRekapQuery = this.value;
   renderRekapQC();
 });
-document.querySelectorAll('.chip[data-sortwarna]').forEach(function (el) {
+// v.50: 1 handler buat SEMUA chip filter Stok Kain (kg/nama/roll/terpakai-sebagian/polo) -
+// single-select murni (request Denny): klik salah satu SELALU matiin ke-4 lainnya, gak pernah
+// dobel aktif. Reset kartu/roll yang lagi kebuka CUMA kalau basis datanya beneran ganti (pindah
+// dari/ke terpakai-sebagian/polo) - klik antar kg/nama/roll doang (basis data sama, cuma beda
+// urutan) gak perlu nutup kartu yang lagi kebuka.
+document.querySelectorAll('.chip[data-chip]').forEach(function (el) {
   el.addEventListener('click', function () {
-    document.querySelectorAll('.chip[data-sortwarna]').forEach(function (c) { c.classList.remove('active'); });
+    const nilai = el.dataset.chip;
+    if (nilai === chipStokAktif) return;
+    const basisKhusus = ['terpakai-sebagian', 'polo'];
+    const gantiBasisData = basisKhusus.indexOf(nilai) !== -1 || basisKhusus.indexOf(chipStokAktif) !== -1;
+    document.querySelectorAll('.chip[data-chip]').forEach(function (c) { c.classList.remove('active'); });
     el.classList.add('active');
-    sortWarna = el.dataset.sortwarna;
+    chipStokAktif = nilai;
+    if (nilai === 'kg' || nilai === 'nama' || nilai === 'roll') sortWarna = nilai;
+    if (gantiBasisData) { warnaTerbukaSatu = null; rollTerbukaKunci = null; }
     renderWarnaGrid();
   });
 });
