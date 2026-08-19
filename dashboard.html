@@ -1,7 +1,12 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.51
+DASHBOARD ver.52
+============================================================
+PERUBAHAN ver.52 (request Denny): urutan chip filter Stok Kain diubah jadi COMBED, POLO,
+Terpakai Sebagian, Nama A-Z, Roll Terbanyak. Icon 👔 di chip POLO dihapus. Murni perubahan
+tampilan (urutan HTML + label) - data-chip & logic filter di baliknya gak berubah.
+Riwayat lengkap: git log.
 ============================================================
 PERUBAHAN ver.51 (request Denny, tab Stok Kain):
 1. Chip "Kg terbanyak" berganti nama jadi "COMBED" - dan sekarang (bareng "Nama A-Z"/"Roll
@@ -438,10 +443,10 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
     <input type="text" class="search-box" id="searchWarna" placeholder="Cari nama kain/warna/kode roll...">
     <div class="filter-chips">
       <div class="chip active" data-chip="kg">COMBED</div>
-      <div class="chip" data-chip="nama">Nama A-Z</div>
-      <div class="chip" data-chip="roll">Roll terbanyak</div>
+      <div class="chip" data-chip="polo">POLO</div>
       <div class="chip" data-chip="terpakai-sebagian">🔄 Terpakai Sebagian</div>
-      <div class="chip" data-chip="polo">👔 POLO</div>
+      <div class="chip" data-chip="nama">Nama A-Z</div>
+      <div class="chip" data-chip="roll">Roll Terbanyak</div>
     </div>
     <div class="warna-grid" id="warnaGrid"></div>
 
