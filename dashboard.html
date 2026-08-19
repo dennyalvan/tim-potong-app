@@ -1,7 +1,14 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.45
+DASHBOARD ver.46
+============================================================
+PERUBAHAN ver.46: fix kartu warna yang TERTUTUP ikut melar kosong kalau kartu tetangganya (1
+baris grid yang sama, layout 2 kolom) lagi TERBUKA (request Denny, screenshot: kartu COKLAT
+ikut tinggi kosong pas NAVY di sebelahnya dibuka). Penyebab: .warna-grid CSS grid tanpa
+align-items eksplisit, default-nya "stretch" - semua kartu di baris yang sama disamain tinggi
+ke yang paling tinggi. Fix: align-items:start.
+Riwayat lengkap: git log.
 ============================================================
 PERUBAHAN ver.45 (4 poin, request Denny, tab Stok Kain):
 1. Kartu warna & tombol edit sebelumnya pasang ulang event listener tiap render
@@ -219,7 +226,11 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .total-card .value .unit { font-size: 15px; font-weight: 600; color: var(--gray-text); }
   .total-card .sub { font-size: 12px; color: var(--gray-text); margin-top: 2px; }
 
-  .warna-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  /* v.46: align-items:start (default grid sebenarnya "stretch") - tanpa ini, kartu warna yang
+     TERTUTUP ikut melar kosong kalau kartu tetangganya (1 baris grid yang sama) lagi TERBUKA,
+     karena grid nyamain tinggi semua kartu di baris yang sama ke yang paling tinggi (request
+     Denny - screenshot COKLAT ikut tinggi kosong pas NAVY di sebelahnya terbuka). */
+  .warna-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
   .warna-card { background: #fff; border-radius: 14px; padding: 12px 14px; cursor: pointer; }
   .warna-card-top { display: flex; align-items: center; gap: 8px; }
   .warna-card .swatch { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.1); }
