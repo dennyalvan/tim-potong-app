@@ -1,14 +1,20 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.47
+DASHBOARD ver.48
 ============================================================
-PERUBAHAN ver.47: kategori/filter baru "🔄 Terpakai Sebagian" di tab Stok Kain (request Denny) -
-roll yang semula utuh lalu kepake sebagian TAPI belum habis (kg_terpakai>0 & kg_sisa>0),
-terpisah dari grid utama (semua roll kg_sisa>0, campur fresh & udah kesentuh) dan dari "Stok
-Habis" (kg_sisa<=0). Pola & alur (toggle lazy-load, refresh setelah edit/write-off) niru persis
-Stok Habis yang sudah ada, cuma tetap nampilin kg karena di sini angkanya berarti. Endpoint baru
-GET /data/stok-terpakai-sebagian (Worker ver.44).
+PERUBAHAN ver.48 (request Denny, 2 hal):
+1. Filter "Terpakai Sebagian" DIPINDAH dari section terpisah (ver.47) jadi chip di baris filter
+   atas, sejajar "Kg terbanyak"/"Nama A-Z"/"Roll terbanyak". Data flat per-roll dari endpoint
+   dikelompokkan ulang jadi struktur per-warna yang sama persis kayak stokUtuhData.perWarna, jadi
+   renderWarnaGrid() yang sama bisa dipakai ulang (search/sort/card/edit/riwayat semua otomatis
+   ikut jalan, gak ada logic render terpisah).
+2. FIX BUG NYATA (screenshot: kartu COKLAT Roll 0002 nampilin riwayat "TS HITAM"/"SET. HITAM") -
+   riwayat pemakaian roll sebelumnya cuma dicocokkan lewat kode_roll, padahal kode_roll BISA
+   sama persis di 2 warna berbeda. Sekarang WAJIB dicocokkan juga nama warnanya (fungsi baru
+   cocokRiwayatRoll_), dipakai di jumlah pemakaian (badge "NX") dan panel riwayatnya sekaligus.
+Riwayat lengkap: git log.
+============================================================
 Riwayat lengkap: git log.
 ============================================================
 PERUBAHAN ver.46: fix kartu warna yang TERTUTUP ikut melar kosong kalau kartu tetangganya (1
@@ -405,14 +411,9 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
       <div class="chip active" data-sortwarna="kg">Kg terbanyak</div>
       <div class="chip" data-sortwarna="nama">Nama A-Z</div>
       <div class="chip" data-sortwarna="roll">Roll terbanyak</div>
+      <div class="chip" id="chipTerpakaiSebagian">🔄 Terpakai Sebagian</div>
     </div>
     <div class="warna-grid" id="warnaGrid"></div>
-
-    <div class="arsip-toggle" id="stokTerpakaiSebagianToggle">
-      <span>🔄 Terpakai Sebagian<span class="sub" id="stokTerpakaiSebagianSub">Ketuk buat lihat</span></span>
-      <span id="stokTerpakaiSebagianChevron">▾</span>
-    </div>
-    <div class="arsip-list" id="stokTerpakaiSebagianList" style="display:none"></div>
 
     <div class="arsip-toggle" id="stokHabisToggle">
       <span>📦 Stok Habis<span class="sub" id="stokHabisSub">Ketuk buat lihat</span></span>
@@ -1244,35 +1245,54 @@ function muatStokHabis() {
     .catch(function (e) { tampilkanToast('Gagal memuat stok habis: ' + e.message); });
 }
 
-// v.47: "Terpakai Sebagian" - roll yang kg_terpakai>0 & kg_sisa>0 (request Denny), pola & alur
-// PERSIS sama kayak Stok Habis di atas (toggle lazy-load, dimuat sekali) - cuma sumber endpoint
-// beda dan tetap nampilin kg (kg_sisa) karena di sini angkanya berarti.
-let stokTerpakaiSebagianDimuat = false;
-document.getElementById('stokTerpakaiSebagianToggle').addEventListener('click', function () {
-  const list = document.getElementById('stokTerpakaiSebagianList');
-  const terbuka = list.style.display === 'block';
-  list.style.display = terbuka ? 'none' : 'block';
-  document.getElementById('stokTerpakaiSebagianChevron').textContent = terbuka ? '▾' : '▴';
-  if (!terbuka && !stokTerpakaiSebagianDimuat) muatStokTerpakaiSebagian();
-});
-function muatStokTerpakaiSebagian() {
+// v.48: "Terpakai Sebagian" dipindah dari section terpisah (ver.47) jadi FILTER CHIP di baris
+// atas, sejajar sort (request Denny) - lebih cepat diakses, gak perlu scroll ke bawah. Data flat
+// per-roll dari /data/stok-terpakai-sebagian DIKELOMPOKKAN ULANG jadi struktur per-warna yang
+// SAMA PERSIS kayak stokUtuhData.perWarna, biar renderWarnaGrid() yang sama persis bisa dipakai
+// ulang (search/sort/card/edit/riwayat semua otomatis ikut, gak perlu logic render terpisah).
+let filterTerpakaiSebagianAktif = false;
+let stokTerpakaiSebagianRaw = null; // cache: array flat {id,warna,kodeRoll,kg}
+let sedangMuatTerpakaiSebagian = false;
+
+function kelompokkanPerWarna_(flatRolls) {
+  const grup = {};
+  flatRolls.forEach(function (r) {
+    if (!grup[r.warna]) grup[r.warna] = { warna: r.warna, totalKg: 0, jumlahRoll: 0, rolls: [] };
+    grup[r.warna].totalKg += r.kg;
+    grup[r.warna].jumlahRoll += 1;
+    grup[r.warna].rolls.push({ id: r.id, kodeRoll: r.kodeRoll, kg: r.kg });
+  });
+  return Object.keys(grup).map(function (k) { return grup[k]; });
+}
+
+// dasar list SEBELUM search/sort - dipakai renderWarnaGrid() DAN listener search (biar auto-
+// scroll+highlight hasil pencarian juga ngikutin filter yang lagi aktif, bukan selalu list penuh).
+function daftarWarnaAktif_() {
+  if (filterTerpakaiSebagianAktif) return stokTerpakaiSebagianRaw ? kelompokkanPerWarna_(stokTerpakaiSebagianRaw) : null;
+  return stokUtuhData ? stokUtuhData.perWarna : null;
+}
+
+function muatStokTerpakaiSebagianGrid_() {
+  if (sedangMuatTerpakaiSebagian) return;
+  sedangMuatTerpakaiSebagian = true;
   fetch(WORKER_URL + '/data/stok-terpakai-sebagian')
     .then(function (r) { return r.json(); })
     .then(function (data) {
-      stokTerpakaiSebagianDimuat = true;
-      const list = Array.isArray(data) ? data : [];
-      document.getElementById('stokTerpakaiSebagianSub').textContent = list.length + ' roll';
-      if (list.length === 0) {
-        document.getElementById('stokTerpakaiSebagianList').innerHTML = '<div class="arsip-item" style="justify-content:center;color:var(--gray-text)">Belum ada roll yang terpakai sebagian.</div>';
-        return;
-      }
-      document.getElementById('stokTerpakaiSebagianList').innerHTML = list.map(function (x) {
-        return '<div class="stok-habis-item"><span class="nama">' + escapeHtml(x.warna) + '</span>' +
-          '<span class="roll">Roll ' + (x.kodeRoll ? escapeHtml(x.kodeRoll) : '-') + '</span>' +
-          '<span class="kg">' + formatAngka(x.kg) + ' kg</span>' + tombolEditRoll_(x) + '</div>';
-      }).join('');
+      stokTerpakaiSebagianRaw = Array.isArray(data) ? data : [];
+      sedangMuatTerpakaiSebagian = false;
+      renderWarnaGrid();
     })
-    .catch(function (e) { tampilkanToast('Gagal memuat stok terpakai sebagian: ' + e.message); });
+    .catch(function (e) {
+      sedangMuatTerpakaiSebagian = false;
+      tampilkanToast('Gagal memuat data terpakai sebagian: ' + e.message);
+    });
+}
+
+// dipanggil setelah edit/write-off/batal-writeoff berhasil - buang cache biar data ke-fetch
+// ulang begitu filter ini aktif lagi (atau langsung kalau lagi aktif pas itu juga).
+function segarkanTerpakaiSebagian_() {
+  stokTerpakaiSebagianRaw = null;
+  if (filterTerpakaiSebagianAktif) muatStokTerpakaiSebagianGrid_();
 }
 
 // ------------------------------------------------------------
@@ -1350,8 +1370,15 @@ function kunciRoll_(w, r) {
 }
 
 function renderWarnaGrid() {
-  if (!stokUtuhData) return;
-  let list = stokUtuhData.perWarna.slice();
+  const listDasar = daftarWarnaAktif_();
+  if (listDasar === null) {
+    if (filterTerpakaiSebagianAktif) {
+      document.getElementById('warnaGrid').innerHTML = '<div class="riwayat-loading" style="grid-column:1/-1">⏳ Memuat...</div>';
+      muatStokTerpakaiSebagianGrid_();
+    }
+    return;
+  }
+  let list = listDasar.slice();
   if (searchWarnaQuery) {
     const q = searchWarnaQuery.toLowerCase();
     // v.33: search sekarang juga cari KODE ROLL, gak cuma nama warna (request Denny).
@@ -1429,7 +1456,7 @@ function renderBarisRoll_(w, r) {
   // 0 pemakaian, render CLEAN dari awal (gak pernah nampilin chevron sama sekali). Begitu
   // kebaca dan TERNYATA ada pemakaian, baru "naik level" jadi bisa diklik.
   const jumlahPakai = riwayatTimPotongData
-    ? riwayatTimPotongData.filter(function (x) { return String(x.kodeRoll || '') === String(kode); }).length
+    ? riwayatTimPotongData.filter(function (x) { return cocokRiwayatRoll_(x, kode, w.warna); }).length
     : 0;
   const kunci = kunciRoll_(w, r);
   if (jumlahPakai === 0) {
@@ -1443,18 +1470,35 @@ function renderBarisRoll_(w, r) {
   let html = '<div class="roll-row' + (terbuka ? ' terbuka' : '') + (disorot ? ' disorot' : '') + '" data-rolltoggle="' + escapeAttr(kunci) + '">' +
     '<div class="roll-kiri"><span class="chev">▶</span><span>Roll ' + escapeHtml(kode) + '</span>' + hintPakai + '</div>' +
     '<div class="roll-kanan"><span class="pemisah">/</span><span>' + formatAngka(r.kg) + ' kg</span>' + tombolEditRoll_(r) + '</div></div>';
-  if (terbuka) html += renderRiwayatPanel_(kode, r.kg);
+  if (terbuka) html += renderRiwayatPanel_(kode, r.kg, w.warna);
   return html;
 }
 
-function renderRiwayatPanel_(kode, kgSisa) {
+// v.48: fix bug nyata (screenshot Denny, 18 Agustus 2026) - riwayat pemakaian roll SEBELUMNYA
+// cuma dicocokkan lewat kode_roll doang. kode_roll TERNYATA BISA SAMA di 2 warna yang beda
+// sekaligus (bukan cuma di 1 warna kayak dugaan awal ver.35 - lihat kunciRoll_) - makanya kartu
+// COKLAT roll 0002 nampilin riwayat punya HITAM (kode roll HITAM yang beda fisik kebetulan juga
+// "0002"). Sekarang WAJIB dicocokkan JUGA nama warnanya, gak cuma kode. Nama item produksi
+// (mis. "TS HITAM") DICEK MENGANDUNG nama warna kanonik roll ini (mis. "HITAM"), bukan exact-
+// match, karena nama item formatnya "[jenis produk] [warna]", bukan warna doang.
+// CATATAN soal "kg" yang juga diminta Denny buat dicocokkan: kg di riwayat itu KG YANG DIPAKAI
+// buat 1 laporan produksi (biasanya cuma sebagian dari roll), BUKAN kg roll itu sendiri - jadi
+// gak bisa dicocokkan exact ke kg roll (sengaja beda angka, itu bukan bug). kode_roll+warna
+// sudah cukup buat mastiin roll fisik yang bener; kg di riwayat murni buat ditampilkan/dijumlah.
+function cocokRiwayatRoll_(x, kode, warnaKanonik) {
+  if (String(x.kodeRoll || '') !== String(kode)) return false;
+  const nama = String(x.jenisWarnaBaju || '').toUpperCase();
+  return nama.indexOf(String(warnaKanonik || '').toUpperCase()) !== -1;
+}
+
+function renderRiwayatPanel_(kode, kgSisa, warnaKanonik) {
   if (sedangMuatRiwayat) {
     return '<div class="riwayat-wrap"><div class="riwayat-loading">⏳ Memuat riwayat pemakaian...</div></div>';
   }
   if (!riwayatTimPotongData) {
     return '<div class="riwayat-wrap"><div class="riwayat-kosong">Gagal memuat riwayat - coba tap lagi.</div></div>';
   }
-  const cocok = riwayatTimPotongData.filter(function (x) { return String(x.kodeRoll || '') === String(kode); })
+  const cocok = riwayatTimPotongData.filter(function (x) { return cocokRiwayatRoll_(x, kode, warnaKanonik); })
     .sort(function (a, b) { return b.tanggal.localeCompare(a.tanggal) || (b.id - a.id); });
   // v.37: kalau roll ini ternyata masih fresh/belum pernah kepakai (request Denny) - JANGAN
   // tampilin apa-apa sama sekali (bukan pesan "belum ada laporan"), chevron-nya tetap bisa
@@ -1605,7 +1649,7 @@ function simpanEditStok_() {
       }
       tampilkanToast('✓ Perubahan tersimpan.');
       if (stokHabisDimuat) muatStokHabis();
-      if (stokTerpakaiSebagianDimuat) muatStokTerpakaiSebagian();
+      segarkanTerpakaiSebagian_();
       // v.44: sebelumnya reload modal (bukaModalEditStok_ ulang) - sekarang modal ditutup,
       // balik ke tampilan dashboard Stok Kain (request Denny). Grid utama tetap auto-refresh
       // sendiri lewat Realtime yang sudah ada (langganan tabel stok_kain).
@@ -1637,7 +1681,7 @@ function submitWriteoff_() {
       }
       tampilkanToast('✓ Write-off tersimpan.');
       if (stokHabisDimuat) muatStokHabis();
-      if (stokTerpakaiSebagianDimuat) muatStokTerpakaiSebagian();
+      segarkanTerpakaiSebagian_();
       // v.44: sama kayak simpanEditStok_ - tutup modal, balik ke dashboard Stok Kain.
       tutupModalEditStok_();
     })
@@ -1658,7 +1702,7 @@ function batalWriteoff_(writeoffId) {
       if (!data.ok) { tampilkanToast('Gagal batalkan: ' + data.error); return; }
       tampilkanToast('✓ Write-off dibatalkan, kg dikembalikan.');
       if (stokHabisDimuat) muatStokHabis();
-      if (stokTerpakaiSebagianDimuat) muatStokTerpakaiSebagian();
+      segarkanTerpakaiSebagian_();
       bukaModalEditStok_(modalStokDetail.id);
     })
     .catch(function (e) { tampilkanToast('Gagal batalkan: ' + e.message); });
@@ -1701,9 +1745,14 @@ document.getElementById('stokHabisList').addEventListener('click', function (e) 
   const btnEdit = e.target.closest('[data-editstok]');
   if (btnEdit) bukaModalEditStok_(parseInt(btnEdit.dataset.editstok, 10));
 });
-document.getElementById('stokTerpakaiSebagianList').addEventListener('click', function (e) {
-  const btnEdit = e.target.closest('[data-editstok]');
-  if (btnEdit) bukaModalEditStok_(parseInt(btnEdit.dataset.editstok, 10));
+document.getElementById('chipTerpakaiSebagian').addEventListener('click', function () {
+  filterTerpakaiSebagianAktif = !filterTerpakaiSebagianAktif;
+  this.classList.toggle('active', filterTerpakaiSebagianAktif);
+  // v.48: tutup kartu/roll yang lagi kebuka pas ganti sumber data - biar gak nyasar (state
+  // nunjuk ke warna yang mungkin gak ada di dataset yang baru dipilih).
+  warnaTerbukaSatu = null;
+  rollTerbukaKunci = null;
+  renderWarnaGrid();
 });
 
 document.getElementById('searchWarna').addEventListener('input', function () {
@@ -1713,10 +1762,11 @@ document.getElementById('searchWarna').addEventListener('input', function () {
   // lain juga, misal ganti sort/klik roll lain - kalau taruh di situ bakal ke-trigger ulang
   // terus & nge-override state expand manual user).
   rollHighlightKunci = null;
-  if (searchWarnaQuery && stokUtuhData) {
+  const listUntukSearch = daftarWarnaAktif_();
+  if (searchWarnaQuery && listUntukSearch) {
     const q = searchWarnaQuery.toLowerCase();
-    for (let i = 0; i < stokUtuhData.perWarna.length; i++) {
-      const w = stokUtuhData.perWarna[i];
+    for (let i = 0; i < listUntukSearch.length; i++) {
+      const w = listUntukSearch[i];
       const rollCocok = w.rolls.find(function (r) { return r.kodeRoll && String(r.kodeRoll).toLowerCase().indexOf(q) !== -1; });
       if (rollCocok) {
         warnaTerbukaSatu = w.warna;
