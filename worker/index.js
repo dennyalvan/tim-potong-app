@@ -1,10 +1,11 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.43
+// CODE WORKER PRODUKSI ver.44
 // ============================================================
-// PERUBAHAN ver.43: /data/writeoff-kain sekarang ikut nyimpen kode_roll & warna sebagai SNAPSHOT
-// (kolom teks baru di log_writeoff_kain, bukan live lookup lewat stok_kain_id) - biar Denny
-// gampang nge-scan langsung di Table Editor Supabase tanpa follow FK. Sama pola kayak
-// log_pemakaian_kain.warna. 6 baris lama sudah di-backfill manual lewat SQL.
+// PERUBAHAN ver.44: endpoint baru GET /data/stok-terpakai-sebagian - roll yang udah kepake
+// SEBAGIAN tapi belum habis (kg_terpakai>0 & kg_sisa>0), kategori terpisah dari grid utama
+// (semua roll kg_sisa>0, campur fresh & udah kesentuh) dan dari Stok Habis (kg_sisa<=0).
+// Struktur & pola sama persis handleStokHabis_, cuma filter beda + tetap sertain kg (kg_sisa,
+// karena di sini angkanya berarti - beda dari Stok Habis yang selalu ~0). Request Denny.
 //
 // Riwayat versi lengkap: git log.
 //
@@ -125,6 +126,12 @@ export default {
     // (request Denny - dipisah dari /data/stok-utuh yang emang sengaja cuma nampilin sisa > 0)
     if (url.pathname === '/data/stok-habis' && request.method === 'GET') {
       return await handleStokHabis_(env);
+    }
+
+    // v.47 - roll yang udah kepake SEBAGIAN tapi belum habis (kg_terpakai>0 & kg_sisa>0),
+    // kategori terpisah di tab Stok Kain (request Denny).
+    if (url.pathname === '/data/stok-terpakai-sebagian' && request.method === 'GET') {
+      return await handleStokTerpakaiSebagian_(env);
     }
 
     // v.41 - detail 1 roll KHUSUS admin: harga_rp_kg, diskon_rp_kg, subtotal (nilai SISA stok =
@@ -1440,9 +1447,36 @@ async function handleStokHabis_(env) {
   }
 }
 
-// ============================================================
-// v.41 - Stok Kain: detail admin (harga, subtotal, riwayat write-off) + edit + write-off manual
-// ============================================================
+// v.47 - roll yang UDAH KEPAKE SEBAGIAN tapi belum habis (kg_terpakai>0 DAN kg_sisa>0) - kategori
+// terpisah dari grid utama (semua roll kg_sisa>0, campur yang fresh & yang udah kesentuh) dan
+// dari Stok Habis (kg_sisa<=0). Request Denny. Sengaja tetap nampilin kg (di sini kg_sisa, bukan
+// ~0 kayak Stok Habis) - itu justru info yang mau dilihat: sisa berapa dari roll yang udah jalan.
+async function handleStokTerpakaiSebagian_(env) {
+  try {
+    const [rowsStok, rowsKamus] = await Promise.all([
+      ambilDariSupabase_(env, '/rest/v1/stok_kain?select=id,warna,kode_roll,kg_sisa&kg_terpakai=gt.0&kg_sisa=gt.0&order=kode_roll.desc'),
+      ambilDariSupabase_(env, '/rest/v1/kamus_sinonim_warna?select=kanonik,sinonim')
+    ]);
+    const petaKanonik = {};
+    rowsKamus.forEach(function (row) {
+      const kanonik = String(row.kanonik || '').toUpperCase();
+      if (!kanonik) return;
+      petaKanonik[kanonik] = kanonik;
+      (row.sinonim || []).forEach(function (s) { const su = String(s || '').toUpperCase(); if (su) petaKanonik[su] = kanonik; });
+    });
+    const hasil = rowsStok
+      .map(function (row) {
+        const warnaRaw = String(row.warna || '').trim();
+        if (!warnaRaw) return null;
+        const kanonik = petaKanonik[warnaRaw.toUpperCase()] || warnaRaw.toUpperCase();
+        return { id: row.id, warna: kanonik, kodeRoll: row.kode_roll || null, kg: parseFloat(row.kg_sisa) || 0 };
+      })
+      .filter(function (x) { return x; });
+    return jsonResponse(hasil);
+  } catch (e) {
+    return jsonResponse({ ok: false, error: e.message }, 500);
+  }
+}
 
 async function handleDetailStokKainAdmin_(body, env) {
   const validasi = await validasiInitData_(body.initData, env);

@@ -1,7 +1,15 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.46
+DASHBOARD ver.47
+============================================================
+PERUBAHAN ver.47: kategori/filter baru "🔄 Terpakai Sebagian" di tab Stok Kain (request Denny) -
+roll yang semula utuh lalu kepake sebagian TAPI belum habis (kg_terpakai>0 & kg_sisa>0),
+terpisah dari grid utama (semua roll kg_sisa>0, campur fresh & udah kesentuh) dan dari "Stok
+Habis" (kg_sisa<=0). Pola & alur (toggle lazy-load, refresh setelah edit/write-off) niru persis
+Stok Habis yang sudah ada, cuma tetap nampilin kg karena di sini angkanya berarti. Endpoint baru
+GET /data/stok-terpakai-sebagian (Worker ver.44).
+Riwayat lengkap: git log.
 ============================================================
 PERUBAHAN ver.46: fix kartu warna yang TERTUTUP ikut melar kosong kalau kartu tetangganya (1
 baris grid yang sama, layout 2 kolom) lagi TERBUKA (request Denny, screenshot: kartu COKLAT
@@ -219,6 +227,8 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .stok-habis-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: #fff; border-radius: 10px; padding: 9px 12px; margin-bottom: 6px; }
   .stok-habis-item .nama { font-weight: 700; font-size: 12.5px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .stok-habis-item .roll { color: var(--gray-text); font-weight: 600; font-size: 11.5px; white-space: nowrap; flex-shrink: 0; }
+  /* v.47: kg dipakai di list "Terpakai Sebagian" (Stok Habis gak perlu, angkanya selalu ~0) */
+  .stok-habis-item .kg { font-weight: 800; font-size: 12px; white-space: nowrap; flex-shrink: 0; }
 
   .total-card { background: #fff; border-radius: 16px; padding: 16px; margin-bottom: 14px; border-top: 3px solid var(--green); }
   .total-card .label { font-size: 12px; color: var(--gray-text); }
@@ -397,6 +407,12 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
       <div class="chip" data-sortwarna="roll">Roll terbanyak</div>
     </div>
     <div class="warna-grid" id="warnaGrid"></div>
+
+    <div class="arsip-toggle" id="stokTerpakaiSebagianToggle">
+      <span>🔄 Terpakai Sebagian<span class="sub" id="stokTerpakaiSebagianSub">Ketuk buat lihat</span></span>
+      <span id="stokTerpakaiSebagianChevron">▾</span>
+    </div>
+    <div class="arsip-list" id="stokTerpakaiSebagianList" style="display:none"></div>
 
     <div class="arsip-toggle" id="stokHabisToggle">
       <span>📦 Stok Habis<span class="sub" id="stokHabisSub">Ketuk buat lihat</span></span>
@@ -1228,6 +1244,37 @@ function muatStokHabis() {
     .catch(function (e) { tampilkanToast('Gagal memuat stok habis: ' + e.message); });
 }
 
+// v.47: "Terpakai Sebagian" - roll yang kg_terpakai>0 & kg_sisa>0 (request Denny), pola & alur
+// PERSIS sama kayak Stok Habis di atas (toggle lazy-load, dimuat sekali) - cuma sumber endpoint
+// beda dan tetap nampilin kg (kg_sisa) karena di sini angkanya berarti.
+let stokTerpakaiSebagianDimuat = false;
+document.getElementById('stokTerpakaiSebagianToggle').addEventListener('click', function () {
+  const list = document.getElementById('stokTerpakaiSebagianList');
+  const terbuka = list.style.display === 'block';
+  list.style.display = terbuka ? 'none' : 'block';
+  document.getElementById('stokTerpakaiSebagianChevron').textContent = terbuka ? '▾' : '▴';
+  if (!terbuka && !stokTerpakaiSebagianDimuat) muatStokTerpakaiSebagian();
+});
+function muatStokTerpakaiSebagian() {
+  fetch(WORKER_URL + '/data/stok-terpakai-sebagian')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      stokTerpakaiSebagianDimuat = true;
+      const list = Array.isArray(data) ? data : [];
+      document.getElementById('stokTerpakaiSebagianSub').textContent = list.length + ' roll';
+      if (list.length === 0) {
+        document.getElementById('stokTerpakaiSebagianList').innerHTML = '<div class="arsip-item" style="justify-content:center;color:var(--gray-text)">Belum ada roll yang terpakai sebagian.</div>';
+        return;
+      }
+      document.getElementById('stokTerpakaiSebagianList').innerHTML = list.map(function (x) {
+        return '<div class="stok-habis-item"><span class="nama">' + escapeHtml(x.warna) + '</span>' +
+          '<span class="roll">Roll ' + (x.kodeRoll ? escapeHtml(x.kodeRoll) : '-') + '</span>' +
+          '<span class="kg">' + formatAngka(x.kg) + ' kg</span>' + tombolEditRoll_(x) + '</div>';
+      }).join('');
+    })
+    .catch(function (e) { tampilkanToast('Gagal memuat stok terpakai sebagian: ' + e.message); });
+}
+
 // ------------------------------------------------------------
 // TAB STOK KAIN
 // ------------------------------------------------------------
@@ -1558,6 +1605,7 @@ function simpanEditStok_() {
       }
       tampilkanToast('✓ Perubahan tersimpan.');
       if (stokHabisDimuat) muatStokHabis();
+      if (stokTerpakaiSebagianDimuat) muatStokTerpakaiSebagian();
       // v.44: sebelumnya reload modal (bukaModalEditStok_ ulang) - sekarang modal ditutup,
       // balik ke tampilan dashboard Stok Kain (request Denny). Grid utama tetap auto-refresh
       // sendiri lewat Realtime yang sudah ada (langganan tabel stok_kain).
@@ -1589,6 +1637,7 @@ function submitWriteoff_() {
       }
       tampilkanToast('✓ Write-off tersimpan.');
       if (stokHabisDimuat) muatStokHabis();
+      if (stokTerpakaiSebagianDimuat) muatStokTerpakaiSebagian();
       // v.44: sama kayak simpanEditStok_ - tutup modal, balik ke dashboard Stok Kain.
       tutupModalEditStok_();
     })
@@ -1609,6 +1658,7 @@ function batalWriteoff_(writeoffId) {
       if (!data.ok) { tampilkanToast('Gagal batalkan: ' + data.error); return; }
       tampilkanToast('✓ Write-off dibatalkan, kg dikembalikan.');
       if (stokHabisDimuat) muatStokHabis();
+      if (stokTerpakaiSebagianDimuat) muatStokTerpakaiSebagian();
       bukaModalEditStok_(modalStokDetail.id);
     })
     .catch(function (e) { tampilkanToast('Gagal batalkan: ' + e.message); });
@@ -1648,6 +1698,10 @@ document.getElementById('warnaGrid').addEventListener('click', function (e) {
   }
 });
 document.getElementById('stokHabisList').addEventListener('click', function (e) {
+  const btnEdit = e.target.closest('[data-editstok]');
+  if (btnEdit) bukaModalEditStok_(parseInt(btnEdit.dataset.editstok, 10));
+});
+document.getElementById('stokTerpakaiSebagianList').addEventListener('click', function (e) {
   const btnEdit = e.target.closest('[data-editstok]');
   if (btnEdit) bukaModalEditStok_(parseInt(btnEdit.dataset.editstok, 10));
 });
