@@ -1,7 +1,14 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.50
+DASHBOARD ver.51
+============================================================
+PERUBAHAN ver.51 (request Denny, tab Stok Kain):
+1. Chip "Kg terbanyak" berganti nama jadi "COMBED" - dan sekarang (bareng "Nama A-Z"/"Roll
+   terbanyak" juga) SENGAJA GAK nampilin warna POLO lagi, karena POLO udah punya kategori/chip
+   sendiri. Ini soal kategori fabric (COMBED vs POLO), bukan cuma urutan tampil.
+2. Chip "Kain Polo" disingkat jadi "POLO".
+Riwayat lengkap: git log.
 ============================================================
 PERUBAHAN ver.50 (request Denny, tab Stok Kain, 2 hal):
 1. FIX: chip filter (Kg terbanyak/Nama A-Z/Roll terbanyak/Terpakai Sebagian) sebelumnya bisa
@@ -430,11 +437,11 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
     <div class="section-label">STOK TERSISA PER WARNA</div>
     <input type="text" class="search-box" id="searchWarna" placeholder="Cari nama kain/warna/kode roll...">
     <div class="filter-chips">
-      <div class="chip active" data-chip="kg">Kg terbanyak</div>
+      <div class="chip active" data-chip="kg">COMBED</div>
       <div class="chip" data-chip="nama">Nama A-Z</div>
       <div class="chip" data-chip="roll">Roll terbanyak</div>
       <div class="chip" data-chip="terpakai-sebagian">🔄 Terpakai Sebagian</div>
-      <div class="chip" data-chip="polo">👔 Kain Polo</div>
+      <div class="chip" data-chip="polo">👔 POLO</div>
     </div>
     <div class="warna-grid" id="warnaGrid"></div>
 
@@ -1297,7 +1304,11 @@ function daftarWarnaAktif_() {
   // v.50: "Kain Polo" - filter client-side doang (gak perlu endpoint baru), warna yang namanya
   // DIAWALI "POLO " (mis. "POLO MAROON", "POLO ST. BLUE") - request Denny.
   if (chipStokAktif === 'polo') return stokUtuhData.perWarna.filter(function (w) { return w.warna.toUpperCase().indexOf('POLO ') === 0; });
-  return stokUtuhData.perWarna;
+  // v.51: COMBED (kg/nama/roll) - warna POLO DIKELUARKAN, sudah punya kategori/chip sendiri
+  // (request Denny: "jangan tampilkan list kain polo karena kain polo sudah terpisah di tab
+  // polo"). Berlaku buat ke-3 chip ini (kg, nama, roll) - bukan cuma yang lagi aktif - karena
+  // ini soal KATEGORI (fabric type COMBED vs POLO), bukan soal urutan tampilnya doang.
+  return stokUtuhData.perWarna.filter(function (w) { return w.warna.toUpperCase().indexOf('POLO ') !== 0; });
 }
 
 function muatStokTerpakaiSebagianGrid_() {
