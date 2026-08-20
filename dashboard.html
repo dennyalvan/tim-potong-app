@@ -1,7 +1,17 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.53
+DASHBOARD ver.54
+============================================================
+PERUBAHAN ver.54: FIX LANJUTAN dari ver.53 (screenshot Denny nunjukin masih kebungkus) - akar
+masalah sebenarnya BUKAN cuma soal CSS, tapi renderBarisRoll_ (JS) taruh "Roll ..." sebagai bare
+<span> TANPA class roll-kiri di 2 dari 3 varian baris (roll kode kosong & roll yang belum pernah
+kepakai) - jadi 2 varian itu gak ikut kena proteksi white-space:nowrap yang ditambahin ver.53.
+Sekarang ketiga varian konsisten pakai class roll-kiri. Sekalian manfaatin whitespace kiri-kanan
+biar lebih lega (request Denny): padding kiri roll-row 16px->10px, padding tombol edit 5px->3px,
+gap roll-kiri 6px->4px, gap roll-kanan 4px->3px. flex-shrink:0 juga ditambahin di roll-kiri
+(sebelumnya cuma roll-kanan) buat jaga-jaga ekstra.
+Riwayat lengkap: git log.
 ============================================================
 PERUBAHAN ver.53: fix baris roll di grid Stok Kain kebungkus jadi 2-3 baris ("Roll" kepisah dari
 kodenya, "kg" kepisah dari angkanya) di layar/setting font yang lebih sempit dari biasa
@@ -297,19 +307,28 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .warna-detail { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 5px; }
   /* v.45: lebih compact (request Denny poin 4) - padding vertikal dirapatkan 8px->6px, garis
      putus-putus di akhir baris DIBUANG (sebelumnya border-bottom dashed). */
-  .warna-detail .roll-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700; padding: 6px 2px 6px 16px; cursor: pointer; }
+  /* v.54: padding kiri dirapatkan 16px->10px - manfaatin whitespace sebelum "Roll" biar teks
+     lebih lega muat 1 baris (request Denny). */
+  .warna-detail .roll-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700; padding: 6px 2px 6px 10px; cursor: pointer; }
   /* v.53: fix baris roll kebungkus jadi 2 baris ("Roll" kepisah dari kode, "kg" kepisah dari
      angkanya) di layar/setting font yang lebih sempit dari biasa (screenshot Denny) - default
      flex item boleh nyusut sampai lebih kecil dari lebar teksnya sendiri (bikin teksnya
-     wrapping), white-space:nowrap ngunci teks tetap 1 baris. flex-shrink:0 di roll-kanan
-     (angka+tombol edit, isinya udah pasti pendek) biar gak ikut kegencet duluan. */
-  .warna-detail .roll-row .roll-kiri { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+     wrapping), white-space:nowrap ngunci teks tetap 1 baris. flex-shrink:0 biar gak ikut
+     kegencet duluan di kedua sisi.
+     v.54: FIX LANJUTAN - ver.53 taruh nowrap di ".roll-kiri", tapi 2 dari 3 varian baris roll
+     (roll kode kosong & roll yang belum pernah kepakai) ternyata nulis "Roll ..." sebagai bare
+     <span> TANPA class roll-kiri (miss di JS renderBarisRoll_, bukan CSS-nya) - jadi gak ikut
+     kena proteksi nowrap, masih kebungkus kayak sebelumnya. Sudah dibetulkan di renderBarisRoll_
+     (ketiga varian sekarang konsisten pakai class roll-kiri). Gap juga dirapatkan 6px->4px. */
+  .warna-detail .roll-row .roll-kiri { display: flex; align-items: center; gap: 4px; white-space: nowrap; flex-shrink: 0; }
   /* v.42: kolom kanan roll-row (kg + tombol edit) digabung 1 wrapper flex, biar space-between
      tetap kebagi 2 kelompok (kiri vs kanan) walau sekarang ada 2 elemen di kanan. */
-  .warna-detail .roll-row .roll-kanan { display: flex; align-items: center; gap: 4px; white-space: nowrap; flex-shrink: 0; }
+  .warna-detail .roll-row .roll-kanan { display: flex; align-items: center; gap: 3px; white-space: nowrap; flex-shrink: 0; }
   /* v.45: pemisah garis miring antara kode roll & kg (request Denny poin 2) */
   .warna-detail .roll-row .pemisah { color: var(--gray-label); font-weight: 400; margin-right: 1px; }
-  .btn-edit-roll { background: none; border: none; cursor: pointer; font-size: 13px; padding: 4px 5px; line-height: 1; opacity: .55; }
+  /* v.54: padding tombol edit dirapatkan 5px->3px kiri-kanan - manfaatin whitespace setelah
+     icon pensil biar teks kg di sebelahnya lebih lega (request Denny). */
+  .btn-edit-roll { background: none; border: none; cursor: pointer; font-size: 13px; padding: 4px 3px; line-height: 1; opacity: .55; }
   .btn-edit-roll:active { opacity: 1; }
   .warna-detail .roll-row .chev { font-size: 9px; color: var(--gray-label); transition: transform 0.15s; margin-left: -14px; }
   .warna-detail .roll-row.terbuka .chev { transform: rotate(90deg); }
@@ -1501,7 +1520,7 @@ function tombolEditRoll_(r) {
 function renderBarisRoll_(w, r) {
   const kode = r.kodeRoll;
   if (!kode) {
-    return '<div class="roll-row" style="cursor:default"><span>Roll -</span><div class="roll-kanan"><span class="pemisah">/</span><span>' + formatAngka(r.kg) + ' kg</span>' + tombolEditRoll_(r) + '</div></div>';
+    return '<div class="roll-row" style="cursor:default"><span class="roll-kiri">Roll -</span><div class="roll-kanan"><span class="pemisah">/</span><span>' + formatAngka(r.kg) + ' kg</span>' + tombolEditRoll_(r) + '</div></div>';
   }
   // v.45: sebelumnya dicocokkan by kode_roll teks (+warna sejak ver.48) - SEKARANG dicocokkan
   // EXACT by stok_kain id (r.id) lewat riwayatPemakaianData.stokKainId, gak ada lagi celah
@@ -1513,7 +1532,7 @@ function renderBarisRoll_(w, r) {
   const kunci = kunciRoll_(w, r);
   if (jumlahPakai === 0) {
     const disorotBersih = (rollHighlightKunci === kunci);
-    return '<div class="roll-row' + (disorotBersih ? ' disorot' : '') + '" style="cursor:default" data-rollkey="' + escapeAttr(kunci) + '"><span>Roll ' + escapeHtml(kode) + '</span><div class="roll-kanan"><span class="pemisah">/</span><span>' + formatAngka(r.kg) + ' kg</span>' + tombolEditRoll_(r) + '</div></div>';
+    return '<div class="roll-row' + (disorotBersih ? ' disorot' : '') + '" style="cursor:default" data-rollkey="' + escapeAttr(kunci) + '"><span class="roll-kiri">Roll ' + escapeHtml(kode) + '</span><div class="roll-kanan"><span class="pemisah">/</span><span>' + formatAngka(r.kg) + ' kg</span>' + tombolEditRoll_(r) + '</div></div>';
   }
   const terbuka = (rollTerbukaKunci === kunci);
   const disorot = (rollHighlightKunci === kunci);
