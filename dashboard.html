@@ -1,7 +1,14 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.52
+DASHBOARD ver.53
+============================================================
+PERUBAHAN ver.53: fix baris roll di grid Stok Kain kebungkus jadi 2-3 baris ("Roll" kepisah dari
+kodenya, "kg" kepisah dari angkanya) di layar/setting font yang lebih sempit dari biasa
+(screenshot Denny). Penyebab: flex item defaultnya boleh nyusut sampai lebih kecil dari lebar
+teksnya sendiri, bikin teksnya ikut wrapping. Fix: white-space:nowrap di .roll-kiri/.roll-kanan
+(list Stok Habis/Terpakai Sebagian udah aman dari awal, sudah punya nowrap).
+Riwayat lengkap: git log.
 ============================================================
 PERUBAHAN ver.52 (request Denny): urutan chip filter Stok Kain diubah jadi COMBED, POLO,
 Terpakai Sebagian, Nama A-Z, Roll Terbanyak. Icon 👔 di chip POLO dihapus. Murni perubahan
@@ -291,10 +298,15 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   /* v.45: lebih compact (request Denny poin 4) - padding vertikal dirapatkan 8px->6px, garis
      putus-putus di akhir baris DIBUANG (sebelumnya border-bottom dashed). */
   .warna-detail .roll-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700; padding: 6px 2px 6px 16px; cursor: pointer; }
-  .warna-detail .roll-row .roll-kiri { display: flex; align-items: center; gap: 6px; }
+  /* v.53: fix baris roll kebungkus jadi 2 baris ("Roll" kepisah dari kode, "kg" kepisah dari
+     angkanya) di layar/setting font yang lebih sempit dari biasa (screenshot Denny) - default
+     flex item boleh nyusut sampai lebih kecil dari lebar teksnya sendiri (bikin teksnya
+     wrapping), white-space:nowrap ngunci teks tetap 1 baris. flex-shrink:0 di roll-kanan
+     (angka+tombol edit, isinya udah pasti pendek) biar gak ikut kegencet duluan. */
+  .warna-detail .roll-row .roll-kiri { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
   /* v.42: kolom kanan roll-row (kg + tombol edit) digabung 1 wrapper flex, biar space-between
      tetap kebagi 2 kelompok (kiri vs kanan) walau sekarang ada 2 elemen di kanan. */
-  .warna-detail .roll-row .roll-kanan { display: flex; align-items: center; gap: 4px; }
+  .warna-detail .roll-row .roll-kanan { display: flex; align-items: center; gap: 4px; white-space: nowrap; flex-shrink: 0; }
   /* v.45: pemisah garis miring antara kode roll & kg (request Denny poin 2) */
   .warna-detail .roll-row .pemisah { color: var(--gray-label); font-weight: 400; margin-right: 1px; }
   .btn-edit-roll { background: none; border: none; cursor: pointer; font-size: 13px; padding: 4px 5px; line-height: 1; opacity: .55; }
