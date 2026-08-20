@@ -1,7 +1,17 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.54
+DASHBOARD ver.55
+============================================================
+PERUBAHAN ver.55: write-off massal (request Denny) - tombol "☑️ Pilih" admin-only di tab Stok
+Kain (dekat kotak pencarian). Aktif: checkbox muncul di tiap baris roll (lintas warna/filter,
+gak ke-reset pas ganti chip/buka-tutup kartu), tap badan baris = toggle centang (expand & edit
+satuan nonaktif sementara). Muncul bar fixed di bawah: "N roll dipilih" + tombol Write-off. Tap
+sekali -> semua roll yang dicentang ditandai HABIS (kg = kg_sisa masing-masing, reuse endpoint
+/data/writeoff-kain yang sudah ada, dipanggil paralel via Promise.all) - SENGAJA gak ada input kg
+per roll (scope disepakati: "cukup tandai HABIS semua, paling simpel"). Kalau ada yang salah
+pilih, tetap bisa dibatalkan satu-satu lewat riwayat write-off di form edit per-roll.
+Riwayat lengkap: git log.
 ============================================================
 PERUBAHAN ver.54: FIX LANJUTAN dari ver.53 (screenshot Denny nunjukin masih kebungkus) - akar
 masalah sebenarnya BUKAN cuma soal CSS, tapi renderBarisRoll_ (JS) taruh "Roll ..." sebagai bare
@@ -214,6 +224,17 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .filter-chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 10px; }
   .chip { flex-shrink: 0; padding: 8px 14px; border-radius: 20px; border: 1px solid var(--border); background: #fff; font-size: 13px; font-weight: 600; cursor: pointer; color: #374151; white-space: nowrap; }
   .chip.active { background: var(--indigo); color: #fff; border-color: var(--indigo); }
+
+  /* v.55: write-off massal (request Denny) - tombol toggle mode Pilih, checkbox per-roll pas
+     mode aktif, dan bar fixed di bawah layar buat aksinya. */
+  .btn-pilih-massal { display: inline-block; margin-bottom: 10px; padding: 7px 14px; border-radius: 20px; border: 1.5px solid var(--indigo); background: #fff; color: var(--indigo); font-size: 12.5px; font-weight: 700; cursor: pointer; }
+  .btn-pilih-massal.aktif { background: var(--indigo); color: #fff; }
+  .warna-detail .roll-row.roll-row-pilih { cursor: pointer; }
+  .warna-detail .roll-row.roll-row-pilih.dicentang { background: #EEF0FF; margin: 0 -2px; padding-left: 8px; border-radius: 8px; }
+  .cb-pilih-roll { width: 16px; height: 16px; flex-shrink: 0; margin: 0 2px 0 0; }
+  .bar-pilih-massal { position: fixed; left: 0; right: 0; bottom: 0; background: #1c1c1e; color: #fff; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); display: flex; align-items: center; justify-content: space-between; gap: 10px; z-index: 998; box-shadow: 0 -2px 10px rgba(0,0,0,0.2); }
+  .bar-pilih-massal span { font-size: 13px; font-weight: 700; }
+  .bar-pilih-massal button { background: var(--danger); color: #fff; border: none; border-radius: 10px; padding: 10px 16px; font-weight: 700; font-size: 13px; cursor: pointer; flex-shrink: 0; }
 
   .laporan-wrap { background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
   .laporan-card { background: transparent; border-radius: 0; padding: 0; margin: 0; border-top: 1px solid var(--border); }
@@ -472,6 +493,9 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
     </div>
     <div class="section-label">STOK TERSISA PER WARNA</div>
     <input type="text" class="search-box" id="searchWarna" placeholder="Cari nama kain/warna/kode roll...">
+    <!-- v.55: tombol mode "Pilih" (write-off massal) - admin-only, disembunyikan default,
+         dimunculin lewat JS begitu isAdmin kekonfirmasi (sama pola kayak tombol Edit). -->
+    <button class="btn-pilih-massal" id="btnPilihMassal" style="display:none">☑️ Pilih</button>
     <div class="filter-chips">
       <div class="chip active" data-chip="kg">COMBED</div>
       <div class="chip" data-chip="polo">POLO</div>
@@ -486,6 +510,13 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
       <span id="stokHabisChevron">▾</span>
     </div>
     <div class="arsip-list" id="stokHabisList" style="display:none"></div>
+
+    <!-- v.55: bar write-off massal - fixed di bawah layar, cuma kelihatan pas mode Pilih aktif
+         DAN minimal 1 roll dicentang. -->
+    <div class="bar-pilih-massal" id="barPilihMassal" style="display:none">
+      <span id="jumlahDipilihText">0 roll dipilih</span>
+      <button id="btnWriteoffMassal">🗑️ Write-off (tandai habis)</button>
+    </div>
   </div>
 
   <!-- ============ TAB: REKAP QC ============ -->
@@ -587,7 +618,11 @@ if (tg && tg.initData) {
       isAdmin = !!(data.ok && data.isAdmin);
       // v.42: renderWarnaGrid ditambahin ke daftar re-render - biar tombol Edit Stok Kain
       // langsung muncul kalau tab Stok Kain udah kebuka duluan sebelum status admin kekonfirmasi.
-      if (isAdmin) { renderDaftarLaporan(); renderRekapQC(); if (stokUtuhData) renderWarnaGrid(); }
+      // v.55: tombol Pilih (write-off massal) juga admin-only, sama pola.
+      if (isAdmin) {
+        renderDaftarLaporan(); renderRekapQC(); if (stokUtuhData) renderWarnaGrid();
+        document.getElementById('btnPilihMassal').style.display = 'inline-block';
+      }
     })
     .catch(function () { /* diamkan - anggap bukan admin */ });
 }
@@ -635,6 +670,7 @@ document.querySelectorAll('.tab-btn').forEach(function (btn) {
     document.getElementById('pageTitle').textContent = 'DASHBOARD QC';
     if (tab === 'stok' && !stokUtuhData) muatStokUtuh();
     if (tab === 'rekap') muatRekapQC();
+    perbaruiBarPilihMassal_(); // v.55: bar write-off massal cuma boleh kelihatan pas tab Stok Kain aktif
   });
 });
 
@@ -1318,6 +1354,96 @@ function muatStokHabis() {
 // button). Sekarang SEMUA chip filter (termasuk "Kain Polo" baru) digabung 1 state
 // chipStokAktif - klik salah satu OTOMATIS matiin yang lain, gak pernah dobel/gak ada yang aktif.
 let chipStokAktif = 'kg'; // 'kg' | 'nama' | 'roll' | 'terpakai-sebagian' | 'polo'
+
+// v.55: write-off massal (request Denny) - pilih banyak roll (lintas warna/filter), tandai
+// HABIS semua sekali klik (bukan isi kg satu-satu - request Denny: "cukup tandai HABIS semua,
+// paling simpel"). rollTerpilih disimpen {id: {kg, warna, kodeRoll}} - kg diambil dari data
+// yang UDAH ADA di layar (daftarWarnaAktif_), gak perlu fetch ulang pas submit.
+let modePilihMassalAktif = false;
+let rollTerpilih = {};
+
+function cariRollById_(id) {
+  const list = daftarWarnaAktif_();
+  if (!list) return null;
+  for (let i = 0; i < list.length; i++) {
+    const rolls = list[i].rolls;
+    for (let j = 0; j < rolls.length; j++) {
+      if (rolls[j].id === id) return { id: id, kg: rolls[j].kg, warna: list[i].warna, kodeRoll: rolls[j].kodeRoll };
+    }
+  }
+  return null;
+}
+
+function perbaruiBarPilihMassal_() {
+  const bar = document.getElementById('barPilihMassal');
+  const jumlah = Object.keys(rollTerpilih).length;
+  const tabAktif = document.getElementById('tabStok').style.display !== 'none';
+  if (modePilihMassalAktif && jumlah > 0 && tabAktif) {
+    document.getElementById('jumlahDipilihText').textContent = jumlah + ' roll dipilih';
+    bar.style.display = 'flex';
+  } else {
+    bar.style.display = 'none';
+  }
+}
+
+function toggleModePilihMassal_() {
+  modePilihMassalAktif = !modePilihMassalAktif;
+  rollTerpilih = {};
+  const btn = document.getElementById('btnPilihMassal');
+  btn.textContent = modePilihMassalAktif ? '✕ Batal Pilih' : '☑️ Pilih';
+  btn.classList.toggle('aktif', modePilihMassalAktif);
+  renderWarnaGrid();
+  perbaruiBarPilihMassal_();
+}
+
+function toggleRollTerpilih_(id) {
+  if (rollTerpilih[id]) {
+    delete rollTerpilih[id];
+  } else {
+    const info = cariRollById_(id);
+    if (info) rollTerpilih[id] = info;
+  }
+  renderWarnaGrid();
+  perbaruiBarPilihMassal_();
+}
+
+function submitWriteoffMassal_() {
+  const daftar = Object.values(rollTerpilih);
+  if (daftar.length === 0) return;
+  if (!confirm('Tandai ' + daftar.length + ' roll ini HABIS (write-off penuh)?\n\nSemua kg sisa masing-masing roll akan dianggap terpakai. Bisa dibatalkan satu-satu lewat riwayat write-off kalau ada yang salah pilih.')) return;
+
+  const btn = document.getElementById('btnWriteoffMassal');
+  btn.disabled = true;
+  btn.textContent = 'Memproses...';
+
+  Promise.all(daftar.map(function (r) {
+    return fetch(WORKER_URL + '/data/writeoff-kain', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initData: tg.initData, stokKainId: r.id, kg: r.kg, catatan: 'Write-off massal' })
+    }).then(function (resp) { return resp.json(); }).then(function (data) { return { ok: data.ok, roll: r, error: data.error }; });
+  })).then(function (hasil) {
+    btn.disabled = false;
+    btn.textContent = '🗑️ Write-off (tandai habis)';
+    const berhasil = hasil.filter(function (h) { return h.ok; });
+    const gagal = hasil.filter(function (h) { return !h.ok; });
+    if (gagal.length === 0) {
+      tampilkanToast('✓ ' + berhasil.length + ' roll berhasil di-write-off.');
+    } else {
+      tampilkanToast('✓ ' + berhasil.length + ' berhasil, ✗ ' + gagal.length + ' gagal: ' + gagal.map(function (h) { return (h.roll.kodeRoll || '-') + ' (' + h.error + ')'; }).join('; '));
+    }
+    toggleModePilihMassal_(); // keluar mode pilih & bersihin seleksi
+    if (stokHabisDimuat) muatStokHabis();
+    segarkanTerpakaiSebagian_();
+  }).catch(function (e) {
+    btn.disabled = false;
+    btn.textContent = '🗑️ Write-off (tandai habis)';
+    tampilkanToast('Gagal write-off massal: ' + e.message);
+  });
+}
+
+document.getElementById('btnPilihMassal').addEventListener('click', toggleModePilihMassal_);
+document.getElementById('btnWriteoffMassal').addEventListener('click', submitWriteoffMassal_);
+
 let stokTerpakaiSebagianRaw = null; // cache: array flat {id,warna,kodeRoll,kg}
 let sedangMuatTerpakaiSebagian = false;
 
@@ -1519,6 +1645,15 @@ function tombolEditRoll_(r) {
 
 function renderBarisRoll_(w, r) {
   const kode = r.kodeRoll;
+  // v.55: mode Pilih (write-off massal) - render SERAGAM buat semua roll (checkbox + kode + kg),
+  // gak perlu bedain 3 varian normal (kode kosong/belum pernah dipakai/ada riwayat) - toggle
+  // expand & tombol edit-satuan dinonaktifkan sementara, tap badan baris = toggle centang.
+  if (modePilihMassalAktif) {
+    const dicentang = !!rollTerpilih[r.id];
+    return '<div class="roll-row roll-row-pilih' + (dicentang ? ' dicentang' : '') + '" data-pilihroll="' + r.id + '">' +
+      '<div class="roll-kiri"><input type="checkbox" class="cb-pilih-roll" tabindex="-1"' + (dicentang ? ' checked' : '') + '><span>Roll ' + (kode ? escapeHtml(kode) : '-') + '</span></div>' +
+      '<div class="roll-kanan"><span class="pemisah">/</span><span>' + formatAngka(r.kg) + ' kg</span></div></div>';
+  }
   if (!kode) {
     return '<div class="roll-row" style="cursor:default"><span class="roll-kiri">Roll -</span><div class="roll-kanan"><span class="pemisah">/</span><span>' + formatAngka(r.kg) + ' kg</span>' + tombolEditRoll_(r) + '</div></div>';
   }
@@ -1770,6 +1905,12 @@ function batalWriteoff_(writeoffId) {
 // spesifik/di dalam), baru toggle roll, baru toggle kartu warna (paling luar) - biar klik di
 // tombol edit gak ikut kebaca sebagai toggle roll/warna.
 document.getElementById('warnaGrid').addEventListener('click', function (e) {
+  const btnPilih = e.target.closest('[data-pilihroll]');
+  if (btnPilih) {
+    e.stopPropagation();
+    toggleRollTerpilih_(parseInt(btnPilih.dataset.pilihroll, 10));
+    return;
+  }
   const btnEdit = e.target.closest('[data-editstok]');
   if (btnEdit) {
     e.stopPropagation();
