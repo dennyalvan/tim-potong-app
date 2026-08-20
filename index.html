@@ -1,6 +1,22 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+HTML PRODUKSI (Supabase/testproduksi) - ver.28
+============================================================
+PERUBAHAN ver.28: checkbox "Pakai hitungan estimasi" sekarang beneran jalan (sebelumnya cuma
+toggle kosong, gak ngapa-ngapain). Dicentang -> field Kg Kain Terpakai jadi readonly & KOSONG
+(sengaja gak nampilin angka di form, sesuai request Denny) - kg-nya baru dihitung otomatis pas
+tombol "Tambah" dipencet (titik itu qty per ukuran udah lengkap), dari qty x standar kg/pcs
+(tabel standar_pemakaian, lookup by kategori+varian, sudah difetch dari awal ke
+standarPemakaianData). Kalau standarnya belum ada buat varian/ukuran itu, ditolak via toast,
+item GAK jadi masuk antrian (operator harus isi manual). Mutual-exclusive sama "Pakai habis" -
+centang salah satu otomatis uncentang yang lain (dua-duanya sama-sama cara nentuin kg, gak
+masuk akal nyala bareng). Worker/backend TIDAK diubah - kg yang sudah dihitung dikirim persis
+seperti kg manual, gak ada bedanya buat submit-produksi.
+Riwayat lengkap: git log.
+============================================================
+============================================================
+
 HTML PRODUKSI (Supabase/testproduksi) - ver.27
 ============================================================
 PERUBAHAN ver.27 (koreksi fitur Pakai Habis dari ver.26): uncentang checkbox "Pakai habis"
@@ -730,7 +746,7 @@ function renderDetailCard() {
       // --- Kg Kain Terpakai (single, non kombinasi) ---
       html += '<div class="field-row wrap" id="rowKg">' +
         '<div class="frow-line"><span class="flabel">Kg Kain Terpakai</span>' +
-        '<input type="number" id="inputKg" placeholder="0" value="' + (itemBaru.kg || '') + '"' + (itemBaru.pakaiHabis ? ' readonly' : '') + '></div>' +
+        '<input type="number" id="inputKg" placeholder="' + (itemBaru.estimasi ? 'Otomatis' : '0') + '" value="' + (itemBaru.kg || '') + '"' + ((itemBaru.pakaiHabis || itemBaru.estimasi) ? ' readonly' : '') + '></div>' +
         '<div class="kg-warning-text" id="kgWarningInfo" style="display:none;"></div>' +
         // v.25: checkbox "Pakai habis" - dicentang -> Kg Kain Terpakai otomatis diisi dari sisa
         // stok (kg_sisa) kode roll yang lagi kepilih, gak perlu ngetik manual. Field-nya jadi
@@ -904,7 +920,24 @@ function pasangEventDetailCard() {
     cekKg();
   }
   const chkEstimasi = document.getElementById('chkEstimasi');
-  if (chkEstimasi) chkEstimasi.addEventListener('change', function () { itemBaru.estimasi = chkEstimasi.checked; });
+  if (chkEstimasi) {
+    chkEstimasi.addEventListener('change', function () {
+      itemBaru.estimasi = chkEstimasi.checked;
+      if (chkEstimasi.checked && itemBaru.pakaiHabis) {
+        itemBaru.pakaiHabis = false;
+        const chkHabis = document.getElementById('chkPakaiHabis');
+        if (chkHabis) chkHabis.checked = false;
+      }
+      const inputKg = document.getElementById('inputKg');
+      if (inputKg) {
+        inputKg.readOnly = chkEstimasi.checked;
+        inputKg.placeholder = chkEstimasi.checked ? 'Otomatis' : '0';
+        itemBaru.kg = '';
+        inputKg.value = '';
+        cekKgLebih99(inputKg, document.getElementById('kgWarningInfo'));
+      }
+    });
+  }
 
   // v.27 (koreksi v.26): uncentang Pakai Habis SEKARANG ikut mengosongkan angka kg (bukan
   // cuma balikin jadi bisa-diedit sambil angka lama masih nempel) - sesuai request Denny,
@@ -913,9 +946,15 @@ function pasangEventDetailCard() {
   if (chkPakaiHabis) {
     chkPakaiHabis.addEventListener('change', function () {
       itemBaru.pakaiHabis = chkPakaiHabis.checked;
+      if (chkPakaiHabis.checked && itemBaru.estimasi) {
+        itemBaru.estimasi = false;
+        const chkEst = document.getElementById('chkEstimasi');
+        if (chkEst) chkEst.checked = false;
+      }
       const inputKg = document.getElementById('inputKg');
       if (inputKg) {
         inputKg.readOnly = chkPakaiHabis.checked;
+        inputKg.placeholder = '0';
         if (chkPakaiHabis.checked) {
           const kgSisa = cariKgRollTerpilih_(itemBaru.warna, itemBaru.kodeRoll);
           if (kgSisa !== null) { itemBaru.kg = String(kgSisa); inputKg.value = itemBaru.kg; }
@@ -1171,6 +1210,33 @@ function hitungTotalQty() {
 }
 
 // ------------------------------------------------------------
+// ESTIMASI PEMAKAIAN KAIN (dari standar_pemakaian, dipakai checkbox
+// "Pakai hitungan estimasi") - lookup kategori+varian, jumlahkan
+// qty tiap ukuran x kg_per_pcs_<ukuran> standarnya.
+// ------------------------------------------------------------
+function cariStandarPemakaian_(kategori, varianLabel) {
+  return standarPemakaianData.find(function (s) {
+    return String(s.kategori).toLowerCase() === String(kategori).toLowerCase() &&
+      String(s.varian).toLowerCase() === String(varianLabel).toLowerCase();
+  }) || null;
+}
+function hitungKgEstimasi_(it) {
+  const standar = cariStandarPemakaian_(it.kategori, it.varianLabel);
+  if (!standar) return { ok: false, error: 'Standar pemakaian buat varian "' + it.varianLabel + '" belum ada datanya.' };
+  let total = 0;
+  for (const u in it.ukuran) {
+    const qty = it.ukuran[u];
+    if (!qty) continue;
+    const kgPerPcs = standar['kg_per_pcs_' + u.toLowerCase()];
+    if (kgPerPcs === null || kgPerPcs === undefined) {
+      return { ok: false, error: 'Standar pemakaian ukuran ' + u + ' belum ada, isi kg manual dulu.' };
+    }
+    total += qty * parseFloat(kgPerPcs);
+  }
+  return { ok: true, kg: total };
+}
+
+// ------------------------------------------------------------
 // TAMBAH KE DAFTAR / QUEUE
 // ------------------------------------------------------------
 function itemBaruValid() {
@@ -1204,6 +1270,14 @@ document.getElementById('btnTambah').addEventListener('click', function () {
   if (!itemBaruValid()) {
     tampilkanToast('Lengkapi dulu detail item & qty ukuran.');
     return;
+  }
+  if (itemBaru.estimasi) {
+    const hasil = hitungKgEstimasi_(itemBaru);
+    if (!hasil.ok) {
+      tampilkanToast(hasil.error);
+      return;
+    }
+    itemBaru.kg = hasil.kg.toFixed(2);
   }
   daftarAntrian.push(Object.assign({ tempId: ++antrianSeq }, JSON.parse(JSON.stringify(itemBaru))));
   itemBaru = kosongkanItemBaru();
