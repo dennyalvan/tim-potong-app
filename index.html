@@ -1,6 +1,30 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+HTML PRODUKSI (Supabase/testproduksi) - ver.29
+============================================================
+PERUBAHAN ver.29 (request Denny, 3 hal):
+1. FIX: qty per ukuran (kotak XS-6XL) sebelumnya gak ke-reset pas ganti Varian - itemBaru.ukuran
+   sebenarnya udah kereset kosong di data, tapi renderQtyGrid() gak ikut kepanggil di handler
+   klik varian (beda region DOM dari #cardDetail yang di-refresh renderDetailCard), jadi angka
+   yang udah keketik (mis. "12") keliatan masih nempel walau datanya udah kosong. Ditemukan Denny
+   lewat testing.
+2. Checkbox "Pakai Estimasi" sekarang JUGA ada di kombinasi 3 warna (Trico dkk) - request Denny,
+   1x checkbox berlaku buat SEMUA slot warna sekaligus (beda dari "Pakai habis" yang cuma slot
+   pertama). Perhitungan per-posisi: warna[0] = "badan", warna[1]/[2] = "tangan" (kanan & kiri,
+   angka SAMA - simetris, sesuai penjelasan Denny). Butuh kolom baru `posisi` di tabel
+   standar_pemakaian (migrasi Supabase langsung, NULL = standar item tunggal yang sudah ada,
+   'badan'/'tangan' = standar kombinasi baru) - datanya belum diisi Denny (masih proses
+   dikumpulkan), sampai keisi checkbox ini akan nolak via toast "belum ada datanya" kalau
+   dicentang (sama pola kayak item tunggal). Ringer (kombinasi 2 warna) SENGAJA gak disentuh -
+   posisi badan/tangan gak jelas mapping-nya buat 2 warna.
+3. Label checkbox "Pakai hitungan estimasi" dipersingkat jadi "Pakai Estimasi" (item tunggal
+   maupun kombinasi).
+Riwayat lengkap: git log.
+============================================================
+-->
+<!--
+============================================================
 HTML PRODUKSI (Supabase/testproduksi) - ver.28
 ============================================================
 PERUBAHAN ver.28: checkbox "Pakai hitungan estimasi" sekarang beneran jalan (sebelumnya cuma
@@ -753,7 +777,7 @@ function renderDetailCard() {
         // readonly selama dicentang (biar gak konflik sama angka yang diisi otomatis) - uncentang
         // buat balik isi manual.
         '<label class="chk-sub"><input type="checkbox" id="chkPakaiHabis" ' + (itemBaru.pakaiHabis ? 'checked' : '') + '> Pakai habis</label>' +
-        '<label class="chk-sub"><input type="checkbox" id="chkEstimasi" ' + (itemBaru.estimasi ? 'checked' : '') + '> Pakai hitungan estimasi</label>' +
+        '<label class="chk-sub"><input type="checkbox" id="chkEstimasi" ' + (itemBaru.estimasi ? 'checked' : '') + '> Pakai Estimasi</label>' +
         '</div>';
 
       // --- Kode Roll ---
@@ -817,13 +841,20 @@ function renderWarnaKombinasiSection() {
     });
     html += '</div>';
     html += '<div class="ganti-kombinasi"><a id="linkGantiKombinasi">Ganti kombinasi</a></div>';
+    // v.30: checkbox "Pakai Estimasi" - 1x doang, berlaku buat SEMUA slot warna sekaligus (bukan
+    // per-warna kayak "Pakai habis" yang cuma di slot pertama) - request Denny. Perhitungannya
+    // beda per posisi: warna[0] (badan) pakai standar posisi 'badan', warna[1]/[2] (tangan kanan
+    // & kiri) pakai standar posisi 'tangan' yang sama - lihat hitungKgEstimasi_ & handler
+    // btnTambah. Kg-nya BARU dihitung pas tombol Tambah dipencet (sama pola item tunggal),
+    // bukan langsung pas dicentang.
+    html += '<label class="chk-sub"><input type="checkbox" id="chkEstimasiKombi" ' + (itemBaru.kombinasi.estimasi ? 'checked' : '') + '> Pakai Estimasi</label>';
     w.forEach(function (warna, i) {
       html += '<div class="kombi-warna-section">' +
         '<div class="sub-title-row"><span class="sub-title">Kg + Kode Roll - ' + escapeHtml(warna) + '</span>' +
         (i === 0 ? '<label class="chk-sub"><input type="checkbox" id="chkPakaiHabisKombi0" ' + (itemBaru.kombinasi.pakaiHabis0 ? 'checked' : '') + '> Pakai habis</label>' : '') +
         '</div>' +
         '<div class="sub-fields">' +
-        '<input type="number" class="kg-mini" data-kidx="' + i + '" placeholder="kg" value="' + (itemBaru.kombinasi.kg[i] || '') + '"' + (i === 0 && itemBaru.kombinasi.pakaiHabis0 ? ' readonly' : '') + '>' +
+        '<input type="number" class="kg-mini" data-kidx="' + i + '" placeholder="' + (itemBaru.kombinasi.estimasi ? 'Otomatis' : 'kg') + '" value="' + (itemBaru.kombinasi.kg[i] || '') + '"' + ((i === 0 && itemBaru.kombinasi.pakaiHabis0) || itemBaru.kombinasi.estimasi ? ' readonly' : '') + '>' +
         '<input type="text" class="autocomplete-input roll-mini-input" data-kidx="' + i + '" placeholder="Kode roll" autocomplete="off" value="' + escapeAttr(itemBaru.kombinasi.kodeRoll[i] || '') + '">' +
         '</div>' +
         '<div class="kg-warning-text" id="kgWarning-' + i + '" style="display:none;"></div>' +
@@ -888,6 +919,12 @@ function pasangEventDetailCard() {
       }
       openDropdown = null;
       renderDetailCard();
+      // v.29: renderQtyGrid() SEBELUMNYA gak kepanggil di sini - itemBaru.ukuran udah kereset
+      // kosong (lihat kosongkanItemBaru() di atas), tapi kotak-kotak Qty per Size (beda region
+      // DOM dari #cardDetail yang di-refresh renderDetailCard) gak ikut digambar ulang, jadi
+      // angka yang udah keketik (mis. "12") keliatan masih nempel walau datanya sebenarnya udah
+      // kosong. Ditemukan Denny lewat testing (ganti varian, angka lama masih tampil).
+      renderQtyGrid();
       updateBottomBar();
     });
   });
@@ -983,7 +1020,7 @@ function pasangEventDetailCard() {
     el.addEventListener('click', function () {
       const w1w2 = el.dataset.nama.split(' ');
       const w3 = el.dataset.ketiga;
-      itemBaru.kombinasi = { warna: [w1w2[0], w1w2.slice(1).join(' '), w3], kg: ['', '', ''], kodeRoll: [null, null, null], pakaiHabis0: false };
+      itemBaru.kombinasi = { warna: [w1w2[0], w1w2.slice(1).join(' '), w3], kg: ['', '', ''], kodeRoll: [null, null, null], pakaiHabis0: false, estimasi: false };
       openDropdown = null;
       renderDetailCard();
       itemBaru.kombinasi.warna.forEach(function (w, i) { renderKombiRollSuggestions(i, ''); });
@@ -1010,9 +1047,22 @@ function pasangEventDetailCard() {
     chkPakaiHabisKombi0.addEventListener('change', function () {
       if (!itemBaru.kombinasi) return;
       itemBaru.kombinasi.pakaiHabis0 = chkPakaiHabisKombi0.checked;
+      // v.30: mutual-exclusive sama "Pakai Estimasi" (dua-duanya sama-sama cara nentuin kg
+      // otomatis, gak masuk akal nyala bareng) - matiin estimasi & kembaliin slot 2/3 bisa
+      // diedit manual lagi kalau tadinya lagi estimasi.
+      if (chkPakaiHabisKombi0.checked && itemBaru.kombinasi.estimasi) {
+        itemBaru.kombinasi.estimasi = false;
+        const chkEst = document.getElementById('chkEstimasiKombi');
+        if (chkEst) chkEst.checked = false;
+        [1, 2].forEach(function (idx) {
+          const kgInputLain = document.querySelector('.kg-mini[data-kidx="' + idx + '"]');
+          if (kgInputLain) { kgInputLain.readOnly = false; kgInputLain.placeholder = 'kg'; }
+        });
+      }
       const kgInput0 = document.querySelector('.kg-mini[data-kidx="0"]');
       if (kgInput0) {
         kgInput0.readOnly = chkPakaiHabisKombi0.checked;
+        kgInput0.placeholder = 'kg';
         if (chkPakaiHabisKombi0.checked) {
           const kgSisa = cariKgRollTerpilih_(itemBaru.kombinasi.warna[0], itemBaru.kombinasi.kodeRoll[0]);
           if (kgSisa !== null) { itemBaru.kombinasi.kg[0] = String(kgSisa); kgInput0.value = itemBaru.kombinasi.kg[0]; }
@@ -1022,6 +1072,34 @@ function pasangEventDetailCard() {
         }
         cekKgLebih99(kgInput0, document.getElementById('kgWarning-0'));
       }
+    });
+  }
+
+  // v.30: checkbox "Pakai Estimasi" (khusus kombinasi 3 warna/Trico, request Denny) - berlaku
+  // buat SEMUA slot warna sekaligus (beda dari "Pakai habis" yang cuma slot pertama). Sama pola
+  // kayak checkbox di atas - manipulasi DOM langsung, BUKAN renderDetailCard(), biar suggestion
+  // roll di tiap slot gak ke-reset. Kg-nya BARU kehitung pas tombol Tambah dipencet (lihat
+  // handler btnTambah) - di sini cuma ngunci field jadi readonly & kosong.
+  const chkEstimasiKombi = document.getElementById('chkEstimasiKombi');
+  if (chkEstimasiKombi) {
+    chkEstimasiKombi.addEventListener('change', function () {
+      if (!itemBaru.kombinasi) return;
+      itemBaru.kombinasi.estimasi = chkEstimasiKombi.checked;
+      if (chkEstimasiKombi.checked && itemBaru.kombinasi.pakaiHabis0) {
+        itemBaru.kombinasi.pakaiHabis0 = false;
+        const chkHabis0 = document.getElementById('chkPakaiHabisKombi0');
+        if (chkHabis0) chkHabis0.checked = false;
+      }
+      itemBaru.kombinasi.warna.forEach(function (w, idx) {
+        itemBaru.kombinasi.kg[idx] = '';
+        const kgInput = document.querySelector('.kg-mini[data-kidx="' + idx + '"]');
+        if (kgInput) {
+          kgInput.readOnly = chkEstimasiKombi.checked;
+          kgInput.placeholder = chkEstimasiKombi.checked ? 'Otomatis' : 'kg';
+          kgInput.value = '';
+          cekKgLebih99(kgInput, document.getElementById('kgWarning-' + idx));
+        }
+      });
     });
   }
 
@@ -1211,25 +1289,32 @@ function hitungTotalQty() {
 
 // ------------------------------------------------------------
 // ESTIMASI PEMAKAIAN KAIN (dari standar_pemakaian, dipakai checkbox
-// "Pakai hitungan estimasi") - lookup kategori+varian, jumlahkan
-// qty tiap ukuran x kg_per_pcs_<ukuran> standarnya.
+// "Pakai Estimasi") - lookup kategori+varian(+posisi buat kombinasi),
+// jumlahkan qty tiap ukuran x kg_per_pcs_<ukuran> standarnya.
+// v.30: parameter posisi ditambahkan (opsional) - item TUNGGAL manggil tanpa posisi (match baris
+// standar yang posisi-nya NULL, perilaku SAMA PERSIS kayak sebelumnya). Item KOMBINASI (mis.
+// Trico: badan + tangan kanan + tangan kiri, request Denny) manggil dengan posisi 'badan' atau
+// 'tangan' - 2 baris terpisah per varian di standar_pemakaian, "tangan" dipakai buat kanan
+// MAUPUN kiri (angkanya sama, simetris).
 // ------------------------------------------------------------
-function cariStandarPemakaian_(kategori, varianLabel) {
+function cariStandarPemakaian_(kategori, varianLabel, posisi) {
   return standarPemakaianData.find(function (s) {
     return String(s.kategori).toLowerCase() === String(kategori).toLowerCase() &&
-      String(s.varian).toLowerCase() === String(varianLabel).toLowerCase();
+      String(s.varian).toLowerCase() === String(varianLabel).toLowerCase() &&
+      (posisi ? String(s.posisi || '').toLowerCase() === String(posisi).toLowerCase() : !s.posisi);
   }) || null;
 }
-function hitungKgEstimasi_(it) {
-  const standar = cariStandarPemakaian_(it.kategori, it.varianLabel);
-  if (!standar) return { ok: false, error: 'Standar pemakaian buat varian "' + it.varianLabel + '" belum ada datanya.' };
+function hitungKgEstimasi_(it, posisi) {
+  const standar = cariStandarPemakaian_(it.kategori, it.varianLabel, posisi);
+  const labelPosisi = posisi ? ' posisi "' + posisi + '"' : '';
+  if (!standar) return { ok: false, error: 'Standar pemakaian buat varian "' + it.varianLabel + '"' + labelPosisi + ' belum ada datanya.' };
   let total = 0;
   for (const u in it.ukuran) {
     const qty = it.ukuran[u];
     if (!qty) continue;
     const kgPerPcs = standar['kg_per_pcs_' + u.toLowerCase()];
     if (kgPerPcs === null || kgPerPcs === undefined) {
-      return { ok: false, error: 'Standar pemakaian ukuran ' + u + ' belum ada, isi kg manual dulu.' };
+      return { ok: false, error: 'Standar pemakaian ukuran ' + u + labelPosisi + ' belum ada, isi kg manual dulu.' };
     }
     total += qty * parseFloat(kgPerPcs);
   }
@@ -1256,6 +1341,9 @@ function itemBaruValid() {
   }
   if (itemBaru.isKombinasi || (itemBaru.varianLabel && isVarianRinger(itemBaru.varianLabel))) {
     if (!itemBaru.kombinasi) return false;
+    // v.30: kalau "Pakai Estimasi" aktif, kg-nya SENGAJA kosong (baru dihitung pas Tambah
+    // dipencet) - jangan ditolak validasi cuma gara-gara kg kosong, warna tetap wajib ada.
+    if (itemBaru.kombinasi.estimasi) return itemBaru.kombinasi.warna.every(function (w) { return !!w; });
     return itemBaru.kombinasi.warna.every(function (w, i) { return w && itemBaru.kombinasi.kg[i]; });
   }
   return !!itemBaru.varianLabel && !!itemBaru.warna;
@@ -1278,6 +1366,19 @@ document.getElementById('btnTambah').addEventListener('click', function () {
       return;
     }
     itemBaru.kg = hasil.kg.toFixed(2);
+  }
+  // v.30: kombinasi 3 warna (Trico dkk) - warna[0]=badan, warna[1]/[2]=tangan kanan & kiri
+  // (angka sama, simetris). Lihat catatan panjang di hitungKgEstimasi_/section render.
+  if (itemBaru.kombinasi && itemBaru.kombinasi.estimasi) {
+    const posisiPerSlot = ['badan', 'tangan', 'tangan'];
+    for (let i = 0; i < itemBaru.kombinasi.warna.length; i++) {
+      const hasilKombi = hitungKgEstimasi_(itemBaru, posisiPerSlot[i] || 'tangan');
+      if (!hasilKombi.ok) {
+        tampilkanToast(hasilKombi.error);
+        return;
+      }
+      itemBaru.kombinasi.kg[i] = hasilKombi.kg.toFixed(2);
+    }
   }
   daftarAntrian.push(Object.assign({ tempId: ++antrianSeq }, JSON.parse(JSON.stringify(itemBaru))));
   itemBaru = kosongkanItemBaru();
