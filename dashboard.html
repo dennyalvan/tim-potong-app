@@ -1,7 +1,14 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.55
+DASHBOARD ver.56
+============================================================
+PERUBAHAN ver.56: chip filter baru "🏷️ Tanpa Kode Roll" di tab Stok Kain (request Denny) - roll
+yang kode_roll-nya kosong/null, dikelompokkan ulang per warna (kg & jumlah roll dihitung ulang
+dari yang kosong doang). Murni client-side, gak perlu endpoint baru - sama pola kayak POLO.
+SENGAJA gak ngaruh ke COMBED (beda dari POLO yang memang diminta dikeluarin dari COMBED) - roll
+tanpa kode tetap muncul normal di COMBED/POLO, ini cuma lensa tambahan buat gampang nemuinnya.
+Riwayat lengkap: git log.
 ============================================================
 PERUBAHAN ver.55: write-off massal (request Denny) - tombol "☑️ Pilih" admin-only di tab Stok
 Kain (dekat kotak pencarian). Aktif: checkbox muncul di tiap baris roll (lintas warna/filter,
@@ -500,6 +507,7 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
       <div class="chip active" data-chip="kg">COMBED</div>
       <div class="chip" data-chip="polo">POLO</div>
       <div class="chip" data-chip="terpakai-sebagian">🔄 Terpakai Sebagian</div>
+      <div class="chip" data-chip="tanpa-kode">🏷️ Tanpa Kode Roll</div>
       <div class="chip" data-chip="nama">Nama A-Z</div>
       <div class="chip" data-chip="roll">Roll Terbanyak</div>
     </div>
@@ -1466,6 +1474,20 @@ function daftarWarnaAktif_() {
   // v.50: "Kain Polo" - filter client-side doang (gak perlu endpoint baru), warna yang namanya
   // DIAWALI "POLO " (mis. "POLO MAROON", "POLO ST. BLUE") - request Denny.
   if (chipStokAktif === 'polo') return stokUtuhData.perWarna.filter(function (w) { return w.warna.toUpperCase().indexOf('POLO ') === 0; });
+  // v.56: "Tanpa Kode Roll" - roll yang kode_roll-nya kosong/null (request Denny), buat gampang
+  // nemuin roll yang belum sempat dikasih kode. Murni client-side juga - ambil cuma roll yang
+  // !kodeRoll dari tiap grup warna, KELOMPOKKAN ULANG (kg/jumlah roll dihitung ulang dari yang
+  // kosong doang), warna yang gak punya roll tanpa kode gak ikut muncul di list ini.
+  if (chipStokAktif === 'tanpa-kode') {
+    const hasil = [];
+    stokUtuhData.perWarna.forEach(function (w) {
+      const rollsKosong = w.rolls.filter(function (r) { return !r.kodeRoll; });
+      if (rollsKosong.length > 0) {
+        hasil.push({ warna: w.warna, totalKg: rollsKosong.reduce(function (s, r) { return s + r.kg; }, 0), jumlahRoll: rollsKosong.length, rolls: rollsKosong });
+      }
+    });
+    return hasil;
+  }
   // v.51: COMBED (kg/nama/roll) - warna POLO DIKELUARKAN, sudah punya kategori/chip sendiri
   // (request Denny: "jangan tampilkan list kain polo karena kain polo sudah terpisah di tab
   // polo"). Berlaku buat ke-3 chip ini (kg, nama, roll) - bukan cuma yang lagi aktif - karena
@@ -1977,7 +1999,7 @@ document.querySelectorAll('.chip[data-chip]').forEach(function (el) {
   el.addEventListener('click', function () {
     const nilai = el.dataset.chip;
     if (nilai === chipStokAktif) return;
-    const basisKhusus = ['terpakai-sebagian', 'polo'];
+    const basisKhusus = ['terpakai-sebagian', 'polo', 'tanpa-kode'];
     const gantiBasisData = basisKhusus.indexOf(nilai) !== -1 || basisKhusus.indexOf(chipStokAktif) !== -1;
     document.querySelectorAll('.chip[data-chip]').forEach(function (c) { c.classList.remove('active'); });
     el.classList.add('active');
