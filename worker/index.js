@@ -1,4 +1,17 @@
 // ============================================================
+// CODE WORKER PRODUKSI ver.47
+// ============================================================
+// PERUBAHAN ver.47 (fix bug, request Denny): root cause "Varian kosong di Rekap QC" buat item
+// warna polos tanpa prefix (mis. "MERAH") - fallback tanpa-prefix di cariKategoriQC_/
+// ambilDaftarPrefixQC_ SEBELUMNYA cuma nyimpen string kategori_qc doang, BUKAN baris lengkapnya,
+// jadi hasil fallback kehilangan field varian sama sekali (kategori ketemu "ANAK PENDEK", tapi
+// varian-nya hilang - akhirnya log_qc.varian tersimpan null). Sekarang nyimpen baris lengkap
+// (kategoriQc + varian), DIKECUALIKAN baris yang varian-nya mengandung "KOMBINASI" (butuh
+// cocokin ke tabel kombinasi_warna terpisah yang gak dicek fungsi ini) - biar warna polos biasa
+// kayak MERAH gak ketebak salah jadi kategori kombinasi. Hasilnya: MERAH & sejenisnya sekarang
+// resolve ke varian "ANAK POLOS" (kategori ANAK PENDEK). CUMA berlaku ke submit QC BARU - data
+// historis yang sudah kepalang null gak otomatis ke-backfill (didiskusikan terpisah sama Denny).
+// ============================================================
 // CODE WORKER PRODUKSI ver.46
 // ============================================================
 // PERUBAHAN ver.46 (request Denny): handleSubmitProduksi_ sekarang nyimpen sumber kg (manual/
@@ -2019,14 +2032,21 @@ async function ambilDaftarPrefixQC_(env) {
     .map(function (r) { return { prefix: String(r.prefix_sheet).trim().toUpperCase(), kategoriQc: r.kategori_qc, varian: r.varian }; })
     .sort(function (a, b) { return b.prefix.length - a.prefix.length; }); // terpanjang dulu
 
-  // Fallback: kategori yang punya varian TANPA prefix sama sekali (mis. item cuma nama warna
-  // polos) - kalau CUMA ADA 1 kategori kayak gitu, itu dipakai sebagai fallback pas nama item
-  // gak cocok ke prefix manapun. Porting persis dari cariKategoriTimQC() (Apps Script).
-  const tanpaPrefixSet = {};
-  rows.forEach(function (r) {
-    if (!String(r.prefix_sheet || '').trim()) tanpaPrefixSet[r.kategori_qc] = true;
-  });
-  const kategoriTanpaPrefix = Object.keys(tanpaPrefixSet);
+  // v.47 (fix bug, request Denny): fallback "tanpa prefix" SEBELUMNYA cuma nyimpen string
+  // kategori_qc doang (tanpaPrefixSet), BUKAN baris lengkapnya - jadi pas dipakai di
+  // cariKategoriQC_, hasilnya { kategoriQc } TANPA varian sama sekali (root cause "MERAH" gak
+  // ke-isi varian ANAK PENDEK di Rekap QC - kategori-nya ketemu, tapi varian-nya ilang).
+  // Sekarang nyimpen baris LENGKAP (kategoriQc + varian). Dikecualikan baris yang varian-nya
+  // mengandung "KOMBINASI" (mis. id=2 "ANAK PENDEK KOMBINASI") - itu butuh cocokin ke daftar
+  // warna kombinasi (tabel kombinasi_warna) yang gak dicek di fungsi simpel ini, jadi kalau ikut
+  // dianggap fallback generik, MERAH (warna polos biasa) bisa ke-tebak salah jadi KOMBINASI
+  // padahal harusnya ANAK POLOS. Kalau setelah dikecualikan cuma tersisa 1 baris (kasus normal
+  // sekarang: "ANAK POLOS"), itu yang dipakai sebagai fallback item tanpa prefix apa pun.
+  const kategoriTanpaPrefix = rows
+    .filter(function (r) {
+      return !String(r.prefix_sheet || '').trim() && String(r.varian || '').toUpperCase().indexOf('KOMBINASI') === -1;
+    })
+    .map(function (r) { return { kategoriQc: r.kategori_qc, varian: r.varian }; });
 
   return { daftarPrefix: daftarPrefix, kategoriTanpaPrefix: kategoriTanpaPrefix };
 }
@@ -2042,7 +2062,7 @@ function cariKategoriQC_(namaItem, info) {
       if (setelah === '' || setelah === ' ' || setelah === '-') return daftarPrefix[i];
     }
   }
-  if (info.kategoriTanpaPrefix.length === 1) return { kategoriQc: info.kategoriTanpaPrefix[0] };
+  if (info.kategoriTanpaPrefix.length === 1) return info.kategoriTanpaPrefix[0];
   return null;
 }
 
