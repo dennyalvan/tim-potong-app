@@ -1,6 +1,17 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+DASHBOARD ver.60
+============================================================
+PERUBAHAN ver.60 (request Denny): dropdown filter varian di tab Rekap QC di-restyle - dari native
+<select> jadi dropdown custom (trigger row + list div) yang tampilannya kayak dropdown "Varian" di
+Input Produksi: kartu rounded, baris bergantian warna pucat siklus 6 warna (CSS nth-child), teks
+tebal. Warna dituning ke palet indigo dashboard sendiri (var(--indigo)/var(--border)), bukan
+nyontek biru dari index.html mentah-mentah - biar nyambung ke tema dashboard yang ungu. Baris yang
+lagi aktif dikasih highlight solid var(--indigo). Logic filter (filterVarianRekapAktif, dampak ke
+renderRekapQC) TIDAK berubah - murni ganti tampilan & cara pilihnya, bukan cara kerja filternya.
+Riwayat lengkap: git log.
+============================================================
 DASHBOARD ver.59
 ============================================================
 PERUBAHAN ver.59 (request Denny: "terapkan juga untuk semua elemen di miniapp dan Supabase") -
@@ -265,7 +276,23 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .pending-pill { display: inline-block; background: var(--surface-2); color: var(--indigo); font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px; margin-bottom: 8px; }
 
   .search-box { width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; font-size: 14px; margin-bottom: 8px; background: #fff; }
-  .filter-select { padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; font-size: 12.5px; font-weight: 600; color: var(--gray-text); background: #fff; margin-bottom: 8px; max-width: 100%; }
+  /* v.60 (request Denny): dropdown filter varian Rekap QC restyle - dibikin kayak dropdown
+     "Varian" di Input Produksi (kartu rounded, baris bergantian warna pucat siklus 6 warna,
+     teks tebal) - BUKAN native <select> lagi. Warna dituning ke palet indigo dashboard sendiri
+     (var(--indigo)/var(--border)), bukan biru dari index.html - biar nyambung ke tema di sini.
+  */
+  .varian-filter-trigger { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border: 1px solid var(--border); border-radius: 12px; background: #fff; font-size: 13px; font-weight: 700; color: var(--navy-dark); margin-bottom: 8px; cursor: pointer; }
+  .varian-filter-trigger .chevron { color: var(--gray-label); font-size: 11px; margin-left: 8px; }
+  .varian-filter-list { max-height: 260px; overflow-y: auto; overflow-x: hidden; margin-bottom: 8px; border-radius: 14px; border: 1px solid var(--border); }
+  .varian-filter-item { padding: 10px 14px; font-weight: 600; font-size: 13.5px; cursor: pointer; color: var(--navy-dark); border-bottom: 0.5px solid rgba(0,0,0,.06); }
+  .varian-filter-item:last-child { border-bottom: none; }
+  .varian-filter-item:nth-child(6n+1) { background: #F5F4FB; }
+  .varian-filter-item:nth-child(6n+2) { background: #EFECF8; }
+  .varian-filter-item:nth-child(6n+3) { background: #F8F6FC; }
+  .varian-filter-item:nth-child(6n+4) { background: #EBE8F6; }
+  .varian-filter-item:nth-child(6n+5) { background: #F2F0FA; }
+  .varian-filter-item:nth-child(6n+0) { background: #E8E5F4; }
+  .varian-filter-item.aktif { background: var(--indigo); color: #fff; }
   .count-label { font-size: 12px; color: var(--gray-text); margin-bottom: 8px; }
   .filter-chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 10px; }
   .chip { flex-shrink: 0; padding: 8px 14px; border-radius: 20px; border: 1px solid var(--border); background: #fff; font-size: 13px; font-weight: 600; cursor: pointer; color: #374151; white-space: nowrap; }
@@ -574,8 +601,14 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
     <div class="section-label">REKAP QC</div>
     <input type="text" class="search-box" id="searchRekap" placeholder="Cari warna/varian...">
     <!-- v.57: filter varian (request Denny) - dropdown biar hemat tempat dibanding baris chip
-         (varian bisa banyak macam). Opsi diisi otomatis dari data yang lagi ke-load. -->
-    <select class="filter-select" id="filterVarianRekap"><option value="">Semua Varian</option></select>
+         (varian bisa banyak macam). Opsi diisi otomatis dari data yang lagi ke-load.
+         v.60: restyle dari native <select> jadi dropdown custom (trigger + list), biar bisa
+         dikasih styling siklus warna kayak dropdown Varian di Input Produksi (request Denny). -->
+    <div class="varian-filter-trigger" id="filterVarianRekapTrigger">
+      <span id="filterVarianRekapValue">Semua Varian</span>
+      <span class="chevron">▾</span>
+    </div>
+    <div class="varian-filter-list" id="filterVarianRekapList" style="display:none"></div>
     <p class="rekap-summary" id="rekapSummary">Memuat...</p>
     <div class="rekap-wrap">
       <div id="rekapList"></div>
@@ -693,6 +726,7 @@ let sortWarna = 'kg';
 let searchWarnaQuery = '';
 let searchRekapQuery = '';
 let filterVarianRekapAktif = ''; // v.57: dropdown filter varian di tab Rekap QC (request Denny)
+let filterVarianRekapTerbuka = false; // v.60: state buka/tutup dropdown custom (bukan native <select> lagi)
 // v.45: sebelumnya object {warna: true/false} - beberapa card warna bisa kebuka BARENGAN.
 // Sekarang single value (null = semua tertutup) - accordion, buka 1 card otomatis nutup yang
 // lain (request Denny poin 3).
@@ -2071,9 +2105,12 @@ document.getElementById('searchRekap').addEventListener('input', function () {
   searchRekapQuery = this.value;
   renderRekapQC();
 });
-document.getElementById('filterVarianRekap').addEventListener('change', function () {
-  filterVarianRekapAktif = this.value;
-  renderRekapQC();
+// v.60: trigger custom dropdown (ganti dari native <select> 'change') - klik buka/tutup list.
+// Pemilihan item-nya sendiri ditangani di perbaruiOpsiFilterVarian_ (listener dipasang ulang
+// tiap list di-render, sama pola kayak chip/suggestion lain di file ini).
+document.getElementById('filterVarianRekapTrigger').addEventListener('click', function () {
+  filterVarianRekapTerbuka = !filterVarianRekapTerbuka;
+  document.getElementById('filterVarianRekapList').style.display = filterVarianRekapTerbuka ? 'block' : 'none';
 });
 // v.50: 1 handler buat SEMUA chip filter Stok Kain (kg/nama/roll/terpakai-sebagian/polo) -
 // single-select murni (request Denny): klik salah satu SELALU matiin ke-4 lainnya, gak pernah
@@ -2157,17 +2194,33 @@ function formatWaktuRekap(waktuIso) {
 // v.57: isi opsi dropdown filter varian dari data yang lagi ke-load (client-side, gak perlu
 // endpoint baru - sama pola kayak chip "Kain Polo"/"Tanpa Kode Roll" di Stok Kain). Dicek dulu
 // pakai "kunci" gabungan opsi - kalau daftar varian gak berubah dari render sebelumnya, innerHTML
-// GAK ditulis ulang, biar pilihan dropdown yang lagi aktif gak kereset tiap kali data di-refresh
-// (Realtime bisa manggil render ini tiap 800ms kalau ada perubahan).
+// GAK ditulis ulang (Realtime bisa manggil render ini tiap 800ms kalau ada perubahan) - selain
+// hemat kerja, ini juga jaga posisi scroll list gak kereset kalau lagi kebuka & dataset gak ganti.
+// v.60: dropdown-nya sendiri sekarang custom (trigger + list div), bukan native <select> lagi
+// (request Denny: restyle biar kayak dropdown "Varian" di Input Produksi) - jadi yang di-render
+// di sini bukan <option>, tapi baris .varian-filter-item yang background-nya siklus 6 warna
+// (CSS nth-child) + listener klik per baris buat milih & nutup dropdown.
 function perbaruiOpsiFilterVarian_(items) {
-  const select = document.getElementById('filterVarianRekap');
+  const list = document.getElementById('filterVarianRekapList');
   const unik = Array.from(new Set(items.map(function (it) { return it.varian; }).filter(Boolean))).sort();
-  const kunciBaru = unik.join('|');
-  if (select.dataset.kunci === kunciBaru) return;
-  select.dataset.kunci = kunciBaru;
-  select.innerHTML = '<option value="">Semua Varian</option>' + unik.map(function (v) {
-    return '<option value="' + escapeAttr(v) + '"' + (v === filterVarianRekapAktif ? ' selected' : '') + '>' + escapeHtml(v) + '</option>';
+  const kunciBaru = unik.join('|') + '::' + filterVarianRekapAktif;
+  if (list.dataset.kunci === kunciBaru) return;
+  list.dataset.kunci = kunciBaru;
+  const semuaOpsi = [''].concat(unik); // '' = "Semua Varian"
+  list.innerHTML = semuaOpsi.map(function (v) {
+    const label = v || 'Semua Varian';
+    const aktifClass = (v === filterVarianRekapAktif) ? ' aktif' : '';
+    return '<div class="varian-filter-item' + aktifClass + '" data-varian="' + escapeAttr(v) + '">' + escapeHtml(label) + '</div>';
   }).join('');
+  list.querySelectorAll('[data-varian]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      filterVarianRekapAktif = el.dataset.varian;
+      filterVarianRekapTerbuka = false;
+      list.style.display = 'none';
+      renderRekapQC();
+    });
+  });
+  document.getElementById('filterVarianRekapValue').textContent = filterVarianRekapAktif || 'Semua Varian';
 }
 
 function renderRekapQC() {
