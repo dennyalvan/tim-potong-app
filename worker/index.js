@@ -1,4 +1,13 @@
 // ============================================================
+// CODE WORKER PRODUKSI ver.46
+// ============================================================
+// PERUBAHAN ver.46 (request Denny): handleSubmitProduksi_ sekarang nyimpen sumber kg (manual/
+// "Pakai Habis"/"Pakai Estimasi") ke kolom baru tim_potong.sumber_kg - dikirim dari Mini App
+// lewat payload.kgSumber (item tunggal), payload.kombinasi.kgSumber[] (kombinasi, per slot -
+// slot 1/2 disimpan di dalam ref_stok.sumberKg), atau payload.kgSumber1/kgSumber2 (custom).
+// Ini GANTI dari sebelumnya nampilin "[Pakai Habis]"/"[Estimasi]" di teks Telegram - sekarang
+// keterangan itu cuma di antrian Mini App & kolom database ini, gak lagi masuk pesan Telegram.
+// ============================================================
 // CODE WORKER PRODUKSI ver.45
 // ============================================================
 // PERUBAHAN ver.45: fix bug FUNDAMENTAL di fitur "Riwayat Pemakaian" (dashboard) - dibuktikan
@@ -2359,7 +2368,7 @@ async function handleSubmitProduksi_(body, env) {
     const jumlah = Object.keys(ukuran).reduce(function (s, k) { return s + (parseFloat(ukuran[k]) || 0); }, 0);
     if (jumlah <= 0) return jsonResponse({ ok: false, error: 'Item ke-' + (i + 1) + ': tidak ada qty ukuran yang diisi.' }, 400);
 
-    let namaItem, kgUtama, kodeRollUtama, refStok = null, warnaCustomUtama = null;
+    let namaItem, kgUtama, kodeRollUtama, refStok = null, warnaCustomUtama = null, sumberKgUtama = null;
 
     if (it.kombinasi) {
       // Item KOMBINASI (2-3 warna) - porting konsep "RefStok": baris ini nama-nya gabungan
@@ -2370,6 +2379,7 @@ async function handleSubmitProduksi_(body, env) {
       const warnaArr = Array.isArray(kb.warna) ? kb.warna.map(function (w) { return String(w || '').trim().toUpperCase(); }) : [];
       const kgArr = Array.isArray(kb.kg) ? kb.kg.map(function (v) { return parseFloat(v) || 0; }) : [];
       const rollArr = Array.isArray(kb.kodeRoll) ? kb.kodeRoll.map(function (r) { return r ? String(r).trim() : null; }) : [];
+      const sumberKgArr = Array.isArray(kb.kgSumber) ? kb.kgSumber : [];
       if (warnaArr.length < 2 || warnaArr.length > 3 || warnaArr.some(function (w) { return !w; })) {
         return jsonResponse({ ok: false, error: 'Item ke-' + (i + 1) + ': kombinasi harus 2 atau 3 warna, semua wajib diisi.' }, 400);
       }
@@ -2377,9 +2387,10 @@ async function handleSubmitProduksi_(body, env) {
       namaItem = (awalan ? awalan + ' ' : '') + warnaArr[0] + ' ' + warnaArr[1];
       kgUtama = kgArr[0] || null;
       kodeRollUtama = rollArr[0] || null;
+      sumberKgUtama = sumberKgArr[0] || null;
       refStok = [];
       for (let k = 1; k < warnaArr.length; k++) {
-        refStok.push({ warna: warnaArr[k], kg: kgArr[k] || 0, kodeRoll: rollArr[k] });
+        refStok.push({ warna: warnaArr[k], kg: kgArr[k] || 0, kodeRoll: rollArr[k], sumberKg: sumberKgArr[k] || null });
       }
     } else if (it.custom) {
       // v.16: warna1/warna2 EKSPLISIT (bukan nebak dari namaCustom yang bebas format kayak
@@ -2392,6 +2403,7 @@ async function handleSubmitProduksi_(body, env) {
       const warna1_ = it.warna1 ? String(it.warna1).trim().toUpperCase() : null;
       kgUtama = it.kg1 != null && it.kg1 !== '' ? parseFloat(it.kg1) : null;
       kodeRollUtama = it.kodeRoll1 ? String(it.kodeRoll1).trim() : null;
+      sumberKgUtama = it.kgSumber1 || null;
       if (kgUtama && !warna1_) {
         return jsonResponse({ ok: false, error: 'Item ke-' + (i + 1) + ': kg diisi tapi warna 1 kosong - gak jelas mau potong stok warna apa.' }, 400);
       }
@@ -2402,7 +2414,7 @@ async function handleSubmitProduksi_(body, env) {
         if (!kg2_ || kg2_ <= 0) {
           return jsonResponse({ ok: false, error: 'Item ke-' + (i + 1) + ': warna ke-2 "' + warna2_ + '" butuh kg lebih dari 0.' }, 400);
         }
-        refStok = [{ warna: warna2_, kg: kg2_, kodeRoll: it.kodeRoll2 ? String(it.kodeRoll2).trim() : null }];
+        refStok = [{ warna: warna2_, kg: kg2_, kodeRoll: it.kodeRoll2 ? String(it.kodeRoll2).trim() : null, sumberKg: it.kgSumber2 || null }];
       }
     } else {
       const awalan = bikinAwalan_(it.kategori, it.kodeItem);
@@ -2411,12 +2423,14 @@ async function handleSubmitProduksi_(body, env) {
       namaItem = (awalan ? awalan + ' ' : '') + warna;
       kgUtama = it.kg != null && it.kg !== '' ? parseFloat(it.kg) : null;
       kodeRollUtama = it.kodeRoll ? String(it.kodeRoll).trim() : null;
+      sumberKgUtama = it.kgSumber || null;
     }
 
     rows.push(Object.assign({
       tanggal: it.tanggal || tanggalHariIniJakarta_(),
       jenis_warna_baju: namaItem,
       pemakaian_kain_kg: kgUtama,
+      sumber_kg: sumberKgUtama,
       kode_roll: kodeRollUtama,
       jumlah: jumlah,
       status: '',

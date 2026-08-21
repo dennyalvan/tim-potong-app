@@ -1,6 +1,17 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+HTML PRODUKSI (Supabase/testproduksi) - ver.32
+============================================================
+PERUBAHAN ver.32 (request Denny): keterangan sumber kg ("[Pakai Habis]"/"[Estimasi]") SEKARANG
+CUMA di antrian Mini App (referensi internal), DIHAPUS dari teks yang di-generate buat kirim ke
+Telegram. Sebagai gantinya, sumber kg dikirim ke backend lewat payload (kgSumber utk item
+tunggal & custom slot 1, kgSumber array utk kombinasi tiap slot, kgSumber1/kgSumber2 utk custom)
+buat disimpan permanen di kolom baru tim_potong.sumber_kg (lihat CODE WORKER PRODUKSI ver.46).
+Riwayat lengkap: git log.
+============================================================
+============================================================
+
 HTML PRODUKSI (Supabase/testproduksi) - ver.31
 ============================================================
 PERUBAHAN ver.31 (request Denny): (1) Kg Kain Terpakai sekarang WAJIB keisi lewat salah satu
@@ -1446,7 +1457,7 @@ function renderQueue() {
   wrap.style.display = daftarAntrian.length > 0 ? 'block' : 'none';
 
   list.innerHTML = daftarAntrian.map(function (it) {
-    const deskripsi = deskripsiSingkatItem(it);
+    const deskripsi = deskripsiSingkatItem(it, true); // tampilkan [Pakai Habis]/[Estimasi] di antrian (referensi internal)
     const ukuranTeks = Object.keys(it.ukuran).map(function (u) { return u + it.ukuran[u]; }).join(' ');
     return '<div class="queue-item">' +
       '<div><span class="qtag' + (String(it.kategori).toLowerCase() === 'dewasa' ? ' dewasa' : '') + '">' + escapeHtml(it.kategori) + '</span>' +
@@ -1465,7 +1476,7 @@ function renderQueue() {
   });
 }
 
-function deskripsiSingkatItem(it) {
+function deskripsiSingkatItem(it, sertakanSumber) {
   if (it.isCustom) {
     let s = it.namaCustom;
     if (it.kombinasi && it.kombinasi.warna[0]) {
@@ -1480,12 +1491,12 @@ function deskripsiSingkatItem(it) {
   if (it.isKombinasi || it.kombinasi) {
     const awalan = bikinAwalanPreview(it.kategori, it.kodeItem);
     const nama = (awalan ? awalan + ' ' : '') + it.kombinasi.warna.slice(0, 2).join(' ');
-    const sumber0 = it.kombinasi.kgSumber && it.kombinasi.kgSumber[0];
+    const sumber0 = sertakanSumber && it.kombinasi.kgSumber && it.kombinasi.kgSumber[0];
     return nama + ' - ' + it.kombinasi.kg[0] + 'kg' + (sumber0 ? ' [' + sumber0 + ']' : '') + ' (roll ' + (it.kombinasi.kodeRoll[0] || '-') + ')';
   }
   const awalan = bikinAwalanPreview(it.kategori, it.kodeItem);
   const nama = (awalan ? awalan + ' ' : '') + it.warna;
-  return nama + (it.kg ? (' - ' + it.kg + 'kg' + (it.kgSumber ? ' [' + it.kgSumber + ']' : '')) : '') + (it.kodeRoll ? (' (roll ' + it.kodeRoll + ')') : '');
+  return nama + (it.kg ? (' - ' + it.kg + 'kg' + (sertakanSumber && it.kgSumber ? ' [' + it.kgSumber + ']' : '')) : '') + (it.kodeRoll ? (' (roll ' + it.kodeRoll + ')') : '');
 }
 
 // ------------------------------------------------------------
@@ -1494,7 +1505,7 @@ function deskripsiSingkatItem(it) {
 document.getElementById('btnBuatTeks').addEventListener('click', function () {
   if (daftarAntrian.length === 0) return;
   const teks = daftarAntrian.map(function (it, i) {
-    const deskripsi = deskripsiSingkatItem(it);
+    const deskripsi = deskripsiSingkatItem(it, false); // request Denny: [Pakai Habis]/[Estimasi] JANGAN masuk teks Telegram, cukup di antrian & database
     const ukuranTeks = Object.keys(it.ukuran).map(function (u) { return u + it.ukuran[u] + ' = ' + it.ukuran[u]; }).join('\n');
     return (i + 1) + '. ' + deskripsi + '\n' + ukuranTeks;
   }).join('\n\n');
@@ -1592,10 +1603,12 @@ function bangunPayloadItem(it) {
       payload.warna1 = it.kombinasi.warna[0];
       payload.kg1 = it.kombinasi.kg[0] ? parseFloat(it.kombinasi.kg[0]) : null;
       payload.kodeRoll1 = it.kombinasi.kodeRoll[0] || null;
+      payload.kgSumber1 = (it.kombinasi.kgSumber && it.kombinasi.kgSumber[0]) || null;
       if (it.kombinasi.warna[1]) {
         payload.warna2 = it.kombinasi.warna[1];
         payload.kg2 = it.kombinasi.kg[1] ? parseFloat(it.kombinasi.kg[1]) : null;
         payload.kodeRoll2 = it.kombinasi.kodeRoll[1] || null;
+        payload.kgSumber2 = (it.kombinasi.kgSumber && it.kombinasi.kgSumber[1]) || null;
       }
     }
     return payload;
@@ -1603,11 +1616,11 @@ function bangunPayloadItem(it) {
   if (it.isKombinasi || it.kombinasi) {
     return {
       kategori: it.kategori, kodeItem: it.kodeItem,
-      kombinasi: { warna: it.kombinasi.warna, kg: it.kombinasi.kg.map(function (v) { return parseFloat(v) || 0; }), kodeRoll: it.kombinasi.kodeRoll },
+      kombinasi: { warna: it.kombinasi.warna, kg: it.kombinasi.kg.map(function (v) { return parseFloat(v) || 0; }), kodeRoll: it.kombinasi.kodeRoll, kgSumber: it.kombinasi.kgSumber || [] },
       ukuran: it.ukuran
     };
   }
-  return { kategori: it.kategori, kodeItem: it.kodeItem, warna: it.warna, kg: it.kg || null, kodeRoll: it.kodeRoll || null, ukuran: it.ukuran };
+  return { kategori: it.kategori, kodeItem: it.kodeItem, warna: it.warna, kg: it.kg || null, kgSumber: it.kgSumber || null, kodeRoll: it.kodeRoll || null, ukuran: it.ukuran };
 }
 
 // ------------------------------------------------------------
