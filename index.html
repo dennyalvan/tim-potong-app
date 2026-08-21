@@ -1,6 +1,18 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+HTML PRODUKSI (Supabase/testproduksi) - ver.31
+============================================================
+PERUBAHAN ver.31 (request Denny): (1) Kg Kain Terpakai sekarang WAJIB keisi lewat salah satu
+cara sebelum bisa Tambah ke antrian - manual, "Pakai habis", atau "Pakai Estimasi" (sebelumnya
+boleh kosong sama sekali, sekarang toast peringatan muncul & gak lanjut kalau belum ada
+caranya). (2) Deskripsi item di antrian & teks laporan sekarang nampilin keterangan asal kg-nya
+- "[Pakai Habis]" atau "[Estimasi]" nempel di belakang angka kg, biar kelihatan mana yang manual
+vs otomatis. Berlaku di item tunggal maupun tiap slot warna kombinasi.
+Riwayat lengkap: git log.
+============================================================
+============================================================
+
 HTML PRODUKSI (Supabase/testproduksi) - ver.30
 ============================================================
 PERUBAHAN ver.30 (koreksi ver.29, request Denny): checkbox "Pakai Estimasi" di kombinasi 3 warna
@@ -517,10 +529,11 @@ function kosongkanItemBaru() {
     namaCustom: '',
     warna: null,
     kg: '',
+    kgSumber: null, // 'Pakai Habis' | 'Estimasi' | null (manual) - buat keterangan asal angka kg
     estimasi: false,
     pakaiHabis: false,
     kodeRoll: null,
-    kombinasi: null, // { warna: [...], kg: [...], kodeRoll: [...] }
+    kombinasi: null, // { warna: [...], kg: [...], kodeRoll: [...], kgSumber: [...] }
     ukuran: {}
   };
 }
@@ -814,7 +827,7 @@ function renderDetailCard() {
     // ada), bukan pilih dari daftar kombinasi tetap.
     html += '<div class="subrow"><input type="text" class="kg-input-full" style="text-align:left" id="inputNamaCustom" placeholder="Nama item lengkap, misal: SPECIAL ORDER BIRU MUDA" value="' + escapeAttr(itemBaru.namaCustom) + '"></div>';
 
-    if (!itemBaru.kombinasi) itemBaru.kombinasi = { warna: [''], kg: [''], kodeRoll: [null] };
+    if (!itemBaru.kombinasi) itemBaru.kombinasi = { warna: [''], kg: [''], kgSumber: [null], kodeRoll: [null] };
     itemBaru.kombinasi.warna.forEach(function (warna, i) {
       html += '<div class="kombi-warna-section">' +
         '<div class="sub-title">Warna ' + (i + 1) + (i === 0 ? ' <span style="font-weight:400;color:#9aa3b2;">(opsional)</span>' : ' <span style="font-weight:400;color:#9aa3b2;">(kombinasi)</span>') + '</div>' +
@@ -993,6 +1006,7 @@ function pasangEventDetailCard() {
         inputKg.readOnly = chkEstimasi.checked;
         inputKg.placeholder = chkEstimasi.checked ? 'Otomatis' : '0';
         itemBaru.kg = '';
+        itemBaru.kgSumber = null; // baru keisi 'Estimasi' pas Tambah dipencet & kg-nya kehitung
         inputKg.value = '';
         cekKgLebih99(inputKg, document.getElementById('kgWarningInfo'));
       }
@@ -1017,9 +1031,10 @@ function pasangEventDetailCard() {
         inputKg.placeholder = '0';
         if (chkPakaiHabis.checked) {
           const kgSisa = cariKgRollTerpilih_(itemBaru.warna, itemBaru.kodeRoll);
-          if (kgSisa !== null) { itemBaru.kg = String(kgSisa); inputKg.value = itemBaru.kg; }
+          if (kgSisa !== null) { itemBaru.kg = String(kgSisa); inputKg.value = itemBaru.kg; itemBaru.kgSumber = 'Pakai Habis'; }
         } else {
           itemBaru.kg = '';
+          itemBaru.kgSumber = null;
           inputKg.value = '';
         }
         cekKgLebih99(inputKg, document.getElementById('kgWarningInfo'));
@@ -1043,7 +1058,7 @@ function pasangEventDetailCard() {
     el.addEventListener('click', function () {
       const w1w2 = el.dataset.nama.split(' ');
       const w3 = el.dataset.ketiga;
-      itemBaru.kombinasi = { warna: [w1w2[0], w1w2.slice(1).join(' '), w3], kg: ['', '', ''], kodeRoll: [null, null, null], pakaiHabis0: false, estimasiSlot: [false, false, false] };
+      itemBaru.kombinasi = { warna: [w1w2[0], w1w2.slice(1).join(' '), w3], kg: ['', '', ''], kgSumber: [null, null, null], kodeRoll: [null, null, null], pakaiHabis0: false, estimasiSlot: [false, false, false] };
       openDropdown = null;
       renderDetailCard();
       itemBaru.kombinasi.warna.forEach(function (w, i) { renderKombiRollSuggestions(i, ''); });
@@ -1052,7 +1067,7 @@ function pasangEventDetailCard() {
   document.querySelectorAll('[data-nama-ring]').forEach(function (el) {
     el.addEventListener('click', function () {
       const parts = el.dataset.namaRing.split(' ');
-      itemBaru.kombinasi = { warna: [parts[0], parts.slice(1).join(' ')], kg: ['', ''], kodeRoll: [null, null], pakaiHabis0: false };
+      itemBaru.kombinasi = { warna: [parts[0], parts.slice(1).join(' ')], kg: ['', ''], kgSumber: [null, null], kodeRoll: [null, null], pakaiHabis0: false };
       openDropdown = null;
       renderDetailCard();
       itemBaru.kombinasi.warna.forEach(function (w, i) { renderKombiRollSuggestions(i, ''); });
@@ -1084,9 +1099,10 @@ function pasangEventDetailCard() {
         kgInput0.placeholder = 'kg';
         if (chkPakaiHabisKombi0.checked) {
           const kgSisa = cariKgRollTerpilih_(itemBaru.kombinasi.warna[0], itemBaru.kombinasi.kodeRoll[0]);
-          if (kgSisa !== null) { itemBaru.kombinasi.kg[0] = String(kgSisa); kgInput0.value = itemBaru.kombinasi.kg[0]; }
+          if (kgSisa !== null) { itemBaru.kombinasi.kg[0] = String(kgSisa); kgInput0.value = itemBaru.kombinasi.kg[0]; if (itemBaru.kombinasi.kgSumber) itemBaru.kombinasi.kgSumber[0] = 'Pakai Habis'; }
         } else {
           itemBaru.kombinasi.kg[0] = '';
+          if (itemBaru.kombinasi.kgSumber) itemBaru.kombinasi.kgSumber[0] = null;
           kgInput0.value = '';
         }
         cekKgLebih99(kgInput0, document.getElementById('kgWarning-0'));
@@ -1111,6 +1127,7 @@ function pasangEventDetailCard() {
         if (chkHabis0) chkHabis0.checked = false;
       }
       itemBaru.kombinasi.kg[idx] = '';
+      if (itemBaru.kombinasi.kgSumber) itemBaru.kombinasi.kgSumber[idx] = null; // baru keisi 'Estimasi' pas Tambah dipencet
       const kgInput = document.querySelector('.kg-mini[data-kidx="' + idx + '"]');
       if (kgInput) {
         kgInput.readOnly = el.checked;
@@ -1367,7 +1384,9 @@ function itemBaruValid() {
       return w && (estSlot || itemBaru.kombinasi.kg[i]);
     });
   }
-  return !!itemBaru.varianLabel && !!itemBaru.warna;
+  // v.31: Kg Kain Terpakai sekarang WAJIB keisi lewat salah satu cara - manual, "Pakai habis",
+  // atau "Pakai Estimasi" (request Denny, sebelumnya boleh kosong sama sekali).
+  return !!itemBaru.varianLabel && !!itemBaru.warna && (!!itemBaru.kg || itemBaru.pakaiHabis || itemBaru.estimasi);
 }
 
 function updateBottomBar() {
@@ -1377,7 +1396,7 @@ function updateBottomBar() {
 
 document.getElementById('btnTambah').addEventListener('click', function () {
   if (!itemBaruValid()) {
-    tampilkanToast('Lengkapi dulu detail item & qty ukuran.');
+    tampilkanToast('Lengkapi dulu detail item, qty ukuran, & Kg Kain Terpakai (isi manual, atau centang Pakai habis / Pakai Estimasi).');
     return;
   }
   if (itemBaru.estimasi) {
@@ -1387,6 +1406,7 @@ document.getElementById('btnTambah').addEventListener('click', function () {
       return;
     }
     itemBaru.kg = hasil.kg.toFixed(2);
+    itemBaru.kgSumber = 'Estimasi';
   }
   // v.31: kombinasi 3 warna (Trico dkk) - warna[0]=badan, warna[1]/[2]=tangan kanan & kiri
   // (angka sama, simetris). "Pakai Estimasi" per-slot (independen) - cuma slot yang dicentang
@@ -1401,6 +1421,7 @@ document.getElementById('btnTambah').addEventListener('click', function () {
         return;
       }
       itemBaru.kombinasi.kg[i] = hasilKombi.kg.toFixed(2);
+      if (itemBaru.kombinasi.kgSumber) itemBaru.kombinasi.kgSumber[i] = 'Estimasi';
     }
   }
   daftarAntrian.push(Object.assign({ tempId: ++antrianSeq }, JSON.parse(JSON.stringify(itemBaru))));
@@ -1459,11 +1480,12 @@ function deskripsiSingkatItem(it) {
   if (it.isKombinasi || it.kombinasi) {
     const awalan = bikinAwalanPreview(it.kategori, it.kodeItem);
     const nama = (awalan ? awalan + ' ' : '') + it.kombinasi.warna.slice(0, 2).join(' ');
-    return nama + ' - ' + it.kombinasi.kg[0] + 'kg (roll ' + (it.kombinasi.kodeRoll[0] || '-') + ')';
+    const sumber0 = it.kombinasi.kgSumber && it.kombinasi.kgSumber[0];
+    return nama + ' - ' + it.kombinasi.kg[0] + 'kg' + (sumber0 ? ' [' + sumber0 + ']' : '') + ' (roll ' + (it.kombinasi.kodeRoll[0] || '-') + ')';
   }
   const awalan = bikinAwalanPreview(it.kategori, it.kodeItem);
   const nama = (awalan ? awalan + ' ' : '') + it.warna;
-  return nama + (it.kg ? (' - ' + it.kg + 'kg') : '') + (it.kodeRoll ? (' (roll ' + it.kodeRoll + ')') : '');
+  return nama + (it.kg ? (' - ' + it.kg + 'kg' + (it.kgSumber ? ' [' + it.kgSumber + ']' : '')) : '') + (it.kodeRoll ? (' (roll ' + it.kodeRoll + ')') : '');
 }
 
 // ------------------------------------------------------------
