@@ -1,6 +1,16 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+HTML PRODUKSI (Supabase/testproduksi) - ver.34
+============================================================
+PERUBAHAN ver.34 (request Denny): styling "Kg + Kode Roll" (Kombinasi 3 Warna/Ringer/Custom)
+dibikin nyambung kayak sel tabel Excel - garis pemisah vertikal antara kolom Kg & Kode Roll
+(sebelumnya cuma gap kosong tanpa pembeda, susah dibedain kalau banyak baris warna sekaligus).
+Murni CSS (.sub-fields/.kg-mini/.roll-mini-input), warna border/background tetap konsisten sama
+yang sudah ada di app (var(--bg)/var(--border)), gak ada elemen/warna baru. 1 perubahan CSS ini
+otomatis kepakai di ketiga mode karena class-nya sama.
+Riwayat lengkap: git log.
+============================================================
 HTML PRODUKSI (Supabase/testproduksi) - ver.33
 ============================================================
 PERUBAHAN ver.33 (request Denny, sesi lanjutan STANDAR PEMAKAIAN KAIN): peringatan (BUKAN blokir
@@ -329,9 +339,15 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
      pertama - tanpa ini, space-between di .sub-title-row bakal misah keduanya ke ujung-ujung
      yang beda (request Denny: dua-duanya harus nempel bareng di kanan). */
   .sub-title-checks { display: flex; align-items: center; gap: 10px; }
-  .kombi-warna-section .sub-fields { display: flex; gap: 8px; }
-  .kombi-warna-section input.kg-mini { flex: 0 0 70px; min-width: 0; padding: 9px 8px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-weight: 600; background: var(--bg); }
-  .kombi-warna-section input.roll-mini-input, .kombi-warna-section input.roll-mini-input-custom { flex: 1; min-width: 0; padding: 9px 8px; border-radius: 8px; font-size: 13.5px; font-weight: 600; background: var(--bg); text-overflow: ellipsis; }
+  /* v.34 (request Denny): "Kg + Kode Roll" sekarang dibikin nyambung kayak sel tabel Excel -
+     1 kotak bareng dengan garis pemisah vertikal antara kolom Kg & Kode Roll, bukan lagi 2 kotak
+     lepas yang cuma dikasih gap kosong tanpa pembeda. Susah dibedain kalau banyak baris warna
+     sekaligus (Kombinasi 3 Warna/Ringer/Custom - ketiganya pakai class yang sama, jadi 1 CSS ini
+     kepakai di semuanya). Warna background & border TETAP var(--bg)/var(--border) yang sudah ada
+     (konsisten sama input lain di app), cuma susunannya yang diubah jadi grid nyambung. */
+  .kombi-warna-section .sub-fields { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .kombi-warna-section input.kg-mini { flex: 0 0 70px; min-width: 0; padding: 9px 8px; border: none; border-right: 1.5px solid var(--border); border-radius: 0; font-size: 14px; font-weight: 600; background: var(--bg); }
+  .kombi-warna-section input.roll-mini-input, .kombi-warna-section input.roll-mini-input-custom { flex: 1; min-width: 0; padding: 9px 8px; border: none; border-radius: 0; font-size: 13.5px; font-weight: 600; background: var(--bg); text-overflow: ellipsis; }
   .kombi-warna-section input.kg-mini::placeholder, .kombi-warna-section input.roll-mini-input::placeholder, .kombi-warna-section input.roll-mini-input-custom::placeholder { font-weight: 500; color: #9aa3b2; }
 
   .autocomplete-input { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 10px; font-size: 15px; }
