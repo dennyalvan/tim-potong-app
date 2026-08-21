@@ -1,6 +1,17 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+HTML PRODUKSI (Supabase/testproduksi) - ver.33
+============================================================
+PERUBAHAN ver.33 (request Denny, sesi lanjutan STANDAR PEMAKAIAN KAIN): peringatan (BUKAN blokir
+- tetap boleh lanjut) kalau kode roll yang DIKETIK MANUAL gak ketemu di database kain (stokRollData)
+buat warna yang lagi kepilih. Dicek pas blur field (bukan tiap keystroke, biar gak nge-flash
+pas masih setengah ngetik), exact-match case-insensitive. Milih dari daftar saran (klik) SENGAJA
+gak kena peringatan ini sama sekali (udah pasti valid). Berlaku di semua 3 mode input roll: item
+biasa (rollWarningInfo), Kombinasi 3 Warna & Ringer (rollWarning-<idx>), Custom (crollWarning-<idx>).
+Fungsi baru: cekKodeRollTakDikenal_().
+Riwayat lengkap: git log.
+============================================================
 HTML PRODUKSI (Supabase/testproduksi) - ver.32
 ============================================================
 PERUBAHAN ver.32 (request Denny): keterangan sumber kg ("[Pakai Habis]"/"[Estimasi]") SEKARANG
@@ -508,6 +519,20 @@ function cekKgLebih99(el, warnEl) {
     warnEl.textContent = bermasalah ? '⚠️ ' + v + 'kg? Gak ada kain 1 roll yang beratnya di atas 40kg - cek ulang angkanya.' : '';
   }
 }
+// v.33: peringatan (BUKAN blokir - tetap boleh lanjut, sama pola kayak peringatan kg>99 di atas)
+// kalau kode roll yang DIKETIK MANUAL gak ketemu di stokRollData buat warna itu (request Denny).
+// Sengaja dicek pas BLUR (bukan tiap keystroke kayak kg) - exact-match ke daftar kode yang beneran
+// ada, kalau dicek tiap huruf pas masih setengah ngetik bakal nge-flash "gak ketemu" terus-terusan
+// sebelum kodenya lengkap. Milih dari saran (klik) TETAP gak kena peringatan ini sama sekali -
+// baca comment di pemanggilnya.
+function cekKodeRollTakDikenal_(warna, kodeInput, warnEl) {
+  if (!warnEl) return;
+  const kode = String(kodeInput || '').trim();
+  if (!kode || !warna) { warnEl.style.display = 'none'; warnEl.textContent = ''; return; }
+  const cocok = daftarRollUntukWarna(warna).some(function (r) { return String(r.kodeRoll || '').toUpperCase() === kode.toUpperCase(); });
+  warnEl.style.display = cocok ? 'none' : 'block';
+  warnEl.textContent = cocok ? '' : '⚠️ Kode roll "' + kode + '" gak ketemu di database buat warna ' + warna + ' - cek ulang, atau pilih dari daftar saran.';
+}
 if (window.visualViewport) {
   window.visualViewport.addEventListener('resize', function () {
     setTimeout(function () { __scrollKeVisible(__elemJagaTerlihat); }, 60);
@@ -764,6 +789,10 @@ function renderRollSuggestions(query) {
       // kodenya doang) - biar tim potong gampang nyontek angka kg-nya tanpa buka daftar lagi.
       if (inputRoll) inputRoll.value = 'Roll ' + (itemBaru.kodeRoll || '-') + ' / ' + el.dataset.kg + 'kg';
       box.innerHTML = '';
+      // v.33: kepilih dari saran = pasti valid, langsung bersihin peringatan "gak ketemu" kalau
+      // sebelumnya kepancing dari ketikan lama.
+      const rollWarnInfo = document.getElementById('rollWarningInfo');
+      if (rollWarnInfo) { rollWarnInfo.style.display = 'none'; rollWarnInfo.textContent = ''; }
       // v.25: kalau checkbox Pakai Habis lagi aktif, kg langsung ikut roll yang BARU dipilih ini
       // (dataset.kg udah ada di sini, gak perlu lookup ulang) - biar konsisten kalau roll diganti.
       if (itemBaru.pakaiHabis) {
@@ -827,6 +856,7 @@ function renderDetailCard() {
       html += '<div class="field-row wrap" id="rowKodeRoll">' +
         '<div class="frow-line"><span class="flabel">Kode Roll <span class="badge-wajib">wajib isi</span></span>' +
         '<input type="text" id="inputKodeRoll" placeholder="Ketik / pilih kode roll" autocomplete="off" value="' + escapeAttr(itemBaru.kodeRoll || '') + '"></div>' +
+        '<div class="kg-warning-text" id="rollWarningInfo" style="display:none;"></div>' +
         '<div class="suggestion-list" id="rollSuggestions"></div>' +
         '</div>';
     }
@@ -849,6 +879,7 @@ function renderDetailCard() {
         '<input type="text" class="autocomplete-input roll-mini-input-custom" data-crollidx="' + i + '" placeholder="Kode roll" autocomplete="off" value="' + escapeAttr(itemBaru.kombinasi.kodeRoll[i] || '') + '">' +
         '</div>' +
         '<div class="kg-warning-text" id="ckgWarning-' + i + '" style="display:none;"></div>' +
+        '<div class="kg-warning-text" id="crollWarning-' + i + '" style="display:none;"></div>' +
         '<div class="suggestion-list" id="customRollSuggestions-' + i + '"></div>' +
         (i === 1 ? '<div class="ganti-kombinasi"><a id="hapusWarna2Custom">Hapus warna ke-2</a></div>' : '') +
         '</div>';
@@ -905,6 +936,7 @@ function renderWarnaKombinasiSection() {
         '<input type="text" class="autocomplete-input roll-mini-input" data-kidx="' + i + '" placeholder="Kode roll" autocomplete="off" value="' + escapeAttr(itemBaru.kombinasi.kodeRoll[i] || '') + '">' +
         '</div>' +
         '<div class="kg-warning-text" id="kgWarning-' + i + '" style="display:none;"></div>' +
+        '<div class="kg-warning-text" id="rollWarning-' + i + '" style="display:none;"></div>' +
         '<div class="suggestion-list" id="kombiRollSuggestions-' + i + '"></div>' +
         '</div>';
     });
@@ -941,6 +973,7 @@ function renderWarnaRingerSection() {
         '<input type="text" class="autocomplete-input roll-mini-input" data-kidx="' + i + '" placeholder="Kode roll" autocomplete="off" value="' + escapeAttr(itemBaru.kombinasi.kodeRoll[i] || '') + '">' +
         '</div>' +
         '<div class="kg-warning-text" id="kgWarning-' + i + '" style="display:none;"></div>' +
+        '<div class="kg-warning-text" id="rollWarning-' + i + '" style="display:none;"></div>' +
         '<div class="suggestion-list" id="kombiRollSuggestions-' + i + '"></div>' +
         '</div>';
     });
@@ -983,6 +1016,10 @@ function pasangEventDetailCard() {
       itemBaru.kodeRoll = null;
       const inputRoll = document.getElementById('inputKodeRoll');
       if (inputRoll) inputRoll.value = '';
+      // v.33: warna ganti -> kode roll lama ikut kereset, jadi peringatan "gak ketemu" yang
+      // nempel dari ketikan sebelumnya juga harus ilang (bukan nyangkut nunjuk warna yang salah).
+      const rollWarnInfo = document.getElementById('rollWarningInfo');
+      if (rollWarnInfo) { rollWarnInfo.style.display = 'none'; rollWarnInfo.textContent = ''; }
       // v.25: warna ganti -> roll lama gak relevan lagi, kalau Pakai Habis aktif kosongin kg
       // dulu (nunggu roll baru dipilih) daripada nampilin angka kg roll warna SEBELUMNYA.
       if (itemBaru.pakaiHabis) {
@@ -1055,12 +1092,20 @@ function pasangEventDetailCard() {
 
   const inputKodeRoll = document.getElementById('inputKodeRoll');
   if (inputKodeRoll) {
+    const rollWarnInfo = document.getElementById('rollWarningInfo');
     inputKodeRoll.addEventListener('input', function () {
       itemBaru.kodeRoll = inputKodeRoll.value;
       renderRollSuggestions(inputKodeRoll.value);
     });
     inputKodeRoll.addEventListener('focus', function () { inputKodeRoll.select(); renderRollSuggestions(inputKodeRoll.value); });
-    inputKodeRoll.addEventListener('blur', function () { setTimeout(function () { const b = document.getElementById('rollSuggestions'); if (b) b.innerHTML = ''; }, 150); });
+    // v.33: begitu keluar dari kotak (blur) - cek kode yang lagi keketik/nempel ketemu di
+    // database atau enggak, baru munculin peringatan (request Denny). Milih dari saran (klik)
+    // TETAP gak kena cek ini - lihat comment di renderRollSuggestions soal preventDefault.
+    inputKodeRoll.addEventListener('blur', function () {
+      cekKodeRollTakDikenal_(itemBaru.warna, itemBaru.kodeRoll, rollWarnInfo);
+      setTimeout(function () { const b = document.getElementById('rollSuggestions'); if (b) b.innerHTML = ''; }, 150);
+    });
+    cekKodeRollTakDikenal_(itemBaru.warna, itemBaru.kodeRoll, rollWarnInfo);
   }
 
   const rowKombi = document.getElementById('rowKombinasiWarna');
@@ -1157,12 +1202,18 @@ function pasangEventDetailCard() {
   });
   document.querySelectorAll('.roll-mini-input').forEach(function (el) {
     const idx = parseInt(el.dataset.kidx, 10);
+    const rollWarn = document.getElementById('rollWarning-' + idx);
     el.addEventListener('input', function () {
       itemBaru.kombinasi.kodeRoll[idx] = el.value;
       renderKombiRollSuggestions(idx, el.value);
     });
     el.addEventListener('focus', function () { el.select(); renderKombiRollSuggestions(idx, el.value); });
-    el.addEventListener('blur', function () { setTimeout(function () { const b = document.getElementById('kombiRollSuggestions-' + idx); if (b) b.innerHTML = ''; }, 150); });
+    // v.33: sama pola kayak mode item biasa - cek pas blur (request Denny).
+    el.addEventListener('blur', function () {
+      cekKodeRollTakDikenal_(itemBaru.kombinasi.warna[idx], itemBaru.kombinasi.kodeRoll[idx], rollWarn);
+      setTimeout(function () { const b = document.getElementById('kombiRollSuggestions-' + idx); if (b) b.innerHTML = ''; }, 150);
+    });
+    cekKodeRollTakDikenal_(itemBaru.kombinasi.warna[idx], itemBaru.kombinasi.kodeRoll[idx], rollWarn);
   });
 
   const inputNamaCustom = document.getElementById('inputNamaCustom');
@@ -1175,6 +1226,10 @@ function pasangEventDetailCard() {
       itemBaru.kombinasi.warna[idx] = el.value.toUpperCase();
       itemBaru.kombinasi.kodeRoll[idx] = null;
       renderCustomWarnaSuggestions(idx, el.value);
+      // v.33: warna slot ini ganti -> kode roll lama ikut kereset, peringatan lama (kalau ada)
+      // jangan nyangkut nunjuk warna yang udah gak relevan.
+      const crollWarn = document.getElementById('crollWarning-' + idx);
+      if (crollWarn) { crollWarn.style.display = 'none'; crollWarn.textContent = ''; }
     });
     el.addEventListener('focus', function () { renderCustomWarnaSuggestions(idx, el.value); });
     el.addEventListener('blur', function () { setTimeout(function () { const b = document.getElementById('customWarnaSuggestions-' + idx); if (b) b.innerHTML = ''; }, 150); });
@@ -1187,9 +1242,15 @@ function pasangEventDetailCard() {
   });
   document.querySelectorAll('[data-crollidx]').forEach(function (el) {
     const idx = parseInt(el.dataset.crollidx, 10);
+    const crollWarn = document.getElementById('crollWarning-' + idx);
     el.addEventListener('input', function () { itemBaru.kombinasi.kodeRoll[idx] = el.value; renderCustomRollSuggestions(idx, el.value); });
     el.addEventListener('focus', function () { el.select(); renderCustomRollSuggestions(idx, el.value); });
-    el.addEventListener('blur', function () { setTimeout(function () { const b = document.getElementById('customRollSuggestions-' + idx); if (b) b.innerHTML = ''; }, 150); });
+    // v.33: sama pola kayak mode item biasa - cek pas blur (request Denny).
+    el.addEventListener('blur', function () {
+      cekKodeRollTakDikenal_(itemBaru.kombinasi.warna[idx], itemBaru.kombinasi.kodeRoll[idx], crollWarn);
+      setTimeout(function () { const b = document.getElementById('customRollSuggestions-' + idx); if (b) b.innerHTML = ''; }, 150);
+    });
+    cekKodeRollTakDikenal_(itemBaru.kombinasi.warna[idx], itemBaru.kombinasi.kodeRoll[idx], crollWarn);
   });
   const tambahWarna2Custom = document.getElementById('tambahWarna2Custom');
   if (tambahWarna2Custom) tambahWarna2Custom.addEventListener('click', function () {
@@ -1260,6 +1321,8 @@ function renderCustomRollSuggestions(idx, query) {
       const inputEl = document.querySelector('.roll-mini-input-custom[data-crollidx="' + i + '"]');
       if (inputEl) inputEl.value = 'Roll ' + (itemBaru.kombinasi.kodeRoll[i] || '-') + ' / ' + el.dataset.kg + 'kg';
       box.innerHTML = '';
+      const crollWarn = document.getElementById('crollWarning-' + i);
+      if (crollWarn) { crollWarn.style.display = 'none'; crollWarn.textContent = ''; }
     });
   });
 }
@@ -1293,6 +1356,8 @@ function renderKombiRollSuggestions(idx, query) {
       const inputEl = document.querySelector('.roll-mini-input[data-kidx="' + idx + '"]');
       if (inputEl) inputEl.value = 'Roll ' + (itemBaru.kombinasi.kodeRoll[idx] || '-') + ' / ' + el.dataset.kg + 'kg';
       box.innerHTML = '';
+      const rollWarn = document.getElementById('rollWarning-' + idx);
+      if (rollWarn) { rollWarn.style.display = 'none'; rollWarn.textContent = ''; }
       // v.26: slot warna pertama + checkbox Pakai Habis aktif -> kg ikut roll BARU yang dipilih
       if (idx === 0 && itemBaru.kombinasi.pakaiHabis0) {
         itemBaru.kombinasi.kg[0] = String(el.dataset.kg);

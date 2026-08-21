@@ -1,7 +1,18 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.56
+DASHBOARD ver.57
+============================================================
+PERUBAHAN ver.57 (3 request Denny, sesi lanjutan STANDAR PEMAKAIAN KAIN):
+1. Fix "Stok Kain gak realtime" - root cause: chip "Terpakai Sebagian" & panel "Stok Habis" pakai
+   cache terpisah yang cuma ke-invalidate abis aksi lokal, gak pernah kepicu event Realtime dari
+   sesi/klien lain. Sekarang siklus Realtime juga manggil ulang cache itu (muatTabAktif_).
+2. Dropdown filter varian di tab Rekap QC (select#filterVarianRekap) - opsi otomatis dari data
+   yang lagi ke-load, client-side murni, hemat tempat dibanding baris chip.
+3. Tombol "☑️ Pilih" (write-off massal) dipindah dari dalam tab Stok Kain ke header (sebelah
+   Sync) - visibilitasnya sekarang gabungan isAdmin + tab Stok Kain aktif (perbaruiVisibilitasBtnPilihMassal_),
+   karena header dipakai bareng di semua tab.
+Riwayat lengkap: git log.
 ============================================================
 PERUBAHAN ver.56: chip filter baru "🏷️ Tanpa Kode Roll" di tab Stok Kain (request Denny) - roll
 yang kode_roll-nya kosong/null, dikelompokkan ulang per warna (kg & jumlah roll dihitung ulang
@@ -227,6 +238,7 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .pending-pill { display: inline-block; background: var(--surface-2); color: var(--indigo); font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px; margin-bottom: 8px; }
 
   .search-box { width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; font-size: 14px; margin-bottom: 8px; background: #fff; }
+  .filter-select { padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; font-size: 12.5px; font-weight: 600; color: var(--gray-text); background: #fff; margin-bottom: 8px; max-width: 100%; }
   .count-label { font-size: 12px; color: var(--gray-text); margin-bottom: 8px; }
   .filter-chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 10px; }
   .chip { flex-shrink: 0; padding: 8px 14px; border-radius: 20px; border: 1px solid var(--border); background: #fff; font-size: 13px; font-weight: 600; cursor: pointer; color: #374151; white-space: nowrap; }
@@ -234,7 +246,7 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
 
   /* v.55: write-off massal (request Denny) - tombol toggle mode Pilih, checkbox per-roll pas
      mode aktif, dan bar fixed di bawah layar buat aksinya. */
-  .btn-pilih-massal { display: inline-block; margin-bottom: 10px; padding: 7px 14px; border-radius: 20px; border: 1.5px solid var(--indigo); background: #fff; color: var(--indigo); font-size: 12.5px; font-weight: 700; cursor: pointer; }
+  .btn-pilih-massal { display: inline-block; padding: 7px 14px; border-radius: 20px; border: 1.5px solid var(--indigo); background: #fff; color: var(--indigo); font-size: 12.5px; font-weight: 700; cursor: pointer; }
   .btn-pilih-massal.aktif { background: var(--indigo); color: #fff; }
   .warna-detail .roll-row.roll-row-pilih { cursor: pointer; }
   .warna-detail .roll-row.roll-row-pilih.dicentang { background: #EEF0FF; margin: 0 -2px; padding-left: 8px; border-radius: 8px; }
@@ -451,6 +463,12 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
     </div>
     <div class="header-right">
       <button class="btn-sinkron" id="btnSinkronAkuntansi">📤 Sync</button>
+      <!-- v.57: tombol Pilih (write-off massal, admin-only) dipindah kesini dari tab Stok Kain
+           (request Denny: "sebelah tombol sync") - visibilitasnya sekarang diatur JS
+           (perbaruiVisibilitasBtnPilihMassal_), gabungan isAdmin DAN tab Stok Kain lagi aktif,
+           soalnya header ini kepakai bareng di semua tab (beda dari sebelumnya, otomatis
+           ke-sembunyiin sendiri karena nempel di dalam div tabStok). -->
+      <button class="btn-pilih-massal" id="btnPilihMassal" style="display:none">☑️ Pilih</button>
       <button class="btn-refresh" id="btnRefresh">🔄</button>
       <p class="loading-popup" id="loadingIndicator">⏳ Memuat...</p>
     </div>
@@ -500,9 +518,6 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
     </div>
     <div class="section-label">STOK TERSISA PER WARNA</div>
     <input type="text" class="search-box" id="searchWarna" placeholder="Cari nama kain/warna/kode roll...">
-    <!-- v.55: tombol mode "Pilih" (write-off massal) - admin-only, disembunyikan default,
-         dimunculin lewat JS begitu isAdmin kekonfirmasi (sama pola kayak tombol Edit). -->
-    <button class="btn-pilih-massal" id="btnPilihMassal" style="display:none">☑️ Pilih</button>
     <div class="filter-chips">
       <div class="chip active" data-chip="kg">COMBED</div>
       <div class="chip" data-chip="polo">POLO</div>
@@ -531,6 +546,9 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   <div id="tabRekap" style="display:none">
     <div class="section-label">REKAP QC</div>
     <input type="text" class="search-box" id="searchRekap" placeholder="Cari warna/varian...">
+    <!-- v.57: filter varian (request Denny) - dropdown biar hemat tempat dibanding baris chip
+         (varian bisa banyak macam). Opsi diisi otomatis dari data yang lagi ke-load. -->
+    <select class="filter-select" id="filterVarianRekap"><option value="">Semua Varian</option></select>
     <p class="rekap-summary" id="rekapSummary">Memuat...</p>
     <div class="rekap-wrap">
       <div id="rekapList"></div>
@@ -629,7 +647,7 @@ if (tg && tg.initData) {
       // v.55: tombol Pilih (write-off massal) juga admin-only, sama pola.
       if (isAdmin) {
         renderDaftarLaporan(); renderRekapQC(); if (stokUtuhData) renderWarnaGrid();
-        document.getElementById('btnPilihMassal').style.display = 'inline-block';
+        perbaruiVisibilitasBtnPilihMassal_();
       }
     })
     .catch(function () { /* diamkan - anggap bukan admin */ });
@@ -647,6 +665,7 @@ let stokUtuhData = null;
 let sortWarna = 'kg';
 let searchWarnaQuery = '';
 let searchRekapQuery = '';
+let filterVarianRekapAktif = ''; // v.57: dropdown filter varian di tab Rekap QC (request Denny)
 // v.45: sebelumnya object {warna: true/false} - beberapa card warna bisa kebuka BARENGAN.
 // Sekarang single value (null = semua tertutup) - accordion, buka 1 card otomatis nutup yang
 // lain (request Denny poin 3).
@@ -667,6 +686,15 @@ let rollHighlightKunci = null; // roll hasil search yang lagi di-scroll+flash-hi
 // ------------------------------------------------------------
 // TAB SWITCH
 // ------------------------------------------------------------
+// v.57: tombol Pilih sekarang di header (dipindah dari dalam tab Stok Kain, request Denny) -
+// header dipakai bareng di semua tab, jadi visibilitasnya HARUS diatur manual di sini
+// (isAdmin DAN tab Stok Kain lagi aktif), gak lagi otomatis kesembunyi kayak pas masih
+// nempel di dalam div tabStok.
+function perbaruiVisibilitasBtnPilihMassal_() {
+  const tabStokAktif = document.getElementById('tabStok').style.display !== 'none';
+  document.getElementById('btnPilihMassal').style.display = (isAdmin && tabStokAktif) ? 'inline-block' : 'none';
+}
+
 document.querySelectorAll('.tab-btn').forEach(function (btn) {
   btn.addEventListener('click', function () {
     document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
@@ -679,6 +707,7 @@ document.querySelectorAll('.tab-btn').forEach(function (btn) {
     if (tab === 'stok' && !stokUtuhData) muatStokUtuh();
     if (tab === 'rekap') muatRekapQC();
     perbaruiBarPilihMassal_(); // v.55: bar write-off massal cuma boleh kelihatan pas tab Stok Kain aktif
+    perbaruiVisibilitasBtnPilihMassal_();
   });
 });
 
@@ -1990,6 +2019,10 @@ document.getElementById('searchRekap').addEventListener('input', function () {
   searchRekapQuery = this.value;
   renderRekapQC();
 });
+document.getElementById('filterVarianRekap').addEventListener('change', function () {
+  filterVarianRekapAktif = this.value;
+  renderRekapQC();
+});
 // v.50: 1 handler buat SEMUA chip filter Stok Kain (kg/nama/roll/terpakai-sebagian/polo) -
 // single-select murni (request Denny): klik salah satu SELALU matiin ke-4 lainnya, gak pernah
 // dobel aktif. Reset kartu/roll yang lagi kebuka CUMA kalau basis datanya beneran ganti (pindah
@@ -2069,8 +2102,26 @@ function formatWaktuRekap(waktuIso) {
 // kosong). Kolom Reject SENGAJA cuma 1 (total angka), bukan dipecah per ukuran - detail
 // per-ukurannya tetap ada di database (notasi ringkas), cuma gak ditampilkan di sini biar
 // tabel gak penuh. Harga Jait/Total Bayar SENGAJA TIDAK ditampilkan (itu info akunting).
+// v.57: isi opsi dropdown filter varian dari data yang lagi ke-load (client-side, gak perlu
+// endpoint baru - sama pola kayak chip "Kain Polo"/"Tanpa Kode Roll" di Stok Kain). Dicek dulu
+// pakai "kunci" gabungan opsi - kalau daftar varian gak berubah dari render sebelumnya, innerHTML
+// GAK ditulis ulang, biar pilihan dropdown yang lagi aktif gak kereset tiap kali data di-refresh
+// (Realtime bisa manggil render ini tiap 800ms kalau ada perubahan).
+function perbaruiOpsiFilterVarian_(items) {
+  const select = document.getElementById('filterVarianRekap');
+  const unik = Array.from(new Set(items.map(function (it) { return it.varian; }).filter(Boolean))).sort();
+  const kunciBaru = unik.join('|');
+  if (select.dataset.kunci === kunciBaru) return;
+  select.dataset.kunci = kunciBaru;
+  select.innerHTML = '<option value="">Semua Varian</option>' + unik.map(function (v) {
+    return '<option value="' + escapeAttr(v) + '"' + (v === filterVarianRekapAktif ? ' selected' : '') + '>' + escapeHtml(v) + '</option>';
+  }).join('');
+}
+
 function renderRekapQC() {
+  perbaruiOpsiFilterVarian_(rekapItemsRaw);
   let items = rekapItemsRaw;
+  if (filterVarianRekapAktif) items = items.filter(function (it) { return it.varian === filterVarianRekapAktif; });
   if (searchRekapQuery) {
     const q = searchRekapQuery.toLowerCase();
     items = items.filter(function (it) {
@@ -2102,12 +2153,13 @@ function renderRekapQC() {
     (isAdmin ? '<div></div>' : '') + '</div>';
 
   if (items.length === 0) {
-    summary.textContent = searchRekapQuery ? 'Gak ada hasil buat "' + searchRekapQuery + '".' : 'Belum ada submit QC dalam 14 hari terakhir.';
-    list.innerHTML = headHtml + '<div class="rekap-row" style="grid-template-columns:1fr"><div class="rekap-muted">' + (searchRekapQuery ? 'Gak ada hasil pencarian.' : 'Belum ada submit QC.') + '</div></div>';
+    const adaFilter = !!(searchRekapQuery || filterVarianRekapAktif);
+    summary.textContent = adaFilter ? 'Gak ada hasil buat filter ini.' : 'Belum ada submit QC dalam 14 hari terakhir.';
+    list.innerHTML = headHtml + '<div class="rekap-row" style="grid-template-columns:1fr"><div class="rekap-muted">' + (adaFilter ? 'Gak ada hasil pencarian.' : 'Belum ada submit QC.') + '</div></div>';
     document.getElementById('rekapFoot').innerHTML = '';
     return;
   }
-  summary.textContent = items.length + ' submit' + (searchRekapQuery ? ' (hasil pencarian)' : ' (14 hari terakhir)');
+  summary.textContent = items.length + ' submit' + ((searchRekapQuery || filterVarianRekapAktif) ? ' (hasil filter)' : ' (14 hari terakhir)');
 
   const barisHtml = items.map(function (it) {
     const petaUkuran = {};
@@ -2268,7 +2320,16 @@ function tampilkanToast(msg) {
 // biar gak nembak toast "✓ Update ..." sendiri di background.
 function muatTabAktif_() {
   muatDaftarLaporan(0, false);
-  if (document.getElementById('tabStok').style.display !== 'none') muatStokUtuh(0, false);
+  if (document.getElementById('tabStok').style.display !== 'none') {
+    muatStokUtuh(0, false);
+    // v.57: root cause "Stok Kain gak realtime" (request Denny) - grid utama (COMBED/POLO/dst)
+    // emang selalu fresh tiap muatStokUtuh, TAPI chip "Terpakai Sebagian" & panel "Stok Habis"
+    // makai cache terpisah (stokTerpakaiSebagianRaw / stokHabisDimuat) yang SEBELUMNYA cuma
+    // di-invalidate abis aksi lokal (edit/write-off sendiri) - gak pernah kepicu dari event
+    // Realtime tabel lain/sesi lain. Pakai fungsi yang udah ada, sekarang dipicu juga dari sini.
+    segarkanTerpakaiSebagian_();
+    if (stokHabisDimuat) muatStokHabis();
+  }
   if (document.getElementById('tabRekap').style.display !== 'none') muatRekapQC(0, false);
 }
 
