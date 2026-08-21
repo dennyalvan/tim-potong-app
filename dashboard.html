@@ -1,6 +1,18 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+DASHBOARD ver.58
+============================================================
+PERUBAHAN ver.58 (request Denny): root cause KEDUA "Terpakai Sebagian gak realtime" - beda dari
+ver.57. Handler tab-switch SEBELUMNYA cuma fetch data Stok Kain kalau tab itu BELUM PERNAH dibuka
+sama sekali (`!stokUtuhData`) - begitu udah pernah dibuka sekali, pindah-tab-balik-lagi gak
+pernah narik data baru, padahal perubahan bisa kejadian pas lagi di tab LAIN (mis. hapus laporan
+di Proses & QC) dan Realtime ver.57 cuma nge-refresh kalau tab Stok Kain-nya lagi KELIATAN saat
+kejadian. Sekarang disamain kayak pola tab Rekap QC (yang emang udah SELALU fetch ulang tiap
+di-switch ke, gak pernah dilaporin basi) - tab Stok Kain sekarang juga SELALU fetch ulang +
+invalidate cache Terpakai Sebagian & Stok Habis tiap kali di-switch ke, gak cuma kunjungan pertama.
+Riwayat lengkap: git log.
+============================================================
 DASHBOARD ver.57
 ============================================================
 PERUBAHAN ver.57 (3 request Denny, sesi lanjutan STANDAR PEMAKAIAN KAIN):
@@ -704,7 +716,18 @@ document.querySelectorAll('.tab-btn').forEach(function (btn) {
     document.getElementById('tabStok').style.display = tab === 'stok' ? 'block' : 'none';
     document.getElementById('tabRekap').style.display = tab === 'rekap' ? 'block' : 'none';
     document.getElementById('pageTitle').textContent = 'DASHBOARD QC';
-    if (tab === 'stok' && !stokUtuhData) muatStokUtuh();
+    // v.58: root cause KEDUA "Terpakai Sebagian gak realtime" (request Denny) - beda dari v.57.
+    // SEBELUMNYA fetch stok cuma jalan kalau tab ini BELUM PERNAH dibuka sama sekali (!stokUtuhData)
+    // - begitu udah pernah dibuka sekali, pindah-tab-balik-lagi gak pernah narik data baru lagi,
+    // padahal perubahan bisa aja kejadian pas lagi di tab LAIN (mis. hapus laporan di Proses & QC)
+    // dan Realtime v.57 cuma nge-refresh kalau tab Stok Kain-nya lagi KELIATAN saat itu juga.
+    // Sekarang disamain kayak pola tab Rekap QC di bawah - SELALU fetch ulang tiap di-switch ke,
+    // termasuk cache Terpakai Sebagian & Stok Habis (fungsi yang sama kayak di muatTabAktif_).
+    if (tab === 'stok') {
+      muatStokUtuh();
+      segarkanTerpakaiSebagian_();
+      if (stokHabisDimuat) muatStokHabis();
+    }
     if (tab === 'rekap') muatRekapQC();
     perbaruiBarPilihMassal_(); // v.55: bar write-off massal cuma boleh kelihatan pas tab Stok Kain aktif
     perbaruiVisibilitasBtnPilihMassal_();
