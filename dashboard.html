@@ -1,6 +1,21 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+DASHBOARD ver.59
+============================================================
+PERUBAHAN ver.59 (request Denny: "terapkan juga untuk semua elemen di miniapp dan Supabase") -
+audit menyeluruh pola cache-once-gak-pernah-disegarkan yang sama kayak ver.57/58, ditemukan 2
+elemen lagi yang masih kena:
+1. Riwayat Pemakaian per roll (tab Stok Kain) - SEBELUMNYA gak bisa realtime sama sekali karena
+   DUA alasan sekaligus: (a) tabel sumbernya log_pemakaian_kain belum ada di publication Realtime
+   Supabase & belum ada policy baca publik (baru ditambahin sesi ini, migrasi
+   realtime_log_pemakaian_kain), (b) riwayatPemakaianData di JS juga cache-once. Fungsi baru
+   segarkanRiwayatPemakaian_(), dipanggil dari siklus Realtime + tab-switch.
+2. Arsip Selesai (tab Proses & QC) - pola sama kayak Stok Habis ver.57 (fetch sekali pas toggle
+   pertama dibuka, gak pernah disegarkan lagi). Sekarang ikut dipanggil dari muatTabAktif_ +
+   tab-switch, gated tab QC lagi keliatan.
+Riwayat lengkap: git log.
+============================================================
 DASHBOARD ver.58
 ============================================================
 PERUBAHAN ver.58 (request Denny): root cause KEDUA "Terpakai Sebagian gak realtime" - beda dari
@@ -727,7 +742,13 @@ document.querySelectorAll('.tab-btn').forEach(function (btn) {
       muatStokUtuh();
       segarkanTerpakaiSebagian_();
       if (stokHabisDimuat) muatStokHabis();
+      // v.59 (request Denny, "terapkan ke semua elemen") - sama alasannya kayak Terpakai
+      // Sebagian: Riwayat Pemakaian per roll juga harus ikut fresh begitu pindah ke tab ini.
+      segarkanRiwayatPemakaian_();
     }
+    // v.59: Arsip Selesai (pola sama kayak Stok Habis) - fresh lagi begitu balik ke tab ini,
+    // bukan cuma nunggu Realtime nyala pas tab-nya lagi keliatan.
+    if (tab === 'qc' && arsipDimuat) muatArsip();
     if (tab === 'rekap') muatRekapQC();
     perbaruiBarPilihMassal_(); // v.55: bar write-off massal cuma boleh kelihatan pas tab Stok Kain aktif
     perbaruiVisibilitasBtnPilihMassal_();
@@ -1636,6 +1657,14 @@ function muatRiwayatPemakaian_() {
       renderWarnaGrid();
     });
 }
+// v.59 (request Denny): sama pola kayak segarkanTerpakaiSebagian_ - riwayatPemakaianData
+// SEBELUMNYA cuma fetch sekali & gak pernah di-invalidate lagi (log_pemakaian_kain juga belum
+// ada di publication Realtime Supabase sama sekali sampai sekarang, jadi dobel gak nyambung:
+// baik dari sisi Supabase maupun sisi JS). Dipanggil dari siklus Realtime & tab-switch.
+function segarkanRiwayatPemakaian_() {
+  riwayatPemakaianData = null;
+  muatRiwayatPemakaian_();
+}
 
 // v.35: kunci unik per roll (warna+kode+kg) - BUKAN cuma kode roll doang. Kalau ada 2 roll
 // beda yang kebetulan kode-nya sama (request Denny, ini kejadian nyata), masing-masing tetap
@@ -2343,6 +2372,11 @@ function tampilkanToast(msg) {
 // biar gak nembak toast "✓ Update ..." sendiri di background.
 function muatTabAktif_() {
   muatDaftarLaporan(0, false);
+  // v.59 (request Denny, "terapkan ke semua elemen"): "Arsip Selesai" punya pola cache-once yang
+  // sama kayak Stok Habis dulu - belum pernah disentuh siklus Realtime sama sekali.
+  if (document.getElementById('tabQC').style.display !== 'none') {
+    if (arsipDimuat) muatArsip();
+  }
   if (document.getElementById('tabStok').style.display !== 'none') {
     muatStokUtuh(0, false);
     // v.57: root cause "Stok Kain gak realtime" (request Denny) - grid utama (COMBED/POLO/dst)
@@ -2352,6 +2386,8 @@ function muatTabAktif_() {
     // Realtime tabel lain/sesi lain. Pakai fungsi yang udah ada, sekarang dipicu juga dari sini.
     segarkanTerpakaiSebagian_();
     if (stokHabisDimuat) muatStokHabis();
+    // v.59: sama alasannya kayak di atas, buat "Riwayat Pemakaian" per roll.
+    segarkanRiwayatPemakaian_();
   }
   if (document.getElementById('tabRekap').style.display !== 'none') muatRekapQC(0, false);
 }
@@ -2379,6 +2415,9 @@ function setupRealtime() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'tim_potong' }, jadwalkanMuatUlang)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'log_qc' }, jadwalkanMuatUlang)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'stok_kain' }, jadwalkanMuatUlang)
+    // v.59: log_pemakaian_kain baru ditambahin ke publication Realtime Supabase + policy baca
+    // publik (sebelumnya belum ada sama sekali) - sumber data "Riwayat Pemakaian" per roll.
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'log_pemakaian_kain' }, jadwalkanMuatUlang)
     .subscribe();
 }
 
