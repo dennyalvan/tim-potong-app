@@ -1,6 +1,17 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+DASHBOARD ver.62
+============================================================
+PERUBAHAN ver.62 (request Denny): pelengkap slider tanggal Rekap QC (ver.61) - baris chip pilih
+cepat per bulan ("Semua" + 1 chip per bulan yang ada datanya, mis. "Jul 2026", "Agu 2026"). Klik
+chip bulan langsung geser slider ke tanggal 1 s/d 30 bulan itu (PERSIS "1/30" per instruksi
+Denny), dipotong ke tanggal terakhir asli kalau bulannya lebih pendek (Februari 28/29). Reuse
+class .filter-chips/.chip yang udah ada (Stok Kain) - gak ada style baru. Chip yang lagi aktif
+(cocok persis sama rentang slider sekarang) dikasih highlight, ke-update juga kalau slider digeser
+manual sampai pas mentok di rentang 1 bulan penuh.
+Riwayat lengkap: git log.
+============================================================
 DASHBOARD ver.61
 ============================================================
 PERUBAHAN ver.61 (request Denny): tab Rekap QC 2 perubahan besar -
@@ -668,6 +679,10 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
         <input type="range" id="dateRangeMax" min="0" max="1" value="1" step="1">
       </div>
     </div>
+    <!-- v.62 (request Denny): pelengkap slider - chip pilih cepat per bulan (tanggal 1 s/d 30,
+         dipotong ke tanggal terakhir asli buat Februari). Reuse class .filter-chips/.chip yang
+         udah ada (Stok Kain), gak bikin style baru. Klik langsung geser slider ke rentang itu. -->
+    <div class="filter-chips" id="bulanFilterChips"></div>
     <p class="rekap-summary" id="rekapSummary">Memuat...</p>
     <div class="rekap-wrap">
       <div id="rekapList"></div>
@@ -2321,6 +2336,7 @@ function perbaruiRentangTanggalRekap_(items) {
   inputMin.value = filterTglMulai ? Math.min(totalHari, Math.max(0, Math.round((filterTglMulai - rekapTglMinData) / 86400000))) : 0;
   inputMax.value = filterTglAkhir ? Math.min(totalHari, Math.max(0, Math.round((filterTglAkhir - rekapTglMinData) / 86400000))) : totalHari;
   wrap.style.display = 'block';
+  perbaruiChipBulanRekap_();
   perbaruiTampilanSliderTanggal_();
 }
 
@@ -2345,10 +2361,83 @@ function perbaruiTampilanSliderTanggal_() {
   document.getElementById('dateRangeLabel').textContent = tglA.toLocaleDateString('id-ID', opt) + ' s/d ' + tglB.toLocaleDateString('id-ID', opt);
   filterTglMulai = tglA;
   filterTglAkhir = tglB;
+  perbaruiChipBulanAktif_();
 }
 
 document.getElementById('dateRangeMin').addEventListener('input', function () { perbaruiTampilanSliderTanggal_(); renderRekapQC(); });
 document.getElementById('dateRangeMax').addEventListener('input', function () { perbaruiTampilanSliderTanggal_(); renderRekapQC(); });
+
+// v.62 (request Denny): pelengkap slider - chip "Semua" + 1 chip per bulan yang ADA datanya
+// (dari rekapTglMinData s/d rekapTglMaxData). Klik chip bulan -> geser slider ke tanggal 1 s/d
+// 30 bulan itu (PERSIS instruksi Denny "1/30"), dipotong ke tanggal terakhir asli kalau bulan itu
+// lebih pendek dari 30 hari (Februari). Nge-set lewat SLIDER (bukan langsung filterTglMulai/Akhir)
+// biar slider & chip selalu sinkron dari 1 sumber kebenaran yang sama.
+const NAMA_BULAN_REKAP_ = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+
+function pilihRentangTanggal_(tglAwal, tglAkhir) {
+  const totalHari = parseInt(document.getElementById('dateRangeMin').max, 10) || 1;
+  const offA = Math.min(totalHari, Math.max(0, Math.round((tglAwal - rekapTglMinData) / 86400000)));
+  const offB = Math.min(totalHari, Math.max(0, Math.round((tglAkhir - rekapTglMinData) / 86400000)));
+  document.getElementById('dateRangeMin').value = offA;
+  document.getElementById('dateRangeMax').value = offB;
+  perbaruiTampilanSliderTanggal_();
+  renderRekapQC();
+}
+
+function rentangBulan_(tahun, bulan0) {
+  const awal = new Date(tahun, bulan0, 1);
+  const hariTerakhirBulan = new Date(tahun, bulan0 + 1, 0).getDate(); // 28/29/30/31 asli
+  const akhir = new Date(tahun, bulan0, Math.min(30, hariTerakhirBulan)); // "1/30" - dipotong Februari
+  return { awal: awal, akhir: akhir };
+}
+
+function perbaruiChipBulanRekap_() {
+  const wrap = document.getElementById('bulanFilterChips');
+  if (!rekapTglMinData || !rekapTglMaxData) { wrap.innerHTML = ''; return; }
+  const daftarBulan = [];
+  let tahun = rekapTglMinData.getFullYear(), bulan = rekapTglMinData.getMonth();
+  while (tahun < rekapTglMaxData.getFullYear() || (tahun === rekapTglMaxData.getFullYear() && bulan <= rekapTglMaxData.getMonth())) {
+    daftarBulan.push({ tahun: tahun, bulan: bulan });
+    bulan++; if (bulan > 11) { bulan = 0; tahun++; }
+  }
+  const kunciBaru = daftarBulan.length + '_' + rekapTglMinData.getTime() + '_' + rekapTglMaxData.getTime();
+  if (wrap.dataset.kunci === kunciBaru) return;
+  wrap.dataset.kunci = kunciBaru;
+  let html = '<div class="chip" data-aksi="semua">Semua</div>';
+  daftarBulan.forEach(function (b) {
+    html += '<div class="chip" data-tahun="' + b.tahun + '" data-bulan="' + b.bulan + '">' + NAMA_BULAN_REKAP_[b.bulan] + ' ' + b.tahun + '</div>';
+  });
+  wrap.innerHTML = html;
+  wrap.querySelector('[data-aksi="semua"]').addEventListener('click', function () {
+    pilihRentangTanggal_(rekapTglMinData, rekapTglMaxData);
+  });
+  wrap.querySelectorAll('[data-tahun]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      const r = rentangBulan_(parseInt(el.dataset.tahun, 10), parseInt(el.dataset.bulan, 10));
+      pilihRentangTanggal_(r.awal, r.akhir);
+    });
+  });
+}
+
+function perbaruiChipBulanAktif_() {
+  const wrap = document.getElementById('bulanFilterChips');
+  wrap.querySelectorAll('.chip').forEach(function (el) { el.classList.remove('active'); });
+  if (!filterTglMulai || !filterTglAkhir) return;
+  const chipBulan = wrap.querySelectorAll('[data-tahun]');
+  for (let i = 0; i < chipBulan.length; i++) {
+    const el = chipBulan[i];
+    const r = rentangBulan_(parseInt(el.dataset.tahun, 10), parseInt(el.dataset.bulan, 10));
+    if (filterTglMulai.getTime() === r.awal.getTime() && filterTglAkhir.getTime() === r.akhir.getTime()) {
+      el.classList.add('active');
+      return;
+    }
+  }
+  if (rekapTglMinData && rekapTglMaxData &&
+    filterTglMulai.getTime() === rekapTglMinData.getTime() && filterTglAkhir.getTime() === rekapTglMaxData.getTime()) {
+    const chipSemua = wrap.querySelector('[data-aksi="semua"]');
+    if (chipSemua) chipSemua.classList.add('active');
+  }
+}
 
 function renderRekapQC() {
   perbaruiOpsiFilterVarian_(rekapItemsRaw);
