@@ -1,6 +1,18 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+DASHBOARD ver.61
+============================================================
+PERUBAHAN ver.61 (request Denny): tab Rekap QC 2 perubahan besar -
+1. Sekarang narik SEMUA history (bukan cuma 14 hari terakhir) - endpoint Worker gak perlu diubah
+   (udah dukung parameter ?hari=N), cuma nilai default fetch di frontend dinaikin jadi 3650.
+2. Slider rentang tanggal (2 handle, geser dari tanggal awal ke tanggal akhir) buat narrow-in
+   tampilan - murni filter client-side (gak fetch ulang ke server tiap geser). Defaultnya full
+   range (semua history kelihatan), user bisa geser sendiri buat mempersempit. Posisinya COMPACT:
+   search box + dropdown varian digabung 1 baris (dipersempit masing2), baris yang kebebas dari
+   situ dipakai slider - total tinggi area filter TETAP SAMA, gak nambah space baru sama sekali.
+Riwayat lengkap: git log.
+============================================================
 DASHBOARD ver.60
 ============================================================
 PERUBAHAN ver.60 (request Denny): dropdown filter varian di tab Rekap QC di-restyle - dari native
@@ -286,6 +298,37 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .varian-filter-list { max-height: 260px; overflow-y: auto; overflow-x: hidden; margin-bottom: 8px; border-radius: 14px; border: 1px solid var(--border); }
   .varian-filter-item { padding: 10px 14px; font-weight: 600; font-size: 13.5px; cursor: pointer; color: var(--navy-dark); border-bottom: 0.5px solid rgba(0,0,0,.06); }
   .varian-filter-item:last-child { border-bottom: none; }
+  /* v.61 (request Denny): search box + dropdown varian digabung 1 baris biar hemat tempat - baris
+     yang kebebas dipakai slider tanggal. Di dalam baris ini, masing2 dipersempit dari lebar penuh. */
+  .rekap-filter-row { display: flex; gap: 8px; align-items: flex-start; }
+  .rekap-filter-row .search-box { flex: 1; min-width: 0; margin-bottom: 8px; }
+  .rekap-filter-row .varian-filter-trigger { flex: 0 1 38%; min-width: 0; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rekap-filter-row .varian-filter-trigger span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* v.61: slider rentang tanggal - 2 handle (dual <input type=range> ditumpuk), geser dari
+     tanggal awal ke tanggal akhir (request Denny). Track/fill murni visual (div), yang beneran
+     bisa digeser cuma 2 input range-nya (transparan, cuma thumb-nya yang kelihatan). */
+  .date-range-wrap { margin-bottom: 8px; }
+  .date-range-label { font-size: 11.5px; font-weight: 700; color: var(--navy-dark); text-align: center; margin-bottom: 2px; }
+  .date-range-track { position: relative; height: 28px; }
+  .date-range-track::before {
+    content: ''; position: absolute; left: 8px; right: 8px; top: 12px; height: 4px;
+    background: var(--surface-2); border-radius: 3px;
+  }
+  .date-range-fill { position: absolute; top: 12px; height: 4px; background: var(--indigo); border-radius: 3px; }
+  .date-range-track input[type="range"] {
+    position: absolute; left: 0; right: 0; top: 0; width: 100%; height: 28px; margin: 0;
+    -webkit-appearance: none; appearance: none; background: transparent; pointer-events: none;
+  }
+  .date-range-track input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; pointer-events: all; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--indigo); border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); cursor: pointer; margin-top: 5px;
+  }
+  .date-range-track input[type="range"]::-moz-range-thumb {
+    pointer-events: all; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--indigo); border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); cursor: pointer;
+  }
+  .date-range-track input[type="range"]::-webkit-slider-runnable-track { background: transparent; }
+  .date-range-track input[type="range"]::-moz-range-track { background: transparent; }
   .varian-filter-item:nth-child(6n+1) { background: #F5F4FB; }
   .varian-filter-item:nth-child(6n+2) { background: #EFECF8; }
   .varian-filter-item:nth-child(6n+3) { background: #F8F6FC; }
@@ -599,16 +642,32 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   <!-- ============ TAB: REKAP QC ============ -->
   <div id="tabRekap" style="display:none">
     <div class="section-label">REKAP QC</div>
-    <input type="text" class="search-box" id="searchRekap" placeholder="Cari warna/varian...">
-    <!-- v.57: filter varian (request Denny) - dropdown biar hemat tempat dibanding baris chip
-         (varian bisa banyak macam). Opsi diisi otomatis dari data yang lagi ke-load.
-         v.60: restyle dari native <select> jadi dropdown custom (trigger + list), biar bisa
-         dikasih styling siklus warna kayak dropdown Varian di Input Produksi (request Denny). -->
-    <div class="varian-filter-trigger" id="filterVarianRekapTrigger">
-      <span id="filterVarianRekapValue">Semua Varian</span>
-      <span class="chevron">▾</span>
+    <!-- v.61 (request Denny): search box + dropdown varian DIGABUNG 1 baris (masing2 dipersempit)
+         - baris yang kebebas dari sebelumnya (dropdown sendirian 1 baris) dipakai buat slider
+         rentang tanggal di bawah. Total tinggi tetap sama kayak sebelumnya, gak nambah space. -->
+    <div class="rekap-filter-row">
+      <input type="text" class="search-box" id="searchRekap" placeholder="Cari warna/varian...">
+      <!-- v.57: filter varian (request Denny) - dropdown biar hemat tempat dibanding baris chip
+           (varian bisa banyak macam). Opsi diisi otomatis dari data yang lagi ke-load.
+           v.60: restyle dari native <select> jadi dropdown custom (trigger + list), biar bisa
+           dikasih styling siklus warna kayak dropdown Varian di Input Produksi (request Denny). -->
+      <div class="varian-filter-trigger" id="filterVarianRekapTrigger">
+        <span id="filterVarianRekapValue">Semua Varian</span>
+        <span class="chevron">▾</span>
+      </div>
     </div>
     <div class="varian-filter-list" id="filterVarianRekapList" style="display:none"></div>
+    <!-- v.61: slider rentang tanggal (2 handle, geser dari tanggal awal ke tanggal akhir) -
+         batasnya otomatis dari tanggal submit paling lama s/d hari ini begitu data ke-load,
+         defaultnya full range (semua history kelihatan). -->
+    <div class="date-range-wrap" id="dateRangeWrap" style="display:none">
+      <div class="date-range-label" id="dateRangeLabel">- s/d -</div>
+      <div class="date-range-track">
+        <div class="date-range-fill" id="dateRangeFill"></div>
+        <input type="range" id="dateRangeMin" min="0" max="1" value="0" step="1">
+        <input type="range" id="dateRangeMax" min="0" max="1" value="1" step="1">
+      </div>
+    </div>
     <p class="rekap-summary" id="rekapSummary">Memuat...</p>
     <div class="rekap-wrap">
       <div id="rekapList"></div>
@@ -727,6 +786,15 @@ let searchWarnaQuery = '';
 let searchRekapQuery = '';
 let filterVarianRekapAktif = ''; // v.57: dropdown filter varian di tab Rekap QC (request Denny)
 let filterVarianRekapTerbuka = false; // v.60: state buka/tutup dropdown custom (bukan native <select> lagi)
+// v.61 (request Denny): slider rentang tanggal Rekap QC. rekapTglMinData/rekapTglMaxData = batas
+// yang tersedia dari data (dihitung ulang tiap data refresh). filterTglMulai/filterTglAkhir =
+// null berarti belum disentuh user (ikut full range data terbaru terus). Begitu user geser salah
+// satu handle, keduanya diisi tanggal eksplisit - abis itu gak lagi ke-auto-reset ke full range
+// pas data refresh (biar pilihan user gak ke-reset sendiri tiap Realtime narik data baru).
+let rekapTglMinData = null;
+let rekapTglMaxData = null;
+let filterTglMulai = null;
+let filterTglAkhir = null;
 // v.45: sebelumnya object {warna: true/false} - beberapa card warna bisa kebuka BARENGAN.
 // Sekarang single value (null = semua tertutup) - accordion, buka 1 card otomatis nutup yang
 // lain (request Denny poin 3).
@@ -2158,7 +2226,11 @@ function muatRekapQC(percobaan, manual) {
     }
     if (!munculDariCache) document.getElementById('rekapSummary').textContent = 'Memuat...';
   }
-  fetch(WORKER_URL + '/data/rekap-qc?hari=14')
+  // v.61 (request Denny): sebelumnya ?hari=14 (cuma 14 hari terakhir) - sekarang tarik SEMUA
+  // history (endpoint-nya sendiri gak perlu diubah, worker udah dukung parameter hari sembarang).
+  // Rentang tanggal buat NARROW-in tampilan sekarang ditangani via slider di client, bukan lewat
+  // parameter fetch ini - biar geser slider gak perlu nembak ulang ke server tiap kali.
+  fetch(WORKER_URL + '/data/rekap-qc?hari=3650')
     .then(function (r) { return r.json(); })
     .then(function (data) {
       rekapItemsRaw = Array.isArray(data) ? data : [];
@@ -2223,10 +2295,74 @@ function perbaruiOpsiFilterVarian_(items) {
   document.getElementById('filterVarianRekapValue').textContent = filterVarianRekapAktif || 'Semua Varian';
 }
 
+// v.61 (request Denny): hitung ulang batas slider tanggal dari data yang lagi ke-load - min =
+// tanggal submit paling lama, max = HARI INI (bukan submit terakhir, biar slider tetep bisa
+// digeser sampai "sekarang" walau belum ada submit hari itu). Kalau user BELUM PERNAH geser
+// slider (filterTglMulai/Akhir masih null), slider ikut nunjuk full range terus tiap data
+// refresh (defaultnya "semua history kelihatan"). Begitu user geser, batas (min/max) tetep
+// di-update kalau ada data lebih lama/baru, tapi PILIHAN user dipertahankan - gak ke-reset ke
+// full range sendiri tiap Realtime narik data baru (sama semangatnya kayak dropdown varian).
+function perbaruiRentangTanggalRekap_(items) {
+  const wrap = document.getElementById('dateRangeWrap');
+  if (items.length === 0) { wrap.style.display = 'none'; return; }
+  let minMs = Infinity;
+  items.forEach(function (it) { const t = new Date(it.waktu).getTime(); if (t < minMs) minMs = t; });
+  const baruMin = new Date(minMs); baruMin.setHours(0, 0, 0, 0);
+  const baruMax = new Date(); baruMax.setHours(0, 0, 0, 0);
+  const kunciBaru = baruMin.getTime() + '_' + baruMax.getTime();
+  if (wrap.dataset.kunci === kunciBaru) return;
+  wrap.dataset.kunci = kunciBaru;
+  rekapTglMinData = baruMin;
+  rekapTglMaxData = baruMax;
+  const totalHari = Math.max(1, Math.round((rekapTglMaxData - rekapTglMinData) / 86400000));
+  const inputMin = document.getElementById('dateRangeMin');
+  const inputMax = document.getElementById('dateRangeMax');
+  inputMin.max = totalHari; inputMax.max = totalHari;
+  inputMin.value = filterTglMulai ? Math.min(totalHari, Math.max(0, Math.round((filterTglMulai - rekapTglMinData) / 86400000))) : 0;
+  inputMax.value = filterTglAkhir ? Math.min(totalHari, Math.max(0, Math.round((filterTglAkhir - rekapTglMinData) / 86400000))) : totalHari;
+  wrap.style.display = 'block';
+  perbaruiTampilanSliderTanggal_();
+}
+
+function perbaruiTampilanSliderTanggal_() {
+  const inputMin = document.getElementById('dateRangeMin');
+  const inputMax = document.getElementById('dateRangeMax');
+  let a = parseInt(inputMin.value, 10), b = parseInt(inputMax.value, 10);
+  if (a > b) {
+    if (document.activeElement === inputMax) { a = b; inputMin.value = a; } else { b = a; inputMax.value = b; }
+  }
+  const totalHari = parseInt(inputMin.max, 10) || 1;
+  const track = document.querySelector('.date-range-track');
+  const fill = document.getElementById('dateRangeFill');
+  const lebar = track.offsetWidth;
+  const pxKiri = 9 + (a / totalHari) * (lebar - 18);
+  const pxKanan = 9 + (b / totalHari) * (lebar - 18);
+  fill.style.left = pxKiri + 'px';
+  fill.style.width = Math.max(0, pxKanan - pxKiri) + 'px';
+  const tglA = new Date(rekapTglMinData.getTime() + a * 86400000);
+  const tglB = new Date(rekapTglMinData.getTime() + b * 86400000);
+  const opt = { day: '2-digit', month: '2-digit' };
+  document.getElementById('dateRangeLabel').textContent = tglA.toLocaleDateString('id-ID', opt) + ' s/d ' + tglB.toLocaleDateString('id-ID', opt);
+  filterTglMulai = tglA;
+  filterTglAkhir = tglB;
+}
+
+document.getElementById('dateRangeMin').addEventListener('input', function () { perbaruiTampilanSliderTanggal_(); renderRekapQC(); });
+document.getElementById('dateRangeMax').addEventListener('input', function () { perbaruiTampilanSliderTanggal_(); renderRekapQC(); });
+
 function renderRekapQC() {
   perbaruiOpsiFilterVarian_(rekapItemsRaw);
+  perbaruiRentangTanggalRekap_(rekapItemsRaw);
   let items = rekapItemsRaw;
   if (filterVarianRekapAktif) items = items.filter(function (it) { return it.varian === filterVarianRekapAktif; });
+  if (filterTglMulai && filterTglAkhir) {
+    const batasAwal = filterTglMulai.getTime();
+    const batasAkhir = filterTglAkhir.getTime() + 86400000; // sampai akhir hari filterTglAkhir
+    items = items.filter(function (it) {
+      const t = new Date(it.waktu).getTime();
+      return t >= batasAwal && t < batasAkhir;
+    });
+  }
   if (searchRekapQuery) {
     const q = searchRekapQuery.toLowerCase();
     items = items.filter(function (it) {
@@ -2257,14 +2393,19 @@ function renderRekapQC() {
     '<div class="rekap-num">Selesai</div><div class="rekap-num">Reject</div>' +
     (isAdmin ? '<div></div>' : '') + '</div>';
 
+  // v.61: dianggap "difilter" kalau search/varian aktif, ATAU slider tanggal udah digeser dari
+  // full range (bukan cuma "udah disentuh" - user bisa geser terus balik lagi ke full range).
+  const tglDipersempit = !!(filterTglMulai && filterTglAkhir && rekapTglMinData && rekapTglMaxData &&
+    (filterTglMulai.getTime() > rekapTglMinData.getTime() || filterTglAkhir.getTime() < rekapTglMaxData.getTime()));
+  const adaFilterAktif = !!(searchRekapQuery || filterVarianRekapAktif || tglDipersempit);
+
   if (items.length === 0) {
-    const adaFilter = !!(searchRekapQuery || filterVarianRekapAktif);
-    summary.textContent = adaFilter ? 'Gak ada hasil buat filter ini.' : 'Belum ada submit QC dalam 14 hari terakhir.';
-    list.innerHTML = headHtml + '<div class="rekap-row" style="grid-template-columns:1fr"><div class="rekap-muted">' + (adaFilter ? 'Gak ada hasil pencarian.' : 'Belum ada submit QC.') + '</div></div>';
+    summary.textContent = adaFilterAktif ? 'Gak ada hasil buat filter ini.' : 'Belum ada submit QC.';
+    list.innerHTML = headHtml + '<div class="rekap-row" style="grid-template-columns:1fr"><div class="rekap-muted">' + (adaFilterAktif ? 'Gak ada hasil pencarian.' : 'Belum ada submit QC.') + '</div></div>';
     document.getElementById('rekapFoot').innerHTML = '';
     return;
   }
-  summary.textContent = items.length + ' submit' + ((searchRekapQuery || filterVarianRekapAktif) ? ' (hasil filter)' : ' (14 hari terakhir)');
+  summary.textContent = items.length + ' submit' + (adaFilterAktif ? ' (hasil filter)' : ' (semua history)');
 
   const barisHtml = items.map(function (it) {
     const petaUkuran = {};
