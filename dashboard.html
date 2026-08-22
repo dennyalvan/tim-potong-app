@@ -1,6 +1,17 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+DASHBOARD ver.63
+============================================================
+PERUBAHAN ver.63 (koreksi ver.62, request Denny): baris chip pilih bulan (ver.62) diganti dropdown
+- Denny nge-flag risiko nyata: chip horizontal bakal makin panjang & perlu geser2 ke samping terus
+kalau bulan/tahun udah banyak (sistem ini kepake bertahun-tahun). Dropdown scroll VERTIKAL gak
+punya batasan itu. Diganti PERSIS pola dropdown Varian (trigger + list custom, "kunci" dataset,
+highlight item aktif) - reuse class .varian-filter-trigger/-list/-item yang udah ada, gak ada
+style baru sama sekali. Logic penentuan rentang tanggal per bulan (1 s/d 30, dipotong Februari)
+TIDAK berubah dari ver.62 - cuma cara milihnya yang ganti dari klik chip jadi klik item dropdown.
+Riwayat lengkap: git log.
+============================================================
 DASHBOARD ver.62
 ============================================================
 PERUBAHAN ver.62 (request Denny): pelengkap slider tanggal Rekap QC (ver.61) - baris chip pilih
@@ -679,10 +690,16 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
         <input type="range" id="dateRangeMax" min="0" max="1" value="1" step="1">
       </div>
     </div>
-    <!-- v.62 (request Denny): pelengkap slider - chip pilih cepat per bulan (tanggal 1 s/d 30,
-         dipotong ke tanggal terakhir asli buat Februari). Reuse class .filter-chips/.chip yang
-         udah ada (Stok Kain), gak bikin style baru. Klik langsung geser slider ke rentang itu. -->
-    <div class="filter-chips" id="bulanFilterChips"></div>
+    <!-- v.63 (request Denny, koreksi ver.62): baris chip bulan diganti dropdown - kekhawatiran
+         Denny valid, chip horizontal bakal makin panjang & perlu geser2 terus kalau bulan/tahun
+         udah banyak. Dropdown scroll VERTIKAL gak punya batasan itu. Reuse class
+         .varian-filter-trigger/.varian-filter-list/.varian-filter-item yang udah ada (dropdown
+         Varian ver.60) - gak ada style baru sama sekali, cuma markup + JS baru. -->
+    <div class="varian-filter-trigger" id="filterBulanRekapTrigger">
+      <span id="filterBulanRekapValue">Semua Bulan</span>
+      <span class="chevron">▾</span>
+    </div>
+    <div class="varian-filter-list" id="filterBulanRekapList" style="display:none"></div>
     <p class="rekap-summary" id="rekapSummary">Memuat...</p>
     <div class="rekap-wrap">
       <div id="rekapList"></div>
@@ -2336,7 +2353,7 @@ function perbaruiRentangTanggalRekap_(items) {
   inputMin.value = filterTglMulai ? Math.min(totalHari, Math.max(0, Math.round((filterTglMulai - rekapTglMinData) / 86400000))) : 0;
   inputMax.value = filterTglAkhir ? Math.min(totalHari, Math.max(0, Math.round((filterTglAkhir - rekapTglMinData) / 86400000))) : totalHari;
   wrap.style.display = 'block';
-  perbaruiChipBulanRekap_();
+  perbaruiOpsiFilterBulan_();
   perbaruiTampilanSliderTanggal_();
 }
 
@@ -2361,7 +2378,7 @@ function perbaruiTampilanSliderTanggal_() {
   document.getElementById('dateRangeLabel').textContent = tglA.toLocaleDateString('id-ID', opt) + ' s/d ' + tglB.toLocaleDateString('id-ID', opt);
   filterTglMulai = tglA;
   filterTglAkhir = tglB;
-  perbaruiChipBulanAktif_();
+  perbaruiTampilanFilterBulanAktif_();
 }
 
 document.getElementById('dateRangeMin').addEventListener('input', function () { perbaruiTampilanSliderTanggal_(); renderRekapQC(); });
@@ -2372,7 +2389,14 @@ document.getElementById('dateRangeMax').addEventListener('input', function () { 
 // 30 bulan itu (PERSIS instruksi Denny "1/30"), dipotong ke tanggal terakhir asli kalau bulan itu
 // lebih pendek dari 30 hari (Februari). Nge-set lewat SLIDER (bukan langsung filterTglMulai/Akhir)
 // biar slider & chip selalu sinkron dari 1 sumber kebenaran yang sama.
+// v.63 (koreksi ver.62, request Denny): "hover" pilih bulan sebelumnya chip horizontal - Denny
+// khawatir bakal makin panjang & perlu geser2 kalau bulan/tahun udah banyak. Diganti dropdown
+// (scroll vertikal, gak ada batasan panjang) - PERSIS pola dropdown Varian (perbaruiOpsiFilterVarian_
+// ver.57/60): trigger + list custom, "kunci" dataset biar gak render ulang & nutup dropdown
+// sendiri kalau data gak berubah. rentangBulan_/pilihRentangTanggal_ di bawah TETAP DIPAKAI
+// (logicnya sama, cuma cara milihnya yang ganti dari klik chip jadi klik item dropdown).
 const NAMA_BULAN_REKAP_ = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+let filterBulanRekapTerbuka = false;
 
 function pilihRentangTanggal_(tglAwal, tglAkhir) {
   const totalHari = parseInt(document.getElementById('dateRangeMin').max, 10) || 1;
@@ -2391,9 +2415,9 @@ function rentangBulan_(tahun, bulan0) {
   return { awal: awal, akhir: akhir };
 }
 
-function perbaruiChipBulanRekap_() {
-  const wrap = document.getElementById('bulanFilterChips');
-  if (!rekapTglMinData || !rekapTglMaxData) { wrap.innerHTML = ''; return; }
+function perbaruiOpsiFilterBulan_() {
+  const list = document.getElementById('filterBulanRekapList');
+  if (!rekapTglMinData || !rekapTglMaxData) { list.innerHTML = ''; return; }
   const daftarBulan = [];
   let tahun = rekapTglMinData.getFullYear(), bulan = rekapTglMinData.getMonth();
   while (tahun < rekapTglMaxData.getFullYear() || (tahun === rekapTglMaxData.getFullYear() && bulan <= rekapTglMaxData.getMonth())) {
@@ -2401,43 +2425,59 @@ function perbaruiChipBulanRekap_() {
     bulan++; if (bulan > 11) { bulan = 0; tahun++; }
   }
   const kunciBaru = daftarBulan.length + '_' + rekapTglMinData.getTime() + '_' + rekapTglMaxData.getTime();
-  if (wrap.dataset.kunci === kunciBaru) return;
-  wrap.dataset.kunci = kunciBaru;
-  let html = '<div class="chip" data-aksi="semua">Semua</div>';
-  daftarBulan.forEach(function (b) {
-    html += '<div class="chip" data-tahun="' + b.tahun + '" data-bulan="' + b.bulan + '">' + NAMA_BULAN_REKAP_[b.bulan] + ' ' + b.tahun + '</div>';
-  });
-  wrap.innerHTML = html;
-  wrap.querySelector('[data-aksi="semua"]').addEventListener('click', function () {
+  if (list.dataset.kunci === kunciBaru) return;
+  list.dataset.kunci = kunciBaru;
+  // terbaru di atas - lebih relevan buat dicari drpd urut kronologis dari yang paling lama
+  let html = '<div class="varian-filter-item" data-aksi="semua">Semua Bulan</div>';
+  for (let i = daftarBulan.length - 1; i >= 0; i--) {
+    const b = daftarBulan[i];
+    html += '<div class="varian-filter-item" data-tahun="' + b.tahun + '" data-bulan="' + b.bulan + '">' + NAMA_BULAN_REKAP_[b.bulan] + ' ' + b.tahun + '</div>';
+  }
+  list.innerHTML = html;
+  list.querySelector('[data-aksi="semua"]').addEventListener('click', function () {
     pilihRentangTanggal_(rekapTglMinData, rekapTglMaxData);
+    filterBulanRekapTerbuka = false;
+    list.style.display = 'none';
   });
-  wrap.querySelectorAll('[data-tahun]').forEach(function (el) {
+  list.querySelectorAll('[data-tahun]').forEach(function (el) {
     el.addEventListener('click', function () {
       const r = rentangBulan_(parseInt(el.dataset.tahun, 10), parseInt(el.dataset.bulan, 10));
       pilihRentangTanggal_(r.awal, r.akhir);
+      filterBulanRekapTerbuka = false;
+      list.style.display = 'none';
     });
   });
 }
 
-function perbaruiChipBulanAktif_() {
-  const wrap = document.getElementById('bulanFilterChips');
-  wrap.querySelectorAll('.chip').forEach(function (el) { el.classList.remove('active'); });
+function perbaruiTampilanFilterBulanAktif_() {
+  const list = document.getElementById('filterBulanRekapList');
+  const label = document.getElementById('filterBulanRekapValue');
+  list.querySelectorAll('.varian-filter-item').forEach(function (el) { el.classList.remove('aktif'); });
   if (!filterTglMulai || !filterTglAkhir) return;
-  const chipBulan = wrap.querySelectorAll('[data-tahun]');
-  for (let i = 0; i < chipBulan.length; i++) {
-    const el = chipBulan[i];
+  const itemBulan = list.querySelectorAll('[data-tahun]');
+  for (let i = 0; i < itemBulan.length; i++) {
+    const el = itemBulan[i];
     const r = rentangBulan_(parseInt(el.dataset.tahun, 10), parseInt(el.dataset.bulan, 10));
     if (filterTglMulai.getTime() === r.awal.getTime() && filterTglAkhir.getTime() === r.akhir.getTime()) {
-      el.classList.add('active');
+      el.classList.add('aktif');
+      label.textContent = el.textContent;
       return;
     }
   }
   if (rekapTglMinData && rekapTglMaxData &&
     filterTglMulai.getTime() === rekapTglMinData.getTime() && filterTglAkhir.getTime() === rekapTglMaxData.getTime()) {
-    const chipSemua = wrap.querySelector('[data-aksi="semua"]');
-    if (chipSemua) chipSemua.classList.add('active');
+    const itemSemua = list.querySelector('[data-aksi="semua"]');
+    if (itemSemua) itemSemua.classList.add('aktif');
+    label.textContent = 'Semua Bulan';
+    return;
   }
+  label.textContent = 'Rentang custom'; // slider digeser manual, gak pas 1 bulan/semua
 }
+
+document.getElementById('filterBulanRekapTrigger').addEventListener('click', function () {
+  filterBulanRekapTerbuka = !filterBulanRekapTerbuka;
+  document.getElementById('filterBulanRekapList').style.display = filterBulanRekapTerbuka ? 'block' : 'none';
+});
 
 function renderRekapQC() {
   perbaruiOpsiFilterVarian_(rekapItemsRaw);
