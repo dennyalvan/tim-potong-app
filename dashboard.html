@@ -1,6 +1,18 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+DASHBOARD ver.65
+============================================================
+PERUBAHAN ver.65 (koreksi ver.61+64, request Denny): area filter Rekap QC direstrukturisasi jadi
+grid 2 kolom x 2 baris SUNGGUHAN (CSS Grid), bukan lagi 2 flex row terpisah yang proporsinya
+bisa beda sendiri-sendiri. Kolom kiri: search box (atas) + slider tanggal (bawah). Kolom kanan:
+dropdown Varian (atas) + dropdown Periode (bawah, sebelumnya nempel di baris label tanggal, kini
+pindah sejajar di bawah Varian). Daftar dropdown (varian-filter-list) ditarik keluar dari grid,
+tetap render sebagai block biasa di bawah biar gak bikin grid ribet pas salah satu dibuka. Slider
+sekarang pakai visibility (bukan display) buat state loading-nya, biar cell grid dropdown Periode
+di sebelahnya gak ikut geser sesaat sebelum data termuat.
+Riwayat lengkap: git log.
+============================================================
 DASHBOARD ver.64
 ============================================================
 PERUBAHAN ver.64 (request Denny): 2 penyempurnaan dropdown Periode (ver.63) -
@@ -330,22 +342,18 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .varian-filter-list { max-height: 260px; overflow-y: auto; overflow-x: hidden; margin-bottom: 8px; border-radius: 14px; border: 1px solid var(--border); }
   .varian-filter-item { padding: 10px 14px; font-weight: 600; font-size: 13.5px; cursor: pointer; color: var(--navy-dark); border-bottom: 0.5px solid rgba(0,0,0,.06); }
   .varian-filter-item:last-child { border-bottom: none; }
-  /* v.61 (request Denny): search box + dropdown varian digabung 1 baris biar hemat tempat - baris
-     yang kebebas dipakai slider tanggal. Di dalam baris ini, masing2 dipersempit dari lebar penuh. */
-  .rekap-filter-row { display: flex; gap: 8px; align-items: flex-start; }
-  .rekap-filter-row .search-box { flex: 1; min-width: 0; margin-bottom: 8px; }
-  .rekap-filter-row .varian-filter-trigger { flex: 0 1 38%; min-width: 0; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .rekap-filter-row .varian-filter-trigger span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* v.65 (request Denny, koreksi ver.61+64): grid 2 kolom x 2 baris SUNGGUHAN - kolom kiri
+     (search box, slider) & kolom kanan (dropdown Varian, dropdown Periode) OTOMATIS sejajar
+     karena satu CSS Grid yang sama (grid-template-columns dipakai bareng semua baris) - beda
+     dari sebelumnya (ver.61/64) yang 2 flex row terpisah, proporsinya bisa beda sendiri-sendiri. */
+  .rekap-filter-grid { display: grid; grid-template-columns: 1fr minmax(110px, 38%); gap: 8px; align-items: start; margin-bottom: 8px; }
+  .rekap-filter-grid .search-box, .rekap-filter-grid .varian-filter-trigger, .rekap-filter-grid .date-range-wrap { margin-bottom: 0; }
+  .rekap-filter-grid .varian-filter-trigger { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rekap-filter-grid .varian-filter-trigger span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* v.61: slider rentang tanggal - 2 handle (dual <input type=range> ditumpuk), geser dari
      tanggal awal ke tanggal akhir (request Denny). Track/fill murni visual (div), yang beneran
      bisa digeser cuma 2 input range-nya (transparan, cuma thumb-nya yang kelihatan). */
-  .date-range-wrap { margin-bottom: 8px; }
-  /* v.64 (request Denny): dropdown Periode + label tanggal digabung 1 baris (sebelumnya dropdown
-     baris terpisah di bawah track) - trigger dibikin lebih compact khusus di konteks ini
-     (padding/font lebih kecil drpd .varian-filter-trigger dasar), biar muat berdampingan. */
-  .date-range-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-  .date-range-head .varian-filter-trigger { flex: 0 0 auto; margin-bottom: 0; padding: 6px 10px; font-size: 12px; }
-  .date-range-label { font-size: 11.5px; font-weight: 700; color: var(--navy-dark); text-align: right; flex: 1; min-width: 0; }
+  .date-range-label { font-size: 11.5px; font-weight: 700; color: var(--navy-dark); text-align: center; margin-bottom: 2px; }
   .date-range-track { position: relative; height: 28px; }
   .date-range-track::before {
     content: ''; position: absolute; left: 8px; right: 8px; top: 12px; height: 4px;
@@ -679,10 +687,14 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   <!-- ============ TAB: REKAP QC ============ -->
   <div id="tabRekap" style="display:none">
     <div class="section-label">REKAP QC</div>
-    <!-- v.61 (request Denny): search box + dropdown varian DIGABUNG 1 baris (masing2 dipersempit)
-         - baris yang kebebas dari sebelumnya (dropdown sendirian 1 baris) dipakai buat slider
-         rentang tanggal di bawah. Total tinggi tetap sama kayak sebelumnya, gak nambah space. -->
-    <div class="rekap-filter-row">
+    <!-- v.65 (request Denny, koreksi ver.61+64): grid 2 kolom x 2 baris SUNGGUHAN (sebelumnya
+         3 baris terpisah-pisah) - kolom kiri: search box (atas) + slider (bawah), kolom kanan:
+         dropdown Varian (atas) + dropdown Periode (bawah). Satu .rekap-filter-grid pakai CSS
+         Grid biar kolom baris 1 & baris 2 OTOMATIS sejajar (bukan 2 flex row terpisah yang
+         proporsinya bisa beda-beda sendiri-sendiri). Daftar dropdown (varian-filter-list) DITARIK
+         KELUAR dari grid - render sebagai block biasa di bawah, biar gak bikin struktur grid ribet
+         pas salah satu dropdown lagi kebuka (baris ke-3, ke-4 dst kalau ikut masuk grid). -->
+    <div class="rekap-filter-grid">
       <input type="text" class="search-box" id="searchRekap" placeholder="Cari warna/varian...">
       <!-- v.57: filter varian (request Denny) - dropdown biar hemat tempat dibanding baris chip
            (varian bisa banyak macam). Opsi diisi otomatis dari data yang lagi ke-load.
@@ -692,27 +704,26 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
         <span id="filterVarianRekapValue">Semua Varian</span>
         <span class="chevron">▾</span>
       </div>
+      <!-- v.61: slider rentang tanggal (2 handle, geser dari tanggal awal ke tanggal akhir) -
+           batasnya otomatis dari tanggal submit paling lama s/d hari ini begitu data ke-load,
+           defaultnya full range (semua history kelihatan). -->
+      <div class="date-range-wrap" id="dateRangeWrap" style="visibility:hidden">
+        <div class="date-range-label" id="dateRangeLabel">- s/d -</div>
+        <div class="date-range-track">
+          <div class="date-range-fill" id="dateRangeFill"></div>
+          <input type="range" id="dateRangeMin" min="0" max="1" value="0" step="1">
+          <input type="range" id="dateRangeMax" min="0" max="1" value="1" step="1">
+        </div>
+      </div>
+      <!-- v.63: dropdown pilih bulan (request Denny) - reuse class varian-filter-trigger/-list/
+           -item, "kunci" dataset. v.64: label fallback "Periode". -->
+      <div class="varian-filter-trigger" id="filterBulanRekapTrigger">
+        <span id="filterBulanRekapValue">Semua Bulan</span>
+        <span class="chevron">▾</span>
+      </div>
     </div>
     <div class="varian-filter-list" id="filterVarianRekapList" style="display:none"></div>
-    <!-- v.64 (request Denny): dropdown pilih bulan (ver.63) digabung 1 baris sama label tanggal
-         slider - SEBELUMNYA baris terpisah di bawah track, sekarang nempel di baris yang sama
-         kayak label "30/07 s/d 30/07" (yang tadinya sendirian gak ngapa2in di baris itu). Trigger-
-         nya sekarang dilabeli "Periode" pas rentang custom (bukan lagi "Rentang custom"). -->
-    <div class="date-range-wrap" id="dateRangeWrap" style="display:none">
-      <div class="date-range-head">
-        <div class="varian-filter-trigger" id="filterBulanRekapTrigger">
-          <span id="filterBulanRekapValue">Semua Bulan</span>
-          <span class="chevron">▾</span>
-        </div>
-        <div class="date-range-label" id="dateRangeLabel">- s/d -</div>
-      </div>
-      <div class="varian-filter-list" id="filterBulanRekapList" style="display:none"></div>
-      <div class="date-range-track">
-        <div class="date-range-fill" id="dateRangeFill"></div>
-        <input type="range" id="dateRangeMin" min="0" max="1" value="0" step="1">
-        <input type="range" id="dateRangeMax" min="0" max="1" value="1" step="1">
-      </div>
-    </div>
+    <div class="varian-filter-list" id="filterBulanRekapList" style="display:none"></div>
     <p class="rekap-summary" id="rekapSummary">Memuat...</p>
     <div class="rekap-wrap">
       <div id="rekapList"></div>
@@ -2349,7 +2360,7 @@ function perbaruiOpsiFilterVarian_(items) {
 // full range sendiri tiap Realtime narik data baru (sama semangatnya kayak dropdown varian).
 function perbaruiRentangTanggalRekap_(items) {
   const wrap = document.getElementById('dateRangeWrap');
-  if (items.length === 0) { wrap.style.display = 'none'; return; }
+  if (items.length === 0) { wrap.style.visibility = 'hidden'; return; }
   let minMs = Infinity;
   items.forEach(function (it) { const t = new Date(it.waktu).getTime(); if (t < minMs) minMs = t; });
   const baruMin = new Date(minMs); baruMin.setHours(0, 0, 0, 0);
@@ -2365,7 +2376,7 @@ function perbaruiRentangTanggalRekap_(items) {
   inputMin.max = totalHari; inputMax.max = totalHari;
   inputMin.value = filterTglMulai ? Math.min(totalHari, Math.max(0, Math.round((filterTglMulai - rekapTglMinData) / 86400000))) : 0;
   inputMax.value = filterTglAkhir ? Math.min(totalHari, Math.max(0, Math.round((filterTglAkhir - rekapTglMinData) / 86400000))) : totalHari;
-  wrap.style.display = 'block';
+  wrap.style.visibility = 'visible';
   perbaruiOpsiFilterBulan_();
   perbaruiTampilanSliderTanggal_();
 }
