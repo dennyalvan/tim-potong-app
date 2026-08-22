@@ -1,6 +1,15 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+DASHBOARD ver.66
+============================================================
+PERUBAHAN ver.66 (request Denny): label default trigger dropdown Rekap QC diganti - "Semua Varian"
+-> "Pilih Varian", "Semua Bulan" -> "Pilih Periode". Cuma trigger-nya (teks yang kelihatan pas
+belum/gak ada filter aktif) - opsi "Semua Varian"/"Semua Bulan" DI DALAM daftar dropdown (buat
+reset balik ke nampilin semuanya) SENGAJA dibiarkan gak berubah, karena maknanya beda (itu pilihan
+eksplisit "tampilin semua", bukan placeholder "belum milih apa-apa").
+Riwayat lengkap: git log.
+============================================================
 DASHBOARD ver.65
 ============================================================
 PERUBAHAN ver.65 (koreksi ver.61+64, request Denny): area filter Rekap QC direstrukturisasi jadi
@@ -701,7 +710,7 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
            v.60: restyle dari native <select> jadi dropdown custom (trigger + list), biar bisa
            dikasih styling siklus warna kayak dropdown Varian di Input Produksi (request Denny). -->
       <div class="varian-filter-trigger" id="filterVarianRekapTrigger">
-        <span id="filterVarianRekapValue">Semua Varian</span>
+        <span id="filterVarianRekapValue">Pilih Varian</span>
         <span class="chevron">▾</span>
       </div>
       <!-- v.61: slider rentang tanggal (2 handle, geser dari tanggal awal ke tanggal akhir) -
@@ -718,7 +727,7 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
       <!-- v.63: dropdown pilih bulan (request Denny) - reuse class varian-filter-trigger/-list/
            -item, "kunci" dataset. v.64: label fallback "Periode". -->
       <div class="varian-filter-trigger" id="filterBulanRekapTrigger">
-        <span id="filterBulanRekapValue">Semua Bulan</span>
+        <span id="filterBulanRekapValue">Pilih Periode</span>
         <span class="chevron">▾</span>
       </div>
     </div>
@@ -2348,7 +2357,7 @@ function perbaruiOpsiFilterVarian_(items) {
       renderRekapQC();
     });
   });
-  document.getElementById('filterVarianRekapValue').textContent = filterVarianRekapAktif || 'Semua Varian';
+  document.getElementById('filterVarianRekapValue').textContent = filterVarianRekapAktif || 'Pilih Varian';
 }
 
 // v.61 (request Denny): hitung ulang batas slider tanggal dari data yang lagi ke-load - min =
@@ -2492,7 +2501,7 @@ function perbaruiTampilanFilterBulanAktif_() {
     filterTglMulai.getTime() === rekapTglMinData.getTime() && filterTglAkhir.getTime() === rekapTglMaxData.getTime()) {
     const itemSemua = list.querySelector('[data-aksi="semua"]');
     if (itemSemua) itemSemua.classList.add('aktif');
-    label.textContent = 'Semua Bulan';
+    label.textContent = 'Pilih Periode';
     return;
   }
   label.textContent = 'Periode'; // slider digeser manual, gak pas 1 bulan/semua - request Denny (sebelumnya "Rentang custom")
