@@ -1,4 +1,12 @@
 // ============================================================
+// CODE WORKER PRODUKSI ver.49
+// ============================================================
+// PERUBAHAN ver.49 (request Denny, ubah format notifikasi Telegram): (1) Hasil Cutting - emoji
+// baris ukuran 📎->✂️, format ukuran "S18, M36 = 169" -> "S 18 | M 36" (spasi, pemisah " | "),
+// Total dipisah jadi baris sendiri. (2) Rekap QC - baris ukuran yang tadinya 1 baris per ukuran
+// (vertikal) sekarang 1 baris horizontal dipisah " | ", sama pola kayak Hasil Cutting. Header
+// status kedua notifikasi (✅ Hasil Cutting / ✅ LENGKAP 👍 / 🔴 BELUM LENGKAP) TIDAK berubah.
+// ============================================================
 // CODE WORKER PRODUKSI ver.48
 // ============================================================
 // PERUBAHAN ver.48 (request Denny): fitur Write-off Manual (per-roll) di modal Edit Stok Kain
@@ -795,14 +803,15 @@ function htmlEscape_(teks) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-// v.26: format direvisi lagi (contoh Denny) -
+// v.49: format direvisi lagi (contoh Denny) -
 //   Senin, 3/08/26
 //   ✅ Hasil Cutting
 //
 //   <b>1. RFL MERAH 24.85kg / 0132</b>
-//   📎 S18, M36, L43, XL36, XXL36 = 169
-// Bedanya dari ver.20: kg sekarang nempel LANGSUNG setelah nama warna (bukan di akhir), kode
-// roll dipisah "/" (bukan lagi "(Roll ...)"), dan baris ukuran dikasih prefix emoji 📎.
+//   ✂️ S 18 | M 36 | L 43 | XL 36 | XXL 36
+//   Total: 169
+// Beda dari ver.26: emoji baris ukuran 📎->✂️, tiap ukuran dikasih spasi ("S 18" bukan "S18") dan
+// dipisah " | " (bukan ", "), Total dipisah jadi baris sendiri (bukan nempel "= 169" di baris ukuran).
 async function kirimNotifikasiProduksi_(env, rowsTersimpan, peringatanStok) {
   const botToken = env.TELEGRAM_BOT_TOKEN;
   const chatId = env.TELEGRAM_GROUP_CHAT_ID;
@@ -811,11 +820,11 @@ async function kirimNotifikasiProduksi_(env, rowsTersimpan, peringatanStok) {
   const barisTeks = rowsTersimpan.map(function (r, i) {
     const ukuranObj = kolomKeUkuran_(r);
     const totalQty = Object.keys(ukuranObj).reduce(function (sum, u) { return sum + ukuranObj[u]; }, 0);
-    const ukuranTeks = Object.keys(ukuranObj).map(function (u) { return u + ukuranObj[u]; }).join(', ') + ' = ' + totalQty;
+    const ukuranTeks = Object.keys(ukuranObj).map(function (u) { return u + ' ' + ukuranObj[u]; }).join(' | ');
     const kgTeks = r.pemakaian_kain_kg ? (' ' + r.pemakaian_kain_kg + 'kg') : '';
     const rollTeks = r.kode_roll ? (' / ' + r.kode_roll) : '';
     const judulItem = '<b>' + (i + 1) + '. ' + htmlEscape_(r.jenis_warna_baju) + kgTeks + rollTeks + '</b>';
-    return judulItem + '\n📎 ' + htmlEscape_(ukuranTeks);
+    return judulItem + '\n✂️ ' + htmlEscape_(ukuranTeks) + '\nTotal: ' + totalQty;
   }).join('\n\n');
 
   let teks = formatTanggalIndoJakarta_(new Date()) + '\n✅ Hasil Cutting\n\n' + barisTeks;
@@ -1999,15 +2008,14 @@ async function ambilInfoWarnaVarianUntukLog_(env, namaItem) {
   }
 }
 
-// v.31: format direvisi total (contoh Denny) - 2 format beda tergantung status:
+// v.49: format direvisi lagi (contoh Denny) -
 //   LENGKAP:
 //     Sabtu,  1/08/26
 //     ✅ LENGKAP 👍
 //
 //     <b>LS24 SAGE</b> (9103)
 //     <b><u>DEWASA PANJANG</u></b>
-//     XL 44
-//     XXL 7
+//     XL 44 | XXL 7
 //     Total: 51
 //   BELUM LENGKAP (baris ukuran cuma yang SUDAH ada progress-nya, sisanya gak ditampilin):
 //     Sabtu,  1/08/26
@@ -2017,6 +2025,8 @@ async function ambilInfoWarnaVarianUntukLog_(env, namaItem) {
 //     <b><u>DEWASA PANJANG</u></b>
 //     XXL 7
 //     Total: 7 dari 51
+// Beda dari ver.31: baris ukuran sekarang 1 baris horizontal dipisah " | " (bukan 1 baris per
+// ukuran). Header status (✅ LENGKAP 👍 / 🔴 BELUM LENGKAP) TIDAK berubah.
 // CATATAN ASUMSI (belum ada di contoh Denny - reject-nya kebetulan 0 di kedua contoh): kalau
 // totalReject > 0, ditambah 1 baris "Reject: <n>" sebelum baris Total. Kalau ternyata Denny mau
 // beda, gampang diubah - tinggal baris `if (totalReject > 0) teks += ...` di bawah.
@@ -2030,7 +2040,7 @@ async function kirimAtauEditNotifikasiQC_(env, tp, totalSelesai, totalReject, st
   const barisUkuran = (perUkuranBaru || [])
     .filter(function (u) { return u.selesai > 0; })
     .map(function (u) { return u.ukuran + ' ' + u.selesai; })
-    .join('\n');
+    .join(' | ');
 
   let teks = formatTanggalIndoJakarta_(new Date()) + '\n' + headerStatus + '\n\n';
   teks += '<b>' + htmlEscape_(tp.jenis_warna_baju) + '</b>' + (tp.kode_roll ? (' (' + htmlEscape_(tp.kode_roll) + ')') : '') + '\n';
