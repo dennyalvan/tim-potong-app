@@ -1,6 +1,19 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+DASHBOARD ver.67
+============================================================
+PERUBAHAN ver.67 (request Denny): modal Edit Stok Kain - fitur Write-off Manual diganti Stock
+Opname. Field "Kg Sisa" sekarang bisa diketik langsung (bukan lagi abu-abu/readonly) - isi angka
+hasil hitung fisik, backend yang ngitung selisihnya sendiri. Checkbox "Terpakai habis" pindah ke
+sini (centang -> Kg Sisa otomatis 0). Section "Write-off Manual" + tombolnya dihapus, jadi satu
+tombol "Simpan Perubahan" buat semuanya. "Riwayat Write-off" diganti nama "Riwayat Penyesuaian" -
+sekarang bisa nampilin angka + (opname ketemu lebih banyak dari sistem) selain - (berkurang).
+Fitur Write-off Massal (tombol "☑️ Pilih") TIDAK disentuh, tetap sama.
+Riwayat lengkap: git log.
+============================================================
+============================================================
+
 DASHBOARD ver.66
 ============================================================
 PERUBAHAN ver.66 (request Denny): label default trigger dropdown Rekap QC diganti - "Semua Varian"
@@ -593,7 +606,6 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .mf-subtotal { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; margin: 10px 0; }
   .mf-subtotal b { font-size: 15px; }
   .mf-save-btn { width: 100%; background: var(--indigo); color: #fff; border: none; border-radius: 10px; padding: 11px; font-weight: 700; font-size: 13.5px; cursor: pointer; margin-top: 6px; }
-  .mf-writeoff-btn { width: 100%; background: #fff; color: var(--danger); border: 1.5px solid var(--danger); border-radius: 10px; padding: 10px; font-weight: 700; font-size: 13px; cursor: pointer; margin-top: 4px; }
   .wo-item { background: #fff; border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; font-size: 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .wo-item.dibatalkan { opacity: .5; }
   .wo-item .wo-info { flex: 1; min-width: 0; }
@@ -2031,14 +2043,16 @@ function renderModalEditStok_() {
 
   const riwayatHtml = (d.riwayatWriteoff && d.riwayatWriteoff.length)
     ? d.riwayatWriteoff.map(function (w) {
+        const kgNum = parseFloat(w.kg) || 0;
+        const tandaKg = kgNum >= 0 ? ('-' + formatAngka(kgNum)) : ('+' + formatAngka(Math.abs(kgNum)));
         return '<div class="wo-item' + (w.status !== 'aktif' ? ' dibatalkan' : '') + '">' +
-          '<div class="wo-info"><span class="wo-kg">-' + formatAngka(w.kg) + ' kg</span>' +
+          '<div class="wo-info"><span class="wo-kg">' + tandaKg + ' kg</span>' +
           (w.catatan ? '<div class="wo-catatan">' + escapeHtml(w.catatan) + '</div>' : '') +
           '<div class="wo-waktu">' + escapeHtml(w.waktu_wib || '') + (w.status !== 'aktif' ? ' · dibatalkan' : '') + '</div></div>' +
           (w.status === 'aktif' ? '<button class="btn-batal-wo" data-batalwo="' + w.id + '">Batal</button>' : '') +
           '</div>';
       }).join('')
-    : '<div class="wo-kosong">Belum ada write-off buat roll ini.</div>';
+    : '<div class="wo-kosong">Belum ada penyesuaian buat roll ini.</div>';
 
   box.innerHTML =
     '<button class="modal-close" data-tutupmodal>✕</button>' +
@@ -2048,32 +2062,27 @@ function renderModalEditStok_() {
     '<div class="mf-row"><div class="mf-field"><label>Warna</label><input type="text" id="mfWarna" value="' + escapeAttr(d.warna || '') + '"></div>' +
     '<div class="mf-field"><label>Kode Roll</label><input type="text" id="mfKodeRoll" value="' + escapeAttr(d.kodeRoll || '') + '"></div></div>' +
     '<div class="mf-row"><div class="mf-field"><label>Kg (total dibeli)</label><input type="number" step="0.01" id="mfKg" value="' + d.kg + '"></div>' +
-    '<div class="mf-field"><label>Kg Sisa</label><input type="text" value="' + formatAngka(d.kgSisa) + '" disabled></div></div>' +
+    '<div class="mf-field"><label>Kg Sisa (stock opname)</label><input type="number" step="0.01" id="mfKgSisa" value="' + d.kgSisa + '"></div></div>' +
+    '<label class="chk-sub"><input type="checkbox" id="chkTerpakaiHabis"> Terpakai habis</label>' +
+    '<div class="mf-field"><label>Catatan opname (opsional)</label><input type="text" id="mfCatatanOpname" placeholder="mis. hasil hitung fisik 21 Agu"></div>' +
     '<div class="mf-row"><div class="mf-field"><label>Harga Beli (Rp/kg)</label><input type="number" step="1" id="mfHarga" value="' + (d.hargaRpKg || '') + '"></div>' +
     '<div class="mf-field"><label>Diskon (Rp/kg)</label><input type="number" step="1" id="mfDiskon" value="' + (d.diskonRpKg || '') + '"></div></div>' +
     '<div class="mf-subtotal"><span>Subtotal (nilai sisa stok)</span><b>Rp ' + formatAngka(d.subtotal) + '</b></div>' +
     '<button class="mf-save-btn" data-simpanedit>💾 Simpan Perubahan</button>' +
-    '<h3>Write-off Manual</h3>' +
-    '<div class="mf-row"><div class="mf-field"><label>Kg (maks ' + formatAngka(d.kgSisa) + ')</label><input type="number" step="0.01" id="woKg" placeholder="0"></div>' +
-    '<div class="mf-field"><label>Catatan (opsional)</label><input type="text" id="woCatatan" placeholder="mis. rusak, hilang"></div></div>' +
-    '<label class="chk-sub"><input type="checkbox" id="chkWoHabis"> Terpakai habis</label>' +
-    '<button class="mf-writeoff-btn" data-submitwriteoff>➖ Catat Write-off</button>' +
-    '<h3>Riwayat Write-off</h3>' + riwayatHtml;
+    '<h3>Riwayat Penyesuaian</h3>' + riwayatHtml;
 
   box.querySelector('[data-tutupmodal]').addEventListener('click', tutupModalEditStok_);
   box.querySelector('[data-simpanedit]').addEventListener('click', simpanEditStok_);
-  box.querySelector('[data-submitwriteoff]').addEventListener('click', submitWriteoff_);
-  // v.43: checkbox "Terpakai habis" - dicentang -> Kg write-off otomatis diisi kg sisa penuh
-  // (dikunci, gak bisa diketik manual); uncentang -> dikosongin lagi buat isi manual (sama
-  // pola kayak "Pakai Habis" di index.html).
-  box.querySelector('#chkWoHabis').addEventListener('change', function () {
-    const woKg = document.getElementById('woKg');
+  // v.47 (ganti Write-off Manual jadi Stock Opname, request Denny): centang "Terpakai habis" ->
+  // Kg Sisa otomatis 0 & dikunci; uncentang -> balik ke kg sisa sistem saat ini, bisa diketik lagi.
+  box.querySelector('#chkTerpakaiHabis').addEventListener('change', function () {
+    const kgSisaInput = document.getElementById('mfKgSisa');
     if (this.checked) {
-      woKg.value = d.kgSisa;
-      woKg.disabled = true;
+      kgSisaInput.value = 0;
+      kgSisaInput.disabled = true;
     } else {
-      woKg.value = '';
-      woKg.disabled = false;
+      kgSisaInput.value = d.kgSisa;
+      kgSisaInput.disabled = false;
     }
   });
   box.querySelectorAll('[data-batalwo]').forEach(function (el) {
@@ -2090,6 +2099,8 @@ function simpanEditStok_() {
     supplier: document.getElementById('mfSupplier').value,
     warna: document.getElementById('mfWarna').value,
     kg: document.getElementById('mfKg').value,
+    kgSisaBaru: document.getElementById('mfKgSisa').value,
+    catatanOpname: document.getElementById('mfCatatanOpname').value,
     kodeRoll: document.getElementById('mfKodeRoll').value,
     hargaRpKg: document.getElementById('mfHarga').value,
     diskonRpKg: document.getElementById('mfDiskon').value
@@ -2116,36 +2127,6 @@ function simpanEditStok_() {
     .catch(function (e) {
       btn.disabled = false; btn.textContent = '💾 Simpan Perubahan';
       tampilkanToast('Gagal simpan: ' + e.message);
-    });
-}
-
-function submitWriteoff_() {
-  const kg = parseFloat(document.getElementById('woKg').value);
-  if (!(kg > 0)) { tampilkanToast('Isi kg write-off dulu (harus lebih dari 0).'); return; }
-  if (!confirm('Catat write-off ' + kg + ' kg dari roll ini?\n\nKg ini dianggap terpakai di luar laporan produksi, dan mengurangi kg sisa. Bisa dibatalkan lagi dari riwayat kalau salah.')) return;
-  const catatan = document.getElementById('woCatatan').value;
-  const btn = document.querySelector('#modalEditStok [data-submitwriteoff]');
-  btn.disabled = true; btn.textContent = 'Menyimpan...';
-  fetch(WORKER_URL + '/data/writeoff-kain', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ initData: tg.initData, stokKainId: modalStokDetail.id, kg: kg, catatan: catatan })
-  })
-    .then(function (r) { return r.json(); })
-    .then(function (data) {
-      if (!data.ok) {
-        btn.disabled = false; btn.textContent = '➖ Catat Write-off';
-        tampilkanToast('Gagal write-off: ' + data.error);
-        return;
-      }
-      tampilkanToast('✓ Write-off tersimpan.');
-      if (stokHabisDimuat) muatStokHabis();
-      segarkanTerpakaiSebagian_();
-      // v.44: sama kayak simpanEditStok_ - tutup modal, balik ke dashboard Stok Kain.
-      tutupModalEditStok_();
-    })
-    .catch(function (e) {
-      btn.disabled = false; btn.textContent = '➖ Catat Write-off';
-      tampilkanToast('Gagal write-off: ' + e.message);
     });
 }
 

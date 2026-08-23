@@ -1,4 +1,15 @@
 // ============================================================
+// CODE WORKER PRODUKSI ver.48
+// ============================================================
+// PERUBAHAN ver.48 (request Denny): fitur Write-off Manual (per-roll) di modal Edit Stok Kain
+// diganti jadi Stock Opname - handleEditStokKain_ sekarang terima kgSisaBaru opsional (hasil
+// hitung fisik langsung, bukan "kg yang mau dikurangi"), backend yang ngitung delta & sesuaikan
+// kg_terpakai (boleh naik/turun). Dicatat ke log_writeoff_kain (dipakai ulang sebagai riwayat
+// penyesuaian, kg sekarang boleh negatif = opname ketemu lebih banyak dari sistem). Endpoint
+// /data/writeoff-kain & /data/batal-writeoff (dipakai fitur Write-off Massal, TIDAK disentuh)
+// tetap ada, tidak berubah. Sengaja gak nyentuh tim_potong/log_pemakaian_kain sama sekali -
+// opname murni koreksi stok fisik, bukan event produksi.
+// ============================================================
 // CODE WORKER PRODUKSI ver.47
 // ============================================================
 // PERUBAHAN ver.47 (fix bug, request Denny): root cause "Varian kosong di Rekap QC" buat item
@@ -1599,15 +1610,36 @@ async function handleEditStokKain_(body, env) {
   if (!id) return jsonResponse({ ok: false, error: 'id wajib diisi.' }, 400);
 
   try {
-    const rows = await ambilDariSupabase_(env, '/rest/v1/stok_kain?select=id,kode_roll,kg_terpakai&id=eq.' + id);
+    const rows = await ambilDariSupabase_(env, '/rest/v1/stok_kain?select=id,kode_roll,warna,kg_terpakai&id=eq.' + id);
     if (!rows || rows.length === 0) return jsonResponse({ ok: false, error: 'Roll id=' + id + ' tidak ditemukan.' }, 404);
     const existing = rows[0];
 
     const kgBaru = parseFloat(body.kg);
     if (!(kgBaru >= 0)) return jsonResponse({ ok: false, error: 'Kg harus diisi angka >= 0.' }, 400);
     const kgTerpakaiSekarang = parseFloat(existing.kg_terpakai) || 0;
-    if (kgBaru < kgTerpakaiSekarang) {
-      return jsonResponse({ ok: false, error: 'Kg baru (' + kgBaru + ') gak boleh lebih kecil dari kg yang sudah terpakai (' + kgTerpakaiSekarang + '). Kalau maksudnya menandai sisa kain gak kepake, pakai fitur Write-off, bukan turunin angka Kg di sini.' }, 400);
+
+    // v.48 (request Denny, ganti fitur Write-off manual jadi Stock Opname): kgSisaBaru opsional -
+    // hasil hitung fisik langsung, BUKAN "kg yang mau dikurangi" kayak Write-off lama. Backend yang
+    // ngitung delta & sesuaikan kg_terpakai, boleh naik (opname ketemu LEBIH sedikit dari sistem)
+    // maupun turun (opname ketemu LEBIH banyak - misal salah catat pemakaian sebelumnya). Dicatat
+    // ke log_writeoff_kain (tabel dipakai ulang sebagai riwayat penyesuaian, kg boleh +/-, sudah
+    // support batal). SENGAJA gak nyentuh tim_potong/log_pemakaian_kain sama sekali - opname murni
+    // koreksi stok fisik, bukan event produksi, jadi riwayat produksi/QC gak ikut kena.
+    let kgTerpakaiBaru = kgTerpakaiSekarang;
+    let deltaOpname = 0;
+    const kgSisaBaruMentah = body.kgSisaBaru;
+    const adaOpname = kgSisaBaruMentah !== undefined && kgSisaBaruMentah !== null && kgSisaBaruMentah !== '';
+    if (adaOpname) {
+      const kgSisaBaru = parseFloat(kgSisaBaruMentah);
+      if (!(kgSisaBaru >= 0)) return jsonResponse({ ok: false, error: 'Kg Sisa harus diisi angka >= 0.' }, 400);
+      if (kgSisaBaru > kgBaru) {
+        return jsonResponse({ ok: false, error: 'Kg Sisa (' + kgSisaBaru + ') gak boleh lebih besar dari Kg total dibeli (' + kgBaru + ').' }, 400);
+      }
+      kgTerpakaiBaru = kgBaru - kgSisaBaru;
+      deltaOpname = kgTerpakaiBaru - kgTerpakaiSekarang; // + = sisa berkurang (mirip write-off), - = sisa nambah (ketemu lebih banyak)
+    } else if (kgBaru < kgTerpakaiSekarang) {
+      // Kg total diturunin tanpa opname - tetap dijaga biar kg_terpakai gak jadi negatif.
+      return jsonResponse({ ok: false, error: 'Kg baru (' + kgBaru + ') gak boleh lebih kecil dari kg yang sudah terpakai (' + kgTerpakaiSekarang + '). Isi juga Kg Sisa (stock opname) kalau maksudnya menyesuaikan sisa kain.' }, 400);
     }
 
     const kodeRollBaru = body.kodeRoll !== undefined ? (body.kodeRoll ? String(body.kodeRoll).trim() : null) : existing.kode_roll;
@@ -1624,6 +1656,7 @@ async function handleEditStokKain_(body, env) {
       supplier: body.supplier || 'TIDAK DIKETAHUI',
       warna: String(body.warna || '').trim(),
       kg: kgBaru,
+      kg_terpakai: kgTerpakaiBaru,
       kode_roll: kodeRollBaru,
       harga_rp_kg: (body.hargaRpKg === '' || body.hargaRpKg === undefined || body.hargaRpKg === null) ? null : parseFloat(body.hargaRpKg),
       diskon_rp_kg: (body.diskonRpKg === '' || body.diskonRpKg === undefined || body.diskonRpKg === null) ? null : parseFloat(body.diskonRpKg)
@@ -1636,6 +1669,18 @@ async function handleEditStokKain_(body, env) {
       body: JSON.stringify(payload)
     });
     if (res.status >= 300) return jsonResponse({ ok: false, error: 'Gagal update: HTTP ' + res.status + ' ' + (await res.text()).substring(0, 300) }, 500);
+
+    // Catat riwayat opname kalau ada perubahan kg_terpakai lewat kgSisaBaru (delta 0 = gak usah dicatat).
+    if (adaOpname && deltaOpname !== 0) {
+      const resLog = await fetch(env.SUPABASE_URL + '/rest/v1/log_writeoff_kain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: env.SUPABASE_SECRET_KEY, Authorization: 'Bearer ' + env.SUPABASE_SECRET_KEY, Prefer: 'return=minimal' },
+        body: JSON.stringify([{ stok_kain_id: id, kg: deltaOpname, catatan: body.catatanOpname || null, status: 'aktif', kode_roll: kodeRollBaru, warna: payload.warna }])
+      });
+      if (resLog.status >= 300) {
+        peringatan = (peringatan ? peringatan + ' ' : '') + 'PERINGATAN: kg_terpakai berhasil disesuaikan tapi gagal dicatat ke riwayat: HTTP ' + resLog.status + '.';
+      }
+    }
 
     return jsonResponse({ ok: true, peringatan: peringatan });
   } catch (e) {
