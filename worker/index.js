@@ -1,4 +1,16 @@
 // ============================================================
+// CODE WORKER PRODUKSI ver.52
+// ============================================================
+// PERUBAHAN ver.52 (2 request Denny):
+// 1. Fix bug: kurangiStokKain_ SEBELUMNYA cuma ambil kata PERTAMA dari nama item yang tersisa
+//    setelah kode gaya (ANAK/PJ/RFL dst) dibuang - patah buat warna 2 kata+ (mis. "ANAK IJO
+//    BOTOL" -> tersisa "IJO BOTOL", tapi cuma "IJO" yang dipakai). "IJO" doang gak ketemu di
+//    kamus_sinonim_warna (yang ada "IJO BOTOL"), jadi gak ke-expand ke sinonim "HIJAU BOTOL"
+//    (nilai ASLI yang tersimpan di stok_kain) - exact match gagal walau rollnya beneran ada &
+//    user udah pilih dari daftar saran. Sekarang gabungkan SEMUA kata warna yang tersisa jadi 1
+//    frasa (ekstrakKataWarna_ udah nyaring kode gaya, sisanya emang warna).
+// 2. Icon gunting (✂️) di baris ukuran notifikasi Telegram dihapus.
+// ============================================================
 // CODE WORKER PRODUKSI ver.51
 // ============================================================
 // PERUBAHAN ver.51 (fix bug, request Denny): totalKg per-warna di /data/stok-utuh SEBELUMNYA
@@ -823,15 +835,15 @@ function htmlEscape_(teks) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-// v.49: format direvisi lagi (contoh Denny) -
+// v.52 (request Denny): icon gunting (✂️) di baris ukuran DIHAPUS - contoh format sekarang:
 //   Senin, 3/08/26
 //   ✅ Hasil Cutting
 //
 //   <b>1. RFL MERAH 24.85kg / 0132</b>
-//   ✂️ S 18 | M 36 | L 43 | XL 36 | XXL 36
+//   S 18 | M 36 | L 43 | XL 36 | XXL 36
 //   Total: 169
-// Beda dari ver.26: emoji baris ukuran 📎->✂️, tiap ukuran dikasih spasi ("S 18" bukan "S18") dan
-// dipisah " | " (bukan ", "), Total dipisah jadi baris sendiri (bukan nempel "= 169" di baris ukuran).
+// v.49: format direvisi lagi (contoh Denny) - emoji baris ukuran 📎->✂️, tiap ukuran dikasih spasi
+// ("S 18" bukan "S18") dan dipisah " | " (bukan ", "), Total dipisah jadi baris sendiri.
 async function kirimNotifikasiProduksi_(env, rowsTersimpan, peringatanStok) {
   const botToken = env.TELEGRAM_BOT_TOKEN;
   const chatId = env.TELEGRAM_GROUP_CHAT_ID;
@@ -844,7 +856,7 @@ async function kirimNotifikasiProduksi_(env, rowsTersimpan, peringatanStok) {
     const kgTeks = r.pemakaian_kain_kg ? (' ' + r.pemakaian_kain_kg + 'kg') : '';
     const rollTeks = r.kode_roll ? (' / ' + r.kode_roll) : '';
     const judulItem = '<b>' + (i + 1) + '. ' + htmlEscape_(r.jenis_warna_baju) + kgTeks + rollTeks + '</b>';
-    return judulItem + '\n✂️ ' + htmlEscape_(ukuranTeks) + '\nTotal: ' + totalQty;
+    return judulItem + '\n' + htmlEscape_(ukuranTeks) + '\nTotal: ' + totalQty;
   }).join('\n\n');
 
   let teks = formatTanggalIndoJakarta_(new Date()) + '\n✅ Hasil Cutting\n\n' + barisTeks;
@@ -2334,7 +2346,15 @@ async function kurangiStokKain_(env, itemName, kainKg, kodeRoll, timPotongId, ka
   if (kataWarna.length === 0) {
     return { matched: false, keterangan: 'Tidak ada kata warna terdeteksi dari nama "' + itemName + '"' };
   }
-  const warnaUtama = kataWarna[0];
+  // v.52 (fix bug, request Denny): SEBELUMNYA cuma ambil kataWarna[0] (kata PERTAMA doang) -
+  // patah buat warna 2 kata+ (mis. "IJO BOTOL", "G. FOREST"). Contoh nyata: "ANAK IJO BOTOL" ->
+  // ekstrakKataWarna_ udah bener buang "ANAK" (kode gaya), sisa ["IJO","BOTOL"] - tapi
+  // kataWarna[0] cuma ambil "IJO" doang, "BOTOL"-nya kebuang. "IJO" doang gak ketemu di kamus
+  // sinonim (yang ada "IJO BOTOL"/"IJO BOTOL 30S"), jadi gak ke-expand ke sinonim "HIJAU BOTOL"
+  // (nilai warna ASLI yang tersimpan di stok_kain) - akibatnya exact match gagal walau rollnya
+  // beneran ada & dipilih user dari daftar saran. Sekarang GABUNGKAN semua kata warna yang
+  // tersisa (ekstrakKataWarna_ udah nyaring kode gaya kayak ANAK/PJ/RFL dst, sisanya emang warna).
+  const warnaUtama = kataWarna.join(' ');
   const daftarWarnaCari = getSinonimWarna_(warnaUtama, kamusMap);
 
   const rowsStok = await ambilDariSupabase_(env, '/rest/v1/stok_kain?select=id,warna,kode_roll,kg_terpakai,kg_sisa&kg_sisa=gt.0');
