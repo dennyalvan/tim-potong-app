@@ -1,4 +1,13 @@
 // ============================================================
+// CODE WORKER PRODUKSI ver.50
+// ============================================================
+// PERUBAHAN ver.50 (request Denny): Rekap QC - varian (mis. "RUFFLE") pindah dari baris sendiri
+// ke baris yang sama dengan nama/kode roll, dipisah " - ". Contoh:
+//   RFL MERAH (0132) - RUFFLE
+//   S 18 | M 36 | L 43 | XL 36 | XXL 36
+//   Total: 169
+// Underline (& bold) varian TETAP dipertahankan, cuma posisinya pindah.
+// ============================================================
 // CODE WORKER PRODUKSI ver.49
 // ============================================================
 // PERUBAHAN ver.49 (request Denny, ubah format notifikasi Telegram): (1) Hasil Cutting - emoji
@@ -2013,16 +2022,14 @@ async function ambilInfoWarnaVarianUntukLog_(env, namaItem) {
 //     Sabtu,  1/08/26
 //     ✅ LENGKAP 👍
 //
-//     <b>LS24 SAGE</b> (9103)
-//     <b><u>DEWASA PANJANG</u></b>
+//     <b>LS24 SAGE</b> (9103) - <b><u>DEWASA PANJANG</u></b>
 //     XL 44 | XXL 7
 //     Total: 51
 //   BELUM LENGKAP (baris ukuran cuma yang SUDAH ada progress-nya, sisanya gak ditampilin):
 //     Sabtu,  1/08/26
 //     🔴 BELUM LENGKAP
 //
-//     <b>LS24 SAGE</b> (9103)
-//     <b><u>DEWASA PANJANG</u></b>
+//     <b>LS24 SAGE</b> (9103) - <b><u>DEWASA PANJANG</u></b>
 //     XXL 7
 //     Total: 7 dari 51
 // Beda dari ver.31: baris ukuran sekarang 1 baris horizontal dipisah " | " (bukan 1 baris per
@@ -2043,8 +2050,7 @@ async function kirimAtauEditNotifikasiQC_(env, tp, totalSelesai, totalReject, st
     .join(' | ');
 
   let teks = formatTanggalIndoJakarta_(new Date()) + '\n' + headerStatus + '\n\n';
-  teks += '<b>' + htmlEscape_(tp.jenis_warna_baju) + '</b>' + (tp.kode_roll ? (' (' + htmlEscape_(tp.kode_roll) + ')') : '') + '\n';
-  if (varianQC) teks += '<b><u>' + htmlEscape_(varianQC) + '</u></b>\n';
+  teks += '<b>' + htmlEscape_(tp.jenis_warna_baju) + '</b>' + (tp.kode_roll ? (' (' + htmlEscape_(tp.kode_roll) + ')') : '') + (varianQC ? (' - <b><u>' + htmlEscape_(varianQC) + '</u></b>') : '') + '\n';
   if (barisUkuran) teks += barisUkuran + '\n';
   if (totalReject > 0) teks += 'Reject: ' + totalReject + '\n';
   teks += sudahLengkap ? ('Total: ' + tp.jumlah) : ('Total: ' + totalSelesai + ' dari ' + tp.jumlah);
