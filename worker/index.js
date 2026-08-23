@@ -1,4 +1,15 @@
 // ============================================================
+// CODE WORKER PRODUKSI ver.51
+// ============================================================
+// PERUBAHAN ver.51 (fix bug, request Denny): totalKg per-warna di /data/stok-utuh SEBELUMNYA
+// dibulatkan ke 1 desimal (Math.round(x*10)/10) di server, padahal kg per-roll di dalam array
+// `rolls`-nya TETAP presisi penuh (gak dibulatkan) - kalau 1 warna cuma punya 1 roll, angka di
+// card (dibulatkan, mis. "25,1 kg") jadi beda kelihatan sama detail roll pas dibuka (presisi
+// asli, mis. "25,06 kg"). Pembulatan manual di server dihapus - formatAngka() di frontend udah
+// otomatis ngasih maks 2 desimal, jadi gak perlu dibulatkan lagi sebelumnya. totalKg GRAND TOTAL
+// (semua warna) SENGAJA TETAP dibulatkan 1 desimal (beda kasus - itu angka ringkasan besar, gak
+// ada "detail" 1:1 yang perlu dicocokkan kayak per-warna).
+// ============================================================
 // CODE WORKER PRODUKSI ver.50
 // ============================================================
 // PERUBAHAN ver.50 (request Denny): Rekap QC - varian (mis. "RUFFLE") pindah dari baris sendiri
@@ -1491,7 +1502,13 @@ async function handleStokUtuh_(env) {
       grup[warna].rolls.sort(function (a, b) { return b.kg - a.kg; });
       totalKgSemua += grup[warna].totalKg;
       totalRollSemua += grup[warna].rolls.length;
-      return { warna: warna, totalKg: Math.round(grup[warna].totalKg * 10) / 10, jumlahRoll: grup[warna].rolls.length, rolls: grup[warna].rolls };
+      // v.51 (fix, request Denny): SEBELUMNYA totalKg di sini dibulatkan ke 1 desimal
+      // (Math.round(x*10)/10), padahal kg per-roll di array `rolls` di bawah TETAP presisi penuh
+      // (gak dibulatkan) - kalau 1 warna cuma punya 1 roll, angkanya jadi beda kelihatan antara
+      // card (dibulatkan) sama detail roll pas dibuka (presisi asli), padahal sama-sama lewat
+      // formatAngka() di frontend yang udah otomatis ngasih maks 2 desimal - gak butuh pembulatan
+      // manual di sini sama sekali.
+      return { warna: warna, totalKg: grup[warna].totalKg, jumlahRoll: grup[warna].rolls.length, rolls: grup[warna].rolls };
     });
 
     return jsonResponse({
