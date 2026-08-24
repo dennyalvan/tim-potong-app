@@ -1,6 +1,19 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+HTML PRODUKSI (Supabase/testproduksi) - ver.39
+============================================================
+PERUBAHAN ver.39 (2 request Denny) -
+1. Checkbox "Pakai Estimasi" ditambahkan ke alur Ringer (SEBELUMNYA gak ada sama sekali, beda
+   dari Kombinasi 3 Warna yang udah punya) - cuma di slot 0 (badan), karena standar pemakaian
+   Ringer di database cuma 1 angka TOTAL (posisi NULL), beda dari Kombinasi yang kepisah
+   badan/tangan. Jalur hitungnya dipisah dari Kombinasi biasa di handler Tambah.
+2. RINGER DEWASA (kodeItem "RING") - slot warna 1+ (mis. "NAVY" di "MUSTARD NAVY") BUKAN kain,
+   cuma nama aksesoris rib - kotak Kg+Kode Roll buat slot itu dihilangkan dari tampilan, dan
+   itemBaruValid() gak lagi wajibkan kg terisi di situ (warna tetap wajib, buat penamaan).
+   RINGER ANAK (kodeItem "RINGER") BELUM dikecualikan - nunggu konfirmasi Denny.
+Riwayat lengkap: git log.
+============================================================
 HTML PRODUKSI (Supabase/testproduksi) - ver.38
 ============================================================
 PERUBAHAN ver.38 (request Denny): kombinasi warna Ringer ANAK dipisah dari Ringer DEWASA -
@@ -1050,13 +1063,31 @@ function renderWarnaRingerSection() {
     });
     html += '</div>';
     html += '<div class="ganti-kombinasi"><a id="linkGantiKombinasi">Ganti kombinasi</a></div>';
+    // v.39 (request Denny): 2 hal buat Ringer -
+    // 1. Checkbox "Pakai Estimasi" ditambahkan (SEBELUMNYA gak ada sama sekali di Ringer, beda
+    //    dari Kombinasi 3 Warna yang udah punya). Cuma di SLOT 0 (badan/warna utama) - standar
+    //    pemakaian Ringer di database cuma 1 angka TOTAL (posisi NULL), beda dari Kombinasi yang
+    //    kepisah badan/tangan - jadi gak masuk akal ada checkbox estimasi di slot 1/2 juga (bakal
+    //    dobel ngitung total yang sama). Reuse class/id PERSIS sama kayak Kombinasi
+    //    (chk-estimasi-slot, chkPakaiHabisKombi0) - event handler yang udah ada otomatis kepakai,
+    //    gak perlu handler baru.
+    // 2. RINGER DEWASA (kodeItem "RING") - slot 1+ (mis. "NAVY" di "MUSTARD NAVY") BUKAN kain,
+    //    cuma nama aksesoris rib - kotak Kg+Kode Roll buat slot itu DIHILANGKAN (request Denny,
+    //    persis kayak yang di-skip di worker pas potong stok). RINGER ANAK (kodeItem "RINGER")
+    //    BELUM dikecualikan - masih tampil normal, nunggu konfirmasi Denny.
+    const ringerRibSajaTanpaStok = itemBaru.kodeItem === 'RING';
+    if (!itemBaru.kombinasi.estimasiSlot) itemBaru.kombinasi.estimasiSlot = w.map(function () { return false; });
     w.forEach(function (warna, i) {
+      if (i > 0 && ringerRibSajaTanpaStok) return; // request Denny: slot rib gak butuh input Kg+Kode Roll sama sekali
+      const estAktif0 = !!itemBaru.kombinasi.estimasiSlot[0];
+      const cbEstimasi0 = i === 0 ? '<label class="chk-sub"><input type="checkbox" class="chk-estimasi-slot" data-eidx="0" ' + (estAktif0 ? 'checked' : '') + '> Pakai Estimasi</label>' : '';
+      const cbPakaiHabis = (i === 0) ? '<label class="chk-sub"><input type="checkbox" id="chkPakaiHabisKombi0" ' + (itemBaru.kombinasi.pakaiHabis0 ? 'checked' : '') + '> Pakai habis</label>' : '';
       html += '<div class="kombi-warna-section">' +
         '<div class="sub-title-row"><span class="sub-title">Kg + Kode Roll - ' + escapeHtml(warna) + '</span>' +
-        (i === 0 ? '<label class="chk-sub"><input type="checkbox" id="chkPakaiHabisKombi0" ' + (itemBaru.kombinasi.pakaiHabis0 ? 'checked' : '') + '> Pakai habis</label>' : '') +
+        (i === 0 ? '<div class="sub-title-checks">' + cbPakaiHabis + cbEstimasi0 + '</div>' : '') +
         '</div>' +
         '<div class="sub-fields">' +
-        '<input type="number" class="kg-mini" data-kidx="' + i + '" placeholder="kg" value="' + (itemBaru.kombinasi.kg[i] || '') + '"' + (i === 0 && itemBaru.kombinasi.pakaiHabis0 ? ' readonly' : '') + '>' +
+        '<input type="number" class="kg-mini" data-kidx="' + i + '" placeholder="' + (i === 0 && estAktif0 ? 'Otomatis' : 'kg') + '" value="' + (itemBaru.kombinasi.kg[i] || '') + '"' + (i === 0 && (itemBaru.kombinasi.pakaiHabis0 || estAktif0) ? ' readonly' : '') + '>' +
         '<input type="text" class="autocomplete-input roll-mini-input" data-kidx="' + i + '" placeholder="Kode roll" autocomplete="off" value="' + escapeAttr(itemBaru.kombinasi.kodeRoll[i] || '') + '">' +
         '</div>' +
         '<div class="kg-warning-text" id="kgWarning-' + i + '" style="display:none;"></div>' +
@@ -1574,12 +1605,18 @@ function itemBaruValid() {
   }
   if (itemBaru.isKombinasi || (itemBaru.varianLabel && isVarianRinger(itemBaru.varianLabel))) {
     if (!itemBaru.kombinasi) return false;
+    // v.39 (request Denny): RINGER DEWASA (kodeItem "RING") - slot 1+ cuma nama aksesoris rib,
+    // kotak Kg-nya udah dihilangkan (lihat renderWarnaRingerSection) - jadi gak wajib kg terisi
+    // lagi, warna tetap wajib (buat penamaan).
+    const ringerRibSajaTanpaStok = itemBaru.kodeItem === 'RING';
     // v.31: "Pakai Estimasi" sekarang per-slot (independen per kolom warna) - slot yang
     // estimasinya aktif boleh kg kosong (baru dihitung pas Tambah dipencet), slot lain tetap
     // wajib diisi manual. Warna tetap wajib ada di semua slot.
     const isiLengkap = itemBaru.kombinasi.warna.every(function (w, i) {
+      if (!w) return false;
+      if (i > 0 && ringerRibSajaTanpaStok) return true;
       const estSlot = itemBaru.kombinasi.estimasiSlot && itemBaru.kombinasi.estimasiSlot[i];
-      return w && (estSlot || itemBaru.kombinasi.kg[i]);
+      return estSlot || itemBaru.kombinasi.kg[i];
     });
     return isiLengkap && semuaRollCukup_();
   }
@@ -1611,17 +1648,34 @@ document.getElementById('btnTambah').addEventListener('click', function () {
   // v.31: kombinasi 3 warna (Trico dkk) - warna[0]=badan, warna[1]/[2]=tangan kanan & kiri
   // (angka sama, simetris). "Pakai Estimasi" per-slot (independen) - cuma slot yang dicentang
   // yang dihitung ulang, slot lain (manual/Pakai Habis) dibiarkan apa adanya.
+  // v.39 (request Denny): Ringer BEDA dari Kombinasi biasa - standar pemakaiannya di database
+  // cuma 1 angka TOTAL (posisi NULL, bukan kepisah badan/tangan), dan checkbox Estimasi-nya
+  // emang cuma ada di slot 0 (lihat renderWarnaRingerSection) - jadi jalur hitungnya juga
+  // terpisah, gak numpang posisiPerSlot ['badan','tangan','tangan'] yang bakal salah cocok
+  // (standar Ringer gak ada baris posisi='badan').
   if (itemBaru.kombinasi && itemBaru.kombinasi.estimasiSlot) {
-    const posisiPerSlot = ['badan', 'tangan', 'tangan'];
-    for (let i = 0; i < itemBaru.kombinasi.warna.length; i++) {
-      if (!itemBaru.kombinasi.estimasiSlot[i]) continue;
-      const hasilKombi = hitungKgEstimasi_(itemBaru, posisiPerSlot[i] || 'tangan');
-      if (!hasilKombi.ok) {
-        tampilkanToast(hasilKombi.error);
-        return;
+    if (itemBaru.varianLabel && isVarianRinger(itemBaru.varianLabel)) {
+      if (itemBaru.kombinasi.estimasiSlot[0]) {
+        const hasilRing = hitungKgEstimasi_(itemBaru, null);
+        if (!hasilRing.ok) {
+          tampilkanToast(hasilRing.error);
+          return;
+        }
+        itemBaru.kombinasi.kg[0] = hasilRing.kg.toFixed(2);
+        if (itemBaru.kombinasi.kgSumber) itemBaru.kombinasi.kgSumber[0] = 'Estimasi';
       }
-      itemBaru.kombinasi.kg[i] = hasilKombi.kg.toFixed(2);
-      if (itemBaru.kombinasi.kgSumber) itemBaru.kombinasi.kgSumber[i] = 'Estimasi';
+    } else {
+      const posisiPerSlot = ['badan', 'tangan', 'tangan'];
+      for (let i = 0; i < itemBaru.kombinasi.warna.length; i++) {
+        if (!itemBaru.kombinasi.estimasiSlot[i]) continue;
+        const hasilKombi = hitungKgEstimasi_(itemBaru, posisiPerSlot[i] || 'tangan');
+        if (!hasilKombi.ok) {
+          tampilkanToast(hasilKombi.error);
+          return;
+        }
+        itemBaru.kombinasi.kg[i] = hasilKombi.kg.toFixed(2);
+        if (itemBaru.kombinasi.kgSumber) itemBaru.kombinasi.kgSumber[i] = 'Estimasi';
+      }
     }
   }
   // v.35 (request Denny): kg dari "Pakai Estimasi" baru KETAHUAN di titik ini (semuaRollCukup_()

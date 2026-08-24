@@ -1,4 +1,12 @@
 // ============================================================
+// CODE WORKER PRODUKSI ver.54
+// ============================================================
+// PERUBAHAN ver.54 (request Denny): RINGER DEWASA (kodeItem "RING") - warna KE-2 di namanya
+// (mis. "NAVY" di "MUSTARD NAVY") BUKAN kain, cuma nama aksesoris rib - gak diambil dari stok
+// kain sama sekali. Namanya TETAP 2 kata (buat identifikasi), tapi refStok (potong stok
+// terpisah) di-skip buat slot itu. RINGER ANAK (kodeItem "RINGER") BELUM dikecualikan - beda
+// kode item, request Denny khusus Dewasa doang.
+// ============================================================
 // CODE WORKER PRODUKSI ver.53
 // ============================================================
 // PERUBAHAN ver.53 (2 request Denny, buntut investigasi kejadian roll IJO BOTOL/DUSTY/HITAM
@@ -2614,9 +2622,18 @@ async function handleSubmitProduksi_(body, env) {
       kgUtama = kgArr[0] || null;
       kodeRollUtama = rollArr[0] || null;
       sumberKgUtama = sumberKgArr[0] || null;
+      // v.54 (request Denny): RINGER DEWASA (kodeItem "RING") - warna KE-2 di namanya (mis.
+      // "NAVY" di "MUSTARD NAVY") BUKAN kain, cuma asesoris rib - gak ambil dari stok kain sama
+      // sekali. Namanya TETAP 2 kata (buat identifikasi, warnaArr[1] masih wajib diisi di
+      // validasi atas), tapi refStok (potong stok terpisah) SENGAJA di-skip buat slot itu. Ringer
+      // ANAK (kodeItem "RINGER") BELUM dikecualikan - beda kode item, request Denny khusus Dewasa
+      // doang - kalau ternyata sama karakteristiknya, tinggal tambahin ke kondisi if di bawah.
+      const ringerRibSajaTanpaStok = it.kodeItem === 'RING';
       refStok = [];
-      for (let k = 1; k < warnaArr.length; k++) {
-        refStok.push({ warna: warnaArr[k], kg: kgArr[k] || 0, kodeRoll: rollArr[k], sumberKg: sumberKgArr[k] || null });
+      if (!ringerRibSajaTanpaStok) {
+        for (let k = 1; k < warnaArr.length; k++) {
+          refStok.push({ warna: warnaArr[k], kg: kgArr[k] || 0, kodeRoll: rollArr[k], sumberKg: sumberKgArr[k] || null });
+        }
       }
     } else if (it.custom) {
       // v.16: warna1/warna2 EKSPLISIT (bukan nebak dari namaCustom yang bebas format kayak
