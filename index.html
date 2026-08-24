@@ -1,6 +1,12 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+HTML PRODUKSI (Supabase/testproduksi) - ver.37
+============================================================
+PERUBAHAN ver.37 (request Denny): label tombol kirim - "Kirim ke Telegram" -> "Kirim Telegram",
+icon pesawat 🛫 -> roket 🚀.
+Riwayat lengkap: git log.
+============================================================
 HTML PRODUKSI (Supabase/testproduksi) - ver.36
 ============================================================
 PERUBAHAN ver.36 (request Denny): "Buat Teks" + "Kirim ke Telegram" (2 langkah terpisah - tap
@@ -509,7 +515,7 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
 
 <div class="bottom-bar" id="bottomBar">
   <button class="btn tambah" id="btnTambah">+ Tambah ke Daftar</button>
-  <button class="btn buatteks" id="btnBuatTeks" disabled>🛫 Kirim ke Telegram (0)</button>
+  <button class="btn buatteks" id="btnBuatTeks" disabled>🚀 Kirim Telegram (0)</button>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -1619,7 +1625,7 @@ function renderQueue() {
   const btnBuatTeks = document.getElementById('btnBuatTeks');
 
   badge.textContent = daftarAntrian.length;
-  btnBuatTeks.textContent = '🛫 Kirim ke Telegram (' + daftarAntrian.length + ')';
+  btnBuatTeks.textContent = '🚀 Kirim Telegram (' + daftarAntrian.length + ')';
   btnBuatTeks.disabled = daftarAntrian.length === 0;
   wrap.style.display = daftarAntrian.length > 0 ? 'block' : 'none';
 
