@@ -1,6 +1,20 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+HTML PRODUKSI (Supabase/testproduksi) - ver.35
+============================================================
+PERUBAHAN ver.35 (request Denny): blokir TOTAL (bukan cuma peringatan) kalau kode roll yang
+diketik/dipilih DIKENAL tapi kg sisa-nya kurang dari kg yang diminta - "Tambah ke Antrian" gak
+bisa dipencet sampai dibetulkan. Beda dari peringatan "kode roll gak dikenal" (ver.33, itu TETAP
+boleh lanjut - kasusnya beda, bisa jadi cuma belum ke-input ke sistem). Latar belakang: kejadian
+nyata - roll yang sama kepakai 2x gara-gara resubmit antrian lama yang rollnya udah keburu habis
+duluan, sistem cuma ngasih peringatan pas submit (bukan dicegah dari awal). Diterapkan di SEMUA
+3 mode input (item biasa/Kombinasi-Ringer/Custom): live tiap kg/kode-roll berubah, pas pilih dari
+saran, DAN dicek ulang fresh sebagai gerbang final di itemBaruValid() + setelah kg "Pakai Estimasi"
+selesai dihitung (kg-nya baru diketahui belakangan, gak bisa dicek di awal). Fungsi baru:
+semuaRollCukup_(). cekKodeRollTakDikenal_() sekarang return true/false (dulunya gak return apa2).
+Riwayat lengkap: git log.
+============================================================
 HTML PRODUKSI (Supabase/testproduksi) - ver.34
 ============================================================
 PERUBAHAN ver.34 (request Denny): styling "Kg + Kode Roll" (Kombinasi 3 Warna/Ringer/Custom)
@@ -539,15 +553,32 @@ function cekKgLebih99(el, warnEl) {
 // kalau kode roll yang DIKETIK MANUAL gak ketemu di stokRollData buat warna itu (request Denny).
 // Sengaja dicek pas BLUR (bukan tiap keystroke kayak kg) - exact-match ke daftar kode yang beneran
 // ada, kalau dicek tiap huruf pas masih setengah ngetik bakal nge-flash "gak ketemu" terus-terusan
-// sebelum kodenya lengkap. Milih dari saran (klik) TETAP gak kena peringatan ini sama sekali -
-// baca comment di pemanggilnya.
-function cekKodeRollTakDikenal_(warna, kodeInput, warnEl) {
-  if (!warnEl) return;
+// sebelum kodenya lengkap.
+// v.35 (request Denny): tambah state KETIGA - kode roll DITEMUKAN tapi kg sisa-nya KURANG dari kg
+// yang diminta. Beda dari "gak ketemu" (informasinya emang gak ada, bisa jadi cuma belum ke-input
+// ke sistem) - ini BLOKIR TOTAL, karena datanya JELAS ada & PASTI gak cukup. Return true/false -
+// dipakai gate di itemBaruValid() (dicek ULANG dari nol tiap mau nambah ke antrian, gak
+// mengandalkan warning yang sempat/belum sempat muncul di layar). kgInput opsional - kalau gak
+// dikasih (mis. dipanggil dari alur lama), cuma cek "ketemu/enggak" kayak sebelumnya.
+function cekKodeRollTakDikenal_(warna, kodeInput, warnEl, kgInput) {
+  if (!warnEl) return true;
   const kode = String(kodeInput || '').trim();
-  if (!kode || !warna) { warnEl.style.display = 'none'; warnEl.textContent = ''; return; }
-  const cocok = daftarRollUntukWarna(warna).some(function (r) { return String(r.kodeRoll || '').toUpperCase() === kode.toUpperCase(); });
-  warnEl.style.display = cocok ? 'none' : 'block';
-  warnEl.textContent = cocok ? '' : '⚠️ Kode roll "' + kode + '" gak ketemu di database buat warna ' + warna + ' - cek ulang, atau pilih dari daftar saran.';
+  if (!kode || !warna) { warnEl.style.display = 'none'; warnEl.textContent = ''; return true; }
+  const roll = daftarRollUntukWarna(warna).find(function (r) { return String(r.kodeRoll || '').toUpperCase() === kode.toUpperCase(); });
+  if (!roll) {
+    warnEl.style.display = 'block';
+    warnEl.textContent = '⚠️ Kode roll "' + kode + '" gak ketemu di database buat warna ' + warna + ' - cek ulang, atau pilih dari daftar saran.';
+    return true;
+  }
+  const kg = parseFloat(kgInput);
+  if (!isNaN(kg) && kg > 0 && kg > roll.kg) {
+    warnEl.style.display = 'block';
+    warnEl.textContent = '⛔ Roll "' + kode + '" cuma tersisa ' + roll.kg.toFixed(2) + 'kg, gak cukup buat ' + kg.toFixed(2) + 'kg yang diminta - gak bisa ditambah ke antrian.';
+    return false;
+  }
+  warnEl.style.display = 'none';
+  warnEl.textContent = '';
+  return true;
 }
 if (window.visualViewport) {
   window.visualViewport.addEventListener('resize', function () {
@@ -805,10 +836,6 @@ function renderRollSuggestions(query) {
       // kodenya doang) - biar tim potong gampang nyontek angka kg-nya tanpa buka daftar lagi.
       if (inputRoll) inputRoll.value = 'Roll ' + (itemBaru.kodeRoll || '-') + ' / ' + el.dataset.kg + 'kg';
       box.innerHTML = '';
-      // v.33: kepilih dari saran = pasti valid, langsung bersihin peringatan "gak ketemu" kalau
-      // sebelumnya kepancing dari ketikan lama.
-      const rollWarnInfo = document.getElementById('rollWarningInfo');
-      if (rollWarnInfo) { rollWarnInfo.style.display = 'none'; rollWarnInfo.textContent = ''; }
       // v.25: kalau checkbox Pakai Habis lagi aktif, kg langsung ikut roll yang BARU dipilih ini
       // (dataset.kg udah ada di sini, gak perlu lookup ulang) - biar konsisten kalau roll diganti.
       if (itemBaru.pakaiHabis) {
@@ -816,6 +843,11 @@ function renderRollSuggestions(query) {
         const inputKg = document.getElementById('inputKg');
         if (inputKg) { inputKg.value = itemBaru.kg; cekKgLebih99(inputKg, document.getElementById('kgWarningInfo')); }
       }
+      // v.33: kepilih dari saran = kode-nya PASTI ketemu (gak mungkin lagi "gak dikenal"), tapi
+      // v.35: TETAP perlu cek kecukupan kg (dicek TERAKHIR, setelah kg ikut ke-update di atas
+      // kalau Pakai Habis aktif) - roll-nya valid, tapi kalau kg yang udah diketik duluan lebih
+      // besar dari kg roll ini, harus tetap ke-blokir (request Denny).
+      cekKodeRollTakDikenal_(itemBaru.warna, itemBaru.kodeRoll, document.getElementById('rollWarningInfo'), itemBaru.kg);
     });
   });
 }
@@ -1052,7 +1084,13 @@ function pasangEventDetailCard() {
 
   const inputKg = document.getElementById('inputKg');
   if (inputKg) {
-    const cekKg = function () { cekKgLebih99(inputKg, document.getElementById('kgWarningInfo')); };
+    const cekKg = function () {
+      cekKgLebih99(inputKg, document.getElementById('kgWarningInfo'));
+      // v.35: kg berubah -> kecukupan roll yang udah keisi juga harus ke-recheck ulang (request
+      // Denny) - kalau cuma ngandelin cek pas blur kode roll, kg yang diketik BELAKANGAN gak
+      // pernah ke-verifikasi ke roll yang udah dipilih duluan.
+      cekKodeRollTakDikenal_(itemBaru.warna, itemBaru.kodeRoll, document.getElementById('rollWarningInfo'), itemBaru.kg);
+    };
     inputKg.addEventListener('input', function () { itemBaru.kg = inputKg.value; cekKg(); });
     cekKg();
   }
@@ -1118,10 +1156,10 @@ function pasangEventDetailCard() {
     // database atau enggak, baru munculin peringatan (request Denny). Milih dari saran (klik)
     // TETAP gak kena cek ini - lihat comment di renderRollSuggestions soal preventDefault.
     inputKodeRoll.addEventListener('blur', function () {
-      cekKodeRollTakDikenal_(itemBaru.warna, itemBaru.kodeRoll, rollWarnInfo);
+      cekKodeRollTakDikenal_(itemBaru.warna, itemBaru.kodeRoll, rollWarnInfo, itemBaru.kg);
       setTimeout(function () { const b = document.getElementById('rollSuggestions'); if (b) b.innerHTML = ''; }, 150);
     });
-    cekKodeRollTakDikenal_(itemBaru.warna, itemBaru.kodeRoll, rollWarnInfo);
+    cekKodeRollTakDikenal_(itemBaru.warna, itemBaru.kodeRoll, rollWarnInfo, itemBaru.kg);
   }
 
   const rowKombi = document.getElementById('rowKombinasiWarna');
@@ -1213,7 +1251,13 @@ function pasangEventDetailCard() {
   document.querySelectorAll('.kg-mini').forEach(function (el) {
     const idx = parseInt(el.dataset.kidx, 10);
     const warn = document.getElementById('kgWarning-' + idx);
-    el.addEventListener('input', function () { itemBaru.kombinasi.kg[idx] = el.value; cekKgLebih99(el, warn); });
+    el.addEventListener('input', function () {
+      itemBaru.kombinasi.kg[idx] = el.value;
+      cekKgLebih99(el, warn);
+      // v.35: kg slot ini berubah -> kecukupan roll yang udah keisi di slot yang SAMA ikut
+      // ke-recheck (request Denny) - lihat comment sama di mode item biasa.
+      cekKodeRollTakDikenal_(itemBaru.kombinasi.warna[idx], itemBaru.kombinasi.kodeRoll[idx], document.getElementById('rollWarning-' + idx), itemBaru.kombinasi.kg[idx]);
+    });
     cekKgLebih99(el, warn);
   });
   document.querySelectorAll('.roll-mini-input').forEach(function (el) {
@@ -1226,10 +1270,10 @@ function pasangEventDetailCard() {
     el.addEventListener('focus', function () { el.select(); renderKombiRollSuggestions(idx, el.value); });
     // v.33: sama pola kayak mode item biasa - cek pas blur (request Denny).
     el.addEventListener('blur', function () {
-      cekKodeRollTakDikenal_(itemBaru.kombinasi.warna[idx], itemBaru.kombinasi.kodeRoll[idx], rollWarn);
+      cekKodeRollTakDikenal_(itemBaru.kombinasi.warna[idx], itemBaru.kombinasi.kodeRoll[idx], rollWarn, itemBaru.kombinasi.kg[idx]);
       setTimeout(function () { const b = document.getElementById('kombiRollSuggestions-' + idx); if (b) b.innerHTML = ''; }, 150);
     });
-    cekKodeRollTakDikenal_(itemBaru.kombinasi.warna[idx], itemBaru.kombinasi.kodeRoll[idx], rollWarn);
+    cekKodeRollTakDikenal_(itemBaru.kombinasi.warna[idx], itemBaru.kombinasi.kodeRoll[idx], rollWarn, itemBaru.kombinasi.kg[idx]);
   });
 
   const inputNamaCustom = document.getElementById('inputNamaCustom');
@@ -1253,7 +1297,12 @@ function pasangEventDetailCard() {
   document.querySelectorAll('[data-ckgidx]').forEach(function (el) {
     const idx = parseInt(el.dataset.ckgidx, 10);
     const warn = document.getElementById('ckgWarning-' + idx);
-    el.addEventListener('input', function () { itemBaru.kombinasi.kg[idx] = el.value; cekKgLebih99(el, warn); });
+    el.addEventListener('input', function () {
+      itemBaru.kombinasi.kg[idx] = el.value;
+      cekKgLebih99(el, warn);
+      // v.35: kg slot ini berubah -> kecukupan roll di slot yang sama ikut ke-recheck (request Denny).
+      cekKodeRollTakDikenal_(itemBaru.kombinasi.warna[idx], itemBaru.kombinasi.kodeRoll[idx], document.getElementById('crollWarning-' + idx), itemBaru.kombinasi.kg[idx]);
+    });
     cekKgLebih99(el, warn);
   });
   document.querySelectorAll('[data-crollidx]').forEach(function (el) {
@@ -1263,10 +1312,10 @@ function pasangEventDetailCard() {
     el.addEventListener('focus', function () { el.select(); renderCustomRollSuggestions(idx, el.value); });
     // v.33: sama pola kayak mode item biasa - cek pas blur (request Denny).
     el.addEventListener('blur', function () {
-      cekKodeRollTakDikenal_(itemBaru.kombinasi.warna[idx], itemBaru.kombinasi.kodeRoll[idx], crollWarn);
+      cekKodeRollTakDikenal_(itemBaru.kombinasi.warna[idx], itemBaru.kombinasi.kodeRoll[idx], crollWarn, itemBaru.kombinasi.kg[idx]);
       setTimeout(function () { const b = document.getElementById('customRollSuggestions-' + idx); if (b) b.innerHTML = ''; }, 150);
     });
-    cekKodeRollTakDikenal_(itemBaru.kombinasi.warna[idx], itemBaru.kombinasi.kodeRoll[idx], crollWarn);
+    cekKodeRollTakDikenal_(itemBaru.kombinasi.warna[idx], itemBaru.kombinasi.kodeRoll[idx], crollWarn, itemBaru.kombinasi.kg[idx]);
   });
   const tambahWarna2Custom = document.getElementById('tambahWarna2Custom');
   if (tambahWarna2Custom) tambahWarna2Custom.addEventListener('click', function () {
@@ -1337,8 +1386,9 @@ function renderCustomRollSuggestions(idx, query) {
       const inputEl = document.querySelector('.roll-mini-input-custom[data-crollidx="' + i + '"]');
       if (inputEl) inputEl.value = 'Roll ' + (itemBaru.kombinasi.kodeRoll[i] || '-') + ' / ' + el.dataset.kg + 'kg';
       box.innerHTML = '';
-      const crollWarn = document.getElementById('crollWarning-' + i);
-      if (crollWarn) { crollWarn.style.display = 'none'; crollWarn.textContent = ''; }
+      // v.35: kepilih dari saran = kode-nya PASTI ketemu, tapi tetap cek kecukupan kg yang udah
+      // diketik duluan (request Denny) - sama pola kayak mode biasa/kombinasi.
+      cekKodeRollTakDikenal_(itemBaru.kombinasi.warna[i], itemBaru.kombinasi.kodeRoll[i], document.getElementById('crollWarning-' + i), itemBaru.kombinasi.kg[i]);
     });
   });
 }
@@ -1372,14 +1422,15 @@ function renderKombiRollSuggestions(idx, query) {
       const inputEl = document.querySelector('.roll-mini-input[data-kidx="' + idx + '"]');
       if (inputEl) inputEl.value = 'Roll ' + (itemBaru.kombinasi.kodeRoll[idx] || '-') + ' / ' + el.dataset.kg + 'kg';
       box.innerHTML = '';
-      const rollWarn = document.getElementById('rollWarning-' + idx);
-      if (rollWarn) { rollWarn.style.display = 'none'; rollWarn.textContent = ''; }
       // v.26: slot warna pertama + checkbox Pakai Habis aktif -> kg ikut roll BARU yang dipilih
       if (idx === 0 && itemBaru.kombinasi.pakaiHabis0) {
         itemBaru.kombinasi.kg[0] = String(el.dataset.kg);
         const kgInput0 = document.querySelector('.kg-mini[data-kidx="0"]');
         if (kgInput0) { kgInput0.value = itemBaru.kombinasi.kg[0]; cekKgLebih99(kgInput0, document.getElementById('kgWarning-0')); }
       }
+      // v.35: cek kecukupan TERAKHIR (setelah kg ikut ke-update di atas kalau Pakai Habis aktif)
+      // - roll-nya valid, tapi kg yang udah diketik duluan bisa aja masih lebih besar (request Denny).
+      cekKodeRollTakDikenal_(itemBaru.kombinasi.warna[idx], itemBaru.kombinasi.kodeRoll[idx], document.getElementById('rollWarning-' + idx), itemBaru.kombinasi.kg[idx]);
     });
   });
 }
@@ -1451,6 +1502,22 @@ function hitungKgEstimasi_(it, posisi) {
 // ------------------------------------------------------------
 // TAMBAH KE DAFTAR / QUEUE
 // ------------------------------------------------------------
+// v.35 (request Denny): gerbang FINAL - re-cek kecukupan SEMUA kode roll yang keisi (fresh dari
+// state itemBaru, gak ngandelin warning yang sempat/belum sempat muncul di layar - jaga2 kalau
+// user gak sempat blur/ganti field tapi langsung mencet Tambah) sebelum boleh nambah ke antrian.
+// Efek samping: ikut munculin/nutup pesan peringatan di layar (via cekKodeRollTakDikenal_), biar
+// begitu ke-blokir, user langsung lihat kenapa - bukan cuma toast generik.
+function semuaRollCukup_() {
+  if (itemBaru.isCustom || itemBaru.isKombinasi || (itemBaru.varianLabel && isVarianRinger(itemBaru.varianLabel))) {
+    if (!itemBaru.kombinasi) return true;
+    const idElWarn = itemBaru.isCustom ? 'crollWarning-' : 'rollWarning-';
+    return itemBaru.kombinasi.warna.every(function (w, i) {
+      return cekKodeRollTakDikenal_(w, itemBaru.kombinasi.kodeRoll[i], document.getElementById(idElWarn + i), itemBaru.kombinasi.kg[i]);
+    });
+  }
+  return cekKodeRollTakDikenal_(itemBaru.warna, itemBaru.kodeRoll, document.getElementById('rollWarningInfo'), itemBaru.kg);
+}
+
 function itemBaruValid() {
   const totalQty = Object.keys(itemBaru.ukuran).reduce(function (s, k) { return s + itemBaru.ukuran[k]; }, 0);
   if (totalQty <= 0) return false;
@@ -1464,21 +1531,23 @@ function itemBaruValid() {
         if (i === 1 && itemBaru.kombinasi.warna[i] && !itemBaru.kombinasi.kg[i]) return false;
       }
     }
-    return true;
+    return semuaRollCukup_();
   }
   if (itemBaru.isKombinasi || (itemBaru.varianLabel && isVarianRinger(itemBaru.varianLabel))) {
     if (!itemBaru.kombinasi) return false;
     // v.31: "Pakai Estimasi" sekarang per-slot (independen per kolom warna) - slot yang
     // estimasinya aktif boleh kg kosong (baru dihitung pas Tambah dipencet), slot lain tetap
     // wajib diisi manual. Warna tetap wajib ada di semua slot.
-    return itemBaru.kombinasi.warna.every(function (w, i) {
+    const isiLengkap = itemBaru.kombinasi.warna.every(function (w, i) {
       const estSlot = itemBaru.kombinasi.estimasiSlot && itemBaru.kombinasi.estimasiSlot[i];
       return w && (estSlot || itemBaru.kombinasi.kg[i]);
     });
+    return isiLengkap && semuaRollCukup_();
   }
   // v.31: Kg Kain Terpakai sekarang WAJIB keisi lewat salah satu cara - manual, "Pakai habis",
   // atau "Pakai Estimasi" (request Denny, sebelumnya boleh kosong sama sekali).
-  return !!itemBaru.varianLabel && !!itemBaru.warna && (!!itemBaru.kg || itemBaru.pakaiHabis || itemBaru.estimasi);
+  const isiLengkap = !!itemBaru.varianLabel && !!itemBaru.warna && (!!itemBaru.kg || itemBaru.pakaiHabis || itemBaru.estimasi);
+  return isiLengkap && semuaRollCukup_();
 }
 
 function updateBottomBar() {
@@ -1515,6 +1584,13 @@ document.getElementById('btnTambah').addEventListener('click', function () {
       itemBaru.kombinasi.kg[i] = hasilKombi.kg.toFixed(2);
       if (itemBaru.kombinasi.kgSumber) itemBaru.kombinasi.kgSumber[i] = 'Estimasi';
     }
+  }
+  // v.35 (request Denny): kg dari "Pakai Estimasi" baru KETAHUAN di titik ini (semuaRollCukup_()
+  // di itemBaruValid() tadi gak bisa ngecek slot estimasi - kg-nya masih kosong waktu itu).
+  // Cek ULANG sekarang, kg-nya udah pasti keisi (manual maupun barusan dihitung dari estimasi).
+  if (!semuaRollCukup_()) {
+    tampilkanToast('Kg kain (termasuk hasil estimasi) melebihi stok roll yang tersisa - cek lagi.');
+    return;
   }
   daftarAntrian.push(Object.assign({ tempId: ++antrianSeq }, JSON.parse(JSON.stringify(itemBaru))));
   itemBaru = kosongkanItemBaru();
