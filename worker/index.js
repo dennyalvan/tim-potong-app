@@ -1,4 +1,12 @@
 // ============================================================
+// CODE WORKER PRODUKSI ver.55
+// ============================================================
+// PERUBAHAN ver.55 (fix bug, request Denny): "RINGER" (kode item Ringer ANAK, beda dari Dewasa
+// yang "RING") ditambahkan ke KODE_GAYA_BUKAN_WARNA_ - sebelumnya cuma "RING" yang ada, jadi
+// item Ringer Anak (sekarang dientry lewat alur item tunggal biasa di index.html ver.40, mis.
+// "RINGER BIRU MUDA") bakal gagal cocok stok persis kayak bug "IJO BOTOL" ver.52 (kata "RINGER"
+// ikut kebawa jadi bagian pencarian warna, bukan cuma "BIRU MUDA").
+// ============================================================
 // CODE WORKER PRODUKSI ver.54
 // ============================================================
 // PERUBAHAN ver.54 (request Denny): RINGER DEWASA (kodeItem "RING") - warna KE-2 di namanya
@@ -2307,7 +2315,11 @@ function bangunRejectNotasi_(rejectObj) {
   return bagian.length > 0 ? bagian.join(', ') : null;
 }
 
-const KODE_GAYA_BUKAN_WARNA_ = ['LT', 'PJ', 'CP', 'SET', 'SET.', 'ANAK', 'OSA', 'RFL', 'RUFFLE', 'TS24', 'TS30', 'LS24-', 'LS30', 'ONESET', 'PENDEK', 'OSHT', 'TST', 'SPEN', 'LS', 'LS24', 'OS', 'OSH', 'TS', 'LST', 'RING', 'HL', 'PC', 'POLO'];
+// v.55 (request Denny): "RINGER" (kode item Ringer ANAK, prefix beda dari Dewasa yang "RING")
+// ditambahkan - sebelumnya cuma "RING" yang ada di daftar ini, jadi item Ringer Anak (mis.
+// "RINGER BIRU MUDA") bakal gagal cocok stok persis kayak bug "IJO BOTOL" ver.52 (kata "RINGER"
+// ikut kebawa jadi bagian pencarian warna, bukan cuma "BIRU MUDA").
+const KODE_GAYA_BUKAN_WARNA_ = ['LT', 'PJ', 'CP', 'SET', 'SET.', 'ANAK', 'OSA', 'RFL', 'RUFFLE', 'TS24', 'TS30', 'LS24-', 'LS30', 'ONESET', 'PENDEK', 'OSHT', 'TST', 'SPEN', 'LS', 'LS24', 'OS', 'OSH', 'TS', 'LST', 'RING', 'RINGER', 'HL', 'PC', 'POLO'];
 
 function ekstrakKataWarna_(itemName) {
   return String(itemName || '').split(/\s+/)

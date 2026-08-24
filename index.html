@@ -1,6 +1,20 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+HTML PRODUKSI (Supabase/testproduksi) - ver.40
+============================================================
+PERUBAHAN ver.40 (request Denny) -
+1. Label "(BADAN)" ditambahkan ke warna pertama, "(RIB)" ke warna kedua - di chips & judul
+   section "Kg + Kode Roll" alur Ringer Dewasa.
+2. Ringer ANAK SEMENTARA dipindah dari alur kombinasi-2-warna ke alur ITEM TUNGGAL biasa (persis
+   kayak "Anak Pendek Polos" - 1 Warna berlabel "(Badan)", 1 Kg+Kode Roll, checkbox Pakai habis/
+   Pakai Estimasi yang emang udah ada) - kombinasi warna Ringer Anak (badan+rib) belum
+   ditentukan, jadi daripada gak bisa diinput sama sekali. Dilakukan dengan bikin isVarianRinger()
+   kategori-aware (true cuma kalau kategoriAktif==='Dewasa') - fungsi ini dipakai di 4 titik
+   render/validasi/hitung-estimasi sekaligus, jadi 1 perubahan ini otomatis konsisten di semuanya.
+   Ringer Dewasa TIDAK berubah perilakunya sama sekali.
+Riwayat lengkap: git log.
+============================================================
 HTML PRODUKSI (Supabase/testproduksi) - ver.39
 ============================================================
 PERUBAHAN ver.39 (2 request Denny) -
@@ -769,8 +783,18 @@ function daftarVarianUntukKategori() {
 function isVarianKombinasi(label) {
   return String(label || '').toUpperCase().indexOf('KOMBINASI') !== -1;
 }
+// v.40 (request Denny): SEBELUMNYA fungsi ini cuma cek teks label ("RINGER" ada di situ atau
+// enggak), dipakai di 4 titik buat nentuin alur render/validasi kombinasi-2-warna vs item
+// tunggal. Sekarang IKUT ngecek kategoriAktif - Ringer DEWASA tetap alur kombinasi (8 kombinasi
+// tetap, kotak Kg terpisah per warna, dst - kayak sebelumnya). Ringer ANAK SEMENTARA dianggap
+// BUKAN "Ringer" sama sekali di 4 titik ini - kombinasi warnanya belum ditentukan
+// (RING_WARNA_LIST_ANAK kosong), jadi daripada gak bisa diinput sama sekali, otomatis jatuh ke
+// alur ITEM TUNGGAL biasa (persis kayak "ANAK PENDEK POLOS" - 1 Warna, 1 Kg+Kode Roll, checkbox
+// Pakai habis/Pakai Estimasi yang emang udah ada dari dulu di situ, gak perlu kode tambahan).
+// Karena ini fungsi dipakai di 4 tempat sekaligus, ubah di 1 titik ini otomatis konsisten di
+// semua jalur render/validasi/hitung-estimasi.
 function isVarianRinger(label) {
-  return String(label || '').toUpperCase().indexOf('RINGER') !== -1;
+  return String(label || '').toUpperCase().indexOf('RINGER') !== -1 && kategoriAktif === 'Dewasa';
 }
 
 // Porting PERSIS dari bikinAwalan_() (HTML PRODUKSI.html lama)
@@ -925,8 +949,15 @@ function renderDetailCard() {
     } else if (itemBaru.varianLabel && isVarianRinger(itemBaru.varianLabel)) {
       html += renderWarnaRingerSection();
     } else {
+      // v.40 (request Denny): label "(Badan)" ditempel ke "Warna" KHUSUS kalau ini Ringer Anak
+      // (jatuh ke branch else ini gara-gara isVarianRinger() sekarang kategori-aware) - biar
+      // konsisten sama keterangan "(BADAN)"/"(RIB)" yang juga ditambahin ke alur Ringer Dewasa
+      // (renderWarnaRingerSection). Variant lain (PENDEK/PANJANG/dst) TETAP polos "Warna" aja,
+      // gak kesenggol.
+      const labelWarnaTunggal = (itemBaru.varianLabel && String(itemBaru.varianLabel).toUpperCase().indexOf('RINGER') !== -1)
+        ? 'Warna <span style="font-weight:400;color:#9aa3b2;">(Badan)</span>' : 'Warna';
       html += '<div class="field-row wrap" id="rowWarna">' +
-        '<div class="frow-line"><span class="flabel">Warna</span>' +
+        '<div class="frow-line"><span class="flabel">' + labelWarnaTunggal + '</span>' +
         '<input type="text" id="inputWarna" placeholder="— pilih warna —" autocomplete="off" value="' + escapeAttr(itemBaru.warna || '') + '"></div>' +
         '<div class="suggestion-list" id="warnaSuggestions"></div>' +
         '</div>';
@@ -1059,7 +1090,10 @@ function renderWarnaRingerSection() {
     const w = itemBaru.kombinasi.warna;
     html += '<div class="kombi-chips">';
     w.forEach(function (warna, i) {
-      html += '<div class="kombi-chip"><span class="num">' + (i + 1) + '</span>' + escapeHtml(warna) + '</div>';
+      // v.40 (request Denny): keterangan "(BADAN)" buat warna pertama, "(RIB)" buat warna
+      // kedua - Ringer selalu 2 warna (badan + rib), gak pernah 3.
+      const ket = i === 0 ? ' (BADAN)' : (i === 1 ? ' (RIB)' : '');
+      html += '<div class="kombi-chip"><span class="num">' + (i + 1) + '</span>' + escapeHtml(warna) + ket + '</div>';
     });
     html += '</div>';
     html += '<div class="ganti-kombinasi"><a id="linkGantiKombinasi">Ganti kombinasi</a></div>';
@@ -1083,7 +1117,7 @@ function renderWarnaRingerSection() {
       const cbEstimasi0 = i === 0 ? '<label class="chk-sub"><input type="checkbox" class="chk-estimasi-slot" data-eidx="0" ' + (estAktif0 ? 'checked' : '') + '> Pakai Estimasi</label>' : '';
       const cbPakaiHabis = (i === 0) ? '<label class="chk-sub"><input type="checkbox" id="chkPakaiHabisKombi0" ' + (itemBaru.kombinasi.pakaiHabis0 ? 'checked' : '') + '> Pakai habis</label>' : '';
       html += '<div class="kombi-warna-section">' +
-        '<div class="sub-title-row"><span class="sub-title">Kg + Kode Roll - ' + escapeHtml(warna) + '</span>' +
+        '<div class="sub-title-row"><span class="sub-title">Kg + Kode Roll - ' + escapeHtml(warna) + (i === 0 ? ' (BADAN)' : (i === 1 ? ' (RIB)' : '')) + '</span>' +
         (i === 0 ? '<div class="sub-title-checks">' + cbPakaiHabis + cbEstimasi0 + '</div>' : '') +
         '</div>' +
         '<div class="sub-fields">' +
