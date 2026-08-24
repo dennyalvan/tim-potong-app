@@ -1,6 +1,16 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+HTML PRODUKSI (Supabase/testproduksi) - ver.38
+============================================================
+PERUBAHAN ver.38 (request Denny): kombinasi warna Ringer ANAK dipisah dari Ringer DEWASA -
+SEBELUMNYA renderWarnaRingerSection() makai RING_WARNA_LIST (8 kombinasi tetap) yang sama buat
+SEMUA kategori, jadi Ringer Anak ikut numpang daftar kombinasi Dewasa padahal belum ditentukan
+sama sekali. Konstanta baru RING_WARNA_LIST_ANAK sengaja dikosongkan dulu - dropdown-nya nampilin
+pesan "belum ditentukan - hubungi admin" (bukan daftar kosong polos/nyasar ke punya Dewasa).
+Tinggal isi array-nya begitu kombinasi Ringer Anak udah fix.
+Riwayat lengkap: git log.
+============================================================
 HTML PRODUKSI (Supabase/testproduksi) - ver.37
 ============================================================
 PERUBAHAN ver.37 (request Denny): label tombol kirim - "Kirim ke Telegram" -> "Kirim Telegram",
@@ -528,7 +538,12 @@ const WORKER_URL = 'https://tim-potong-api.dennyalvan.workers.dev';
 
 const DAFTAR_UKURAN_UTAMA = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
 const DAFTAR_UKURAN_LAIN = ['3XL', '4XL', '5XL', '6XL'];
+// v.38 (request Denny): kombinasi warna Ringer DEWASA (8 tetap, udah ditentukan) dipisah dari
+// Ringer ANAK - SEBELUMNYA renderWarnaRingerSection_ makai RING_WARNA_LIST ini buat SEMUA
+// kategori (Anak ikut numpang daftar Dewasa, padahal kombinasi Ringer Anak belum ditentukan sama
+// sekali). RING_WARNA_LIST_ANAK sengaja dikosongkan dulu - isi begitu kombinasinya udah fix.
 const RING_WARNA_LIST = ['GREY NAVY', 'PUTIH TERACOTA', 'PUTIH HITAM', 'MUSTARD NAVY', 'PUTIH COKLAT', 'PUTIH MUSTARD', 'PUTIH MERAH', 'PUTIH BIRU'];
+const RING_WARNA_LIST_ANAK = [];
 
 const tg = window.Telegram ? window.Telegram.WebApp : null;
 if (tg) { tg.ready(); tg.expand(); }
@@ -1009,14 +1024,22 @@ function renderWarnaKombinasiSection() {
 }
 
 function renderWarnaRingerSection() {
-  let html = '<div class="subrow" style="padding-bottom:0"><span class="flabel">Warna</span> <span class="badge-wajib">Ringer - 8 kombinasi tetap</span></div>';
+  // v.38 (request Denny): kombinasi Ringer ANAK belum ditentukan - JANGAN numpang daftar Dewasa.
+  const daftarWarnaRingerAktif = kategoriAktif === 'Dewasa' ? RING_WARNA_LIST : RING_WARNA_LIST_ANAK;
+  let html = '<div class="subrow" style="padding-bottom:0"><span class="flabel">Warna</span> <span class="badge-wajib">' +
+    (daftarWarnaRingerAktif.length > 0 ? 'Ringer - ' + daftarWarnaRingerAktif.length + ' kombinasi tetap' : 'Ringer - kombinasi belum ditentukan') +
+    '</span></div>';
   if (!itemBaru.kombinasi) {
     html += '<div class="combo-picker-btn" id="rowKombinasiWarna"><span>Pilih kombinasi warna...</span><span class="chev">▾</span></div>';
     if (openDropdown === 'kombinasiWarna') {
       html += '<div class="dropdown-list">';
-      RING_WARNA_LIST.forEach(function (pasangan) {
-        html += '<div class="dropdown-item" data-nama-ring="' + escapeAttr(pasangan) + '">' + escapeHtml(pasangan) + '</div>';
-      });
+      if (daftarWarnaRingerAktif.length === 0) {
+        html += '<div class="dropdown-item" style="color:#9aa3b2;cursor:default;">Kombinasi warna Ringer ' + escapeHtml(kategoriAktif) + ' belum ditentukan - hubungi admin.</div>';
+      } else {
+        daftarWarnaRingerAktif.forEach(function (pasangan) {
+          html += '<div class="dropdown-item" data-nama-ring="' + escapeAttr(pasangan) + '">' + escapeHtml(pasangan) + '</div>';
+        });
+      }
       html += '</div>';
     }
   } else {
