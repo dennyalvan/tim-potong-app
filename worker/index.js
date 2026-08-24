@@ -1,4 +1,21 @@
 // ============================================================
+// CODE WORKER PRODUKSI ver.53
+// ============================================================
+// PERUBAHAN ver.53 (2 request Denny, buntut investigasi kejadian roll IJO BOTOL/DUSTY/HITAM
+// ONYX kepakai 2x - anti-duplikat gagal deteksi gara-gara beda format kecil yang gak disengaja):
+// 1. kg SELALU dinormalisasi ke 2 desimal SEBELUM fingerprint anti-duplikat dihitung - "25.3" &
+//    "25.30" (nilai sama, teks beda) sekarang dianggap identik, gak akan pernah lolos anti-
+//    duplikat lagi gara-gara beda format doang.
+// 2. Kalau kgSumber kosong (checkbox "Pakai Habis" kelupaan gak dicentang) TAPI kg-nya PERSIS
+//    sama kayak kg_sisa roll yang kodenya cocok, kgSumber otomatis di-set "Pakai Habis" - baik
+//    buat fingerprint maupun kolom sumber_kg yang kesimpen (konsisten, bukan trik doang).
+// Fungsi baru: normalisasiKgDanPakaiHabis_(), dipanggil di awal handleSubmitProduksi_ SEBELUM
+// fingerprint dihitung. CATATAN JUJUR: utk kasus roll yang STOKNYA UDAH KEPALANG HABIS duluan
+// (submission kedua yang genuinely duplikat), poin 2 gak bisa retroaktif nebak "ini harusnya
+// Pakai Habis" karena roll itu udah gak match kg_sisa>0 lagi di query - pertahanan utama buat
+// skenario itu tetap di index.html ver.35 (blokir submit kalau kg > kg_sisa yang KETAHUAN saat
+// itu). Poin 1 (normalisasi kg) tetap berlaku penuh terlepas dari kondisi stok.
+// ============================================================
 // CODE WORKER PRODUKSI ver.52
 // ============================================================
 // PERUBAHAN ver.52 (2 request Denny):
@@ -2440,6 +2457,88 @@ function bikinAwalan_(kategori, kodeItem) {
 }
 
 // ============================================================
+// v.53 (2 request Denny, root cause kejadian roll IJO BOTOL/DUSTY/HITAM ONYX kepakai 2x karena
+// anti-duplikat gagal deteksi):
+// 1. "untuk berat kain, selalu ada 2 angka dibelakang koma... jadi ketika ada tim potong input
+//    25.3 maka sistem akan otomatis deteksi ke stok 25.30" - kg SELALU dinormalisasi ke 2 desimal
+//    SEBELUM fingerprint dihitung, biar "25.3" & "25.30" (nilai sama, teks beda) gak pernah lolos
+//    anti-duplikat lagi gara-gara beda format doang.
+// 2. "kalo misalkan tim potong kelupaan tidak ceklis pakai habis tapi angkanya sama persis dengan
+//    stok yang ada, maka jadikan itu sebagai persamaan pakai habis" - kalau kgSumber kosong TAPI
+//    kg (setelah dinormalisasi) PERSIS sama kayak kg_sisa roll yang kodenya cocok, kgSumber
+//    di-set jadi "Pakai Habis" otomatis - baik buat fingerprint MAUPUN buat kolom sumber_kg yang
+//    kesimpen di database (konsisten, bukan cuma trik anti-duplikat doang).
+// Berlaku di SEMUA 3 mode. Nama warna per slot buat pencarian PERSIS disamain sama logic yang
+// dipakai kurangiStokKain_ nanti (slot utama kombinasi = gabungan 2 warna pertama + awalan, slot
+// tangan/ref_stok = warna sendiri doang, custom = warna eksplisit doang tanpa awalan) - biar
+// deteksi "kg == kg_sisa roll ini" akurat, bukan asal cocok ke roll yang salah.
+// ============================================================
+async function normalisasiKgDanPakaiHabis_(env, items, kamusMap) {
+  const rowsStok = await ambilDariSupabase_(env, '/rest/v1/stok_kain?select=warna,kode_roll,kg_sisa&kg_sisa=gt.0');
+
+  function kgSisaRoll_(namaUntukWarna, kodeRoll) {
+    if (!kodeRoll) return null;
+    const kodeNorm = String(kodeRoll).trim().toUpperCase();
+    const kataWarna = ekstrakKataWarna_(namaUntukWarna);
+    if (kataWarna.length === 0) return null;
+    const daftarWarnaCari = getSinonimWarna_(kataWarna.join(' '), kamusMap);
+    const row = rowsStok.find(function (r) {
+      if (String(r.kode_roll || '').trim().toUpperCase() !== kodeNorm) return false;
+      const warnaCell = String(r.warna || '').toUpperCase();
+      return daftarWarnaCari.some(function (w) { return warnaCell.indexOf(w) !== -1; });
+    });
+    return row ? (parseFloat(row.kg_sisa) || 0) : null;
+  }
+
+  function normalSlot_(namaUntukWarna, kodeRoll, kgMentah, kgSumberMentah) {
+    const kg = parseFloat(kgMentah);
+    if (isNaN(kg)) return { kg: kgMentah, kgSumber: kgSumberMentah || null };
+    const kgFix = parseFloat(kg.toFixed(2));
+    let kgSumber = kgSumberMentah || null;
+    if (!kgSumber) {
+      const kgSisa = kgSisaRoll_(namaUntukWarna, kodeRoll);
+      if (kgSisa !== null && parseFloat(kgSisa.toFixed(2)) === kgFix) kgSumber = 'Pakai Habis';
+    }
+    return { kg: kgFix, kgSumber: kgSumber };
+  }
+
+  items.forEach(function (it) {
+    if (it.custom) {
+      if (it.kg1 !== null && it.kg1 !== undefined && it.kg1 !== '') {
+        const h1 = normalSlot_(it.warna1 || '', it.kodeRoll1, it.kg1, it.kgSumber1);
+        it.kg1 = h1.kg; it.kgSumber1 = h1.kgSumber;
+      }
+      if (it.kg2 !== null && it.kg2 !== undefined && it.kg2 !== '') {
+        const h2 = normalSlot_(it.warna2 || '', it.kodeRoll2, it.kg2, it.kgSumber2);
+        it.kg2 = h2.kg; it.kgSumber2 = h2.kgSumber;
+      }
+    } else if (it.kombinasi) {
+      const kb = it.kombinasi;
+      const awalan = bikinAwalan_(it.kategori, it.kodeItem);
+      const warnaArr = Array.isArray(kb.warna) ? kb.warna : [];
+      if (!kb.kgSumber) kb.kgSumber = [];
+      for (let i = 0; i < (kb.kg || []).length; i++) {
+        if (kb.kg[i] === null || kb.kg[i] === undefined || kb.kg[i] === '' || kb.kg[i] === 0) continue;
+        // slot 0 (badan) dicocokkan pakai nama gabungan 2 warna pertama + awalan (PERSIS
+        // jenis_warna_baju yang dipakai kurangiStokKain_ nanti) - slot 1+ (tangan) pakai
+        // warnanya sendiri doang (PERSIS logic ref_stok breakdown).
+        const namaUntukWarna = i === 0
+          ? (awalan ? awalan + ' ' : '') + (warnaArr[0] || '') + ' ' + (warnaArr[1] || '')
+          : (warnaArr[i] || '');
+        const h = normalSlot_(namaUntukWarna, kb.kodeRoll && kb.kodeRoll[i], kb.kg[i], kb.kgSumber[i]);
+        kb.kg[i] = h.kg; kb.kgSumber[i] = h.kgSumber;
+      }
+    } else if (it.kg !== null && it.kg !== undefined && it.kg !== '') {
+      const awalan = bikinAwalan_(it.kategori, it.kodeItem);
+      const namaUntukWarna = (awalan ? awalan + ' ' : '') + (it.warna || '');
+      const h = normalSlot_(namaUntukWarna, it.kodeRoll, it.kg, it.kgSumber);
+      it.kg = h.kg;
+      it.kgSumber = h.kgSumber;
+    }
+  });
+}
+
+// ============================================================
 // Handler submit produksi (item BIASA, bukan kombinasi) - Tahap 3.
 // Body yang diharapkan: { initData, items: [ item, ... ] }
 // Tiap item (non-custom):
@@ -2458,6 +2557,15 @@ async function handleSubmitProduksi_(body, env) {
 
   const items = Array.isArray(body.items) ? body.items : [];
   if (items.length === 0) return jsonResponse({ ok: false, error: 'Tidak ada item yang dikirim.' }, 400);
+
+  // v.53 (request Denny, root cause kejadian roll IJO BOTOL/DUSTY/HITAM ONYX kepakai 2x): dua
+  // normalisasi yang bikin fingerprint anti-duplikat konsisten walau ada beda format/kelupaan
+  // gak disengaja antar kiriman - baca komentar di normalisasiKgDanPakaiHabis_ buat detailnya.
+  // Kamus diambil di sini (sebelum fingerprint) - nanti diambil ULANG di bagian potong stok
+  // (kode existing gak diubah), sedikit dobel fetch tapi amannya dapet daripada mepet-mepet
+  // rewiring variable across function yang panjang.
+  const kamusMapAwal = await ambilKamusSinonimWarnaMap_(env);
+  await normalisasiKgDanPakaiHabis_(env, items, kamusMapAwal);
 
   // v.07 (Tahap 5): anti-duplikat - fingerprint dihitung dari ISI item (bukan teks bebas kayak
   // sistem lama, karena Mini App sekarang kirim data terstruktur). Key pakai 'miniapp_' + userId,
