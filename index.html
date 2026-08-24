@@ -1,6 +1,17 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+HTML PRODUKSI (Supabase/testproduksi) - ver.36
+============================================================
+PERUBAHAN ver.36 (request Denny): "Buat Teks" + "Kirim ke Telegram" (2 langkah terpisah - tap
+Buat Teks dulu buat lihat layar review, baru tap Kirim ke Telegram di layar itu) DIGABUNG jadi 1
+tap langsung di tombol bar bawah - "tidak perlu tombol buat text". Tombol "Kembali Edit" (buat
+batal dari layar review) ikut dihapus - gak relevan lagi karena gak ada lagi layar review sebelum
+kirim. previewScreen sekarang MURNI layar HASIL (muncul SETELAH berhasil terkirim, bukan sebelum)
+- "Salin Teks" tetap ada di situ (buat nyalin catatan APA yang barusan dikirim). Tombol bar bawah
+warnanya diganti hijau (var(--green), semantik "kirim") - sebelumnya navy netral.
+Riwayat lengkap: git log.
+============================================================
 HTML PRODUKSI (Supabase/testproduksi) - ver.35
 ============================================================
 PERUBAHAN ver.35 (request Denny): blokir TOTAL (bukan cuma peringatan) kalau kode roll yang
@@ -405,15 +416,16 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
   }
   .btn { flex: 1; padding: 14px; border-radius: 12px; border: none; font-weight: 700; font-size: 14px; cursor: pointer; }
   .btn.tambah { background: #dbe4fb; color: var(--navy); }
-  .btn.buatteks { background: var(--navy); color: #fff; }
+  .btn.buatteks { background: var(--green); color: #fff; }
   .btn.buatteks:disabled { background: #c4c4c4; color: #8a8a8a; }
   /* v.11: kontras tombol bawah kurang pas di mode Dewasa (request Denny) - warna aslinya
      (#dbe4fb terang, navy gelap) dirancang buat background terang; begitu --page-bg ikut
      digelapin, tombol.tambah yang terang jadi nyaris nyatu sama background. Override khusus
      di sini: tombol.tambah dibikin lebih terang lagi (bukan makin gelap) biar tetap menonjol
-     kontras dari background medium-gelapnya, tombol.buatteks tetap gelap pekat. */
+     kontras dari background medium-gelapnya, tombol.buatteks tetap gelap pekat.
+     v.36: tombol.buatteks warnanya sekarang ngikut var(--green) di atas (bukan navy statis lagi)
+     - override khusus mode Dewasa ini jadi gak perlu, dihapus. */
   body.mode-dewasa .btn.tambah { background: #f1f5f9; color: #1e293b; }
-  body.mode-dewasa .btn.buatteks { background: #1e293b; color: #fff; }
   .btn.kirim { background: var(--green); color: #fff; width: 100%; padding: 16px; font-size: 15px; border-radius: 12px; border: none; font-weight: 700; cursor: pointer; }
   .btn.kirim:disabled { background: #9ad9ae; cursor: wait; }
   .btn.secondary { flex: 1; background: #dbe4fb; color: var(--navy); padding: 14px; border-radius: 12px; border: none; font-weight: 700; cursor: pointer; }
@@ -483,23 +495,21 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
   </div>
   <div class="preview-center">
     <div class="icon">✅</div>
-    <h2>Siap dikirim</h2>
-    <p>Cek dulu ringkasannya di bawah - kalau ada yang salah, tap "Kembali Edit". Kalau sudah benar, tap "Kirim ke Telegram" buat kirim &amp; proses langsung.</p>
+    <h2>Terkirim</h2>
+    <p>Laporan sudah dikirim & diproses. Ringkasannya ada di bawah.</p>
   </div>
   <div id="peringatanBox"></div>
   <div class="preview-box" id="previewBox"></div>
-  <button class="btn kirim" id="btnKirim">🛫 Kirim ke Telegram</button>
   <button class="btn kirim" id="btnInputBaru" style="display:none">+ Input Laporan Baru</button>
   <div style="height:10px"></div>
   <div class="preview-actions">
-    <button class="btn secondary" id="btnKembaliEdit">Kembali Edit</button>
     <button class="btn secondary" id="btnSalinTeks">Salin Teks</button>
   </div>
 </div>
 
 <div class="bottom-bar" id="bottomBar">
   <button class="btn tambah" id="btnTambah">+ Tambah ke Daftar</button>
-  <button class="btn buatteks" id="btnBuatTeks" disabled>Buat Teks (0)</button>
+  <button class="btn buatteks" id="btnBuatTeks" disabled>🛫 Kirim ke Telegram (0)</button>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -1609,7 +1619,7 @@ function renderQueue() {
   const btnBuatTeks = document.getElementById('btnBuatTeks');
 
   badge.textContent = daftarAntrian.length;
-  btnBuatTeks.textContent = 'Buat Teks (' + daftarAntrian.length + ')';
+  btnBuatTeks.textContent = '🛫 Kirim ke Telegram (' + daftarAntrian.length + ')';
   btnBuatTeks.disabled = daftarAntrian.length === 0;
   wrap.style.display = daftarAntrian.length > 0 ? 'block' : 'none';
 
@@ -1657,61 +1667,30 @@ function deskripsiSingkatItem(it, sertakanSumber) {
 }
 
 // ------------------------------------------------------------
-// BUAT TEKS / PREVIEW / KIRIM
+// TAMBAH KE DAFTAR -> LANGSUNG KIRIM KE TELEGRAM
 // ------------------------------------------------------------
+// v.36 (request Denny): SEBELUMNYA 2 langkah terpisah - "Buat Teks" (nampilin layar review dulu)
+// baru "Kirim ke Telegram" (tombol terpisah di layar review itu). Sekarang digabung jadi 1 tap -
+// tombol bar bawah ini LANGSUNG kirim, gak ada lagi layar "cek dulu sebelum kirim". previewScreen
+// SEKARANG cuma tampil SETELAH berhasil terkirim (layar hasil, bukan layar konfirmasi).
 document.getElementById('btnBuatTeks').addEventListener('click', function () {
   if (daftarAntrian.length === 0) return;
+  if (!tg || !tg.initData) {
+    tampilkanToast('Harus dibuka lewat Mini App Telegram.');
+    return;
+  }
   const teks = daftarAntrian.map(function (it, i) {
     const deskripsi = deskripsiSingkatItem(it, false); // request Denny: [Pakai Habis]/[Estimasi] JANGAN masuk teks Telegram, cukup di antrian & database
     const ukuranTeks = Object.keys(it.ukuran).map(function (u) { return u + it.ukuran[u] + ' = ' + it.ukuran[u]; }).join('\n');
     return (i + 1) + '. ' + deskripsi + '\n' + ukuranTeks;
   }).join('\n\n');
-  document.getElementById('previewBox').textContent = teks;
+  document.getElementById('previewBox').textContent = teks; // dipakai Salin Teks setelah terkirim
   document.getElementById('peringatanBox').innerHTML = '';
-  document.getElementById('app').style.display = 'none';
-  document.getElementById('bottomBar').style.display = 'none';
-  document.getElementById('previewScreen').style.display = 'block';
-});
 
-document.getElementById('btnKembaliEdit').addEventListener('click', function () {
-  document.getElementById('previewScreen').style.display = 'none';
-  document.getElementById('app').style.display = 'block';
-  document.getElementById('bottomBar').style.display = 'flex';
-});
-
-// v.02: dipencet setelah sukses kirim - balikin Mini App ke KONDISI SIAP INPUT lagi dari nol
-// (form kosong, tombol Kirim kelihatan lagi, dsb) buat laporan BERIKUTNYA di hari yang sama.
-document.getElementById('btnInputBaru').addEventListener('click', function () {
-  itemBaru = kosongkanItemBaru();
-  openDropdown = null;
-  ukuranLainTerbuka = false;
-  renderDetailCard();
-  renderQtyGrid();
-  hitungTotalQty();
-  renderQueue();
-  document.getElementById('peringatanBox').innerHTML = '';
-  document.getElementById('previewScreen').style.display = 'none';
-  document.getElementById('app').style.display = 'block';
-  document.getElementById('bottomBar').style.display = 'flex';
-  document.getElementById('btnKirim').style.display = 'block';
-  document.getElementById('btnKirim').disabled = false;
-  document.getElementById('btnKirim').textContent = '🛫 Kirim ke Telegram';
-  document.getElementById('btnInputBaru').style.display = 'none';
-});
-
-document.getElementById('btnSalinTeks').addEventListener('click', function () {
-  const teks = document.getElementById('previewBox').textContent;
-  navigator.clipboard.writeText(teks).then(function () { tampilkanToast('Teks disalin'); });
-});
-
-document.getElementById('btnKirim').addEventListener('click', function () {
-  if (!tg || !tg.initData) {
-    tampilkanToast('Harus dibuka lewat Mini App Telegram.');
-    return;
-  }
-  const btnKirim = document.getElementById('btnKirim');
-  btnKirim.disabled = true;
-  btnKirim.textContent = 'Mengirim...';
+  const btnBuatTeks = this;
+  const labelAsli = btnBuatTeks.textContent;
+  btnBuatTeks.disabled = true;
+  btnBuatTeks.textContent = 'Mengirim...';
 
   const items = daftarAntrian.map(bangunPayloadItem);
 
@@ -1724,9 +1703,8 @@ document.getElementById('btnKirim').addEventListener('click', function () {
     .then(function (data) {
       if (data.ok) {
         // v.02: baik ADA peringatan stok maupun TIDAK, datanya SAMA-SAMA sudah tersimpan
-        // (data.ok true) - jangan biarkan tombol "Kirim ke Telegram" bisa ditekan lagi (nanti
-        // dianggap submit baru & kena tolak anti-duplikat, membingungkan). Bersihkan antrian,
-        // tampilkan peringatan (kalau ada) secara permanen, kasih tombol buat mulai input baru.
+        // (data.ok true) - tampilkan layar hasil (previewScreen), bersihkan antrian, kasih
+        // tombol buat mulai input baru.
         if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
         daftarAntrian = [];
         if (data.peringatanStok && data.peringatanStok.length > 0) {
@@ -1734,23 +1712,49 @@ document.getElementById('btnKirim').addEventListener('click', function () {
             '<div class="peringatan-box">⚠️ Tersimpan, tapi ada yang perlu dicek manual:<br>' + data.peringatanStok.map(escapeHtml).join('<br>') + '</div>';
         }
         document.getElementById('previewBox').textContent = '✅ Berhasil dikirim & tersimpan.';
-        btnKirim.style.display = 'none';
+        document.getElementById('app').style.display = 'none';
+        document.getElementById('bottomBar').style.display = 'none';
+        document.getElementById('previewScreen').style.display = 'block';
         document.getElementById('btnInputBaru').style.display = 'block';
+        btnBuatTeks.disabled = false;
+        btnBuatTeks.textContent = labelAsli;
       } else if (data.duplikat) {
         tampilkanToast(data.error);
-        btnKirim.disabled = false;
-        btnKirim.textContent = '🛫 Kirim ke Telegram';
+        btnBuatTeks.disabled = false;
+        btnBuatTeks.textContent = labelAsli;
       } else {
         tampilkanToast('Gagal: ' + data.error);
-        btnKirim.disabled = false;
-        btnKirim.textContent = '🛫 Kirim ke Telegram';
+        btnBuatTeks.disabled = false;
+        btnBuatTeks.textContent = labelAsli;
       }
     })
     .catch(function (err) {
       tampilkanToast('Gagal jaringan: ' + err.message);
-      btnKirim.disabled = false;
-      btnKirim.textContent = '🛫 Kirim ke Telegram';
+      btnBuatTeks.disabled = false;
+      btnBuatTeks.textContent = labelAsli;
     });
+});
+
+// v.02: dipencet setelah sukses kirim - balikin Mini App ke KONDISI SIAP INPUT lagi dari nol
+// (form kosong, dsb) buat laporan BERIKUTNYA di hari yang sama.
+document.getElementById('btnInputBaru').addEventListener('click', function () {
+  itemBaru = kosongkanItemBaru();
+  openDropdown = null;
+  ukuranLainTerbuka = false;
+  renderDetailCard();
+  renderQtyGrid();
+  hitungTotalQty();
+  renderQueue();
+  document.getElementById('peringatanBox').innerHTML = '';
+  document.getElementById('previewScreen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('bottomBar').style.display = 'flex';
+  document.getElementById('btnInputBaru').style.display = 'none';
+});
+
+document.getElementById('btnSalinTeks').addEventListener('click', function () {
+  const teks = document.getElementById('previewBox').textContent;
+  navigator.clipboard.writeText(teks).then(function () { tampilkanToast('Teks disalin'); });
 });
 
 function bangunPayloadItem(it) {
