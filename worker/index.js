@@ -1,4 +1,15 @@
 // ============================================================
+// CODE WORKER PRODUKSI ver.56
+// ============================================================
+// PERUBAHAN ver.56 (fix bug, request Denny): item REGULAR/KOMBINASI (bukan Item Custom) sekarang
+// WAJIB ada kg - SEBELUMNYA validasi "kg wajib positif" cuma jalan KALAU kg terisi, jadi kg=null
+// (kosong sama sekali) LOLOS TANPA DICEK di server sama sekali (niat awal: dukung Item Custom
+// yang MEMANG boleh non-kain). Kejadian nyata: "RINGER BIRU MUDA" (Anak) berhasil masuk ke
+// tim_potong dengan pemakaian_kain_kg NULL - validasi client (index.html) SEHARUSNYA mencegah
+// ini tapi entah kenapa lolos (dugaan: WebView jalanin JS versi lama/stale). Sekarang server
+// PUNYA PERTAHANAN SENDIRI yang gak bergantung ke client - item REGULAR/KOMBINASI (warna udah
+// wajib diisi validasinya) WAJIB ada kg juga, cuma Item Custom yang tetap boleh kg null.
+// ============================================================
 // CODE WORKER PRODUKSI ver.55
 // ============================================================
 // PERUBAHAN ver.55 (fix bug, request Denny): "RINGER" (kode item Ringer ANAK, beda dari Dewasa
@@ -2608,6 +2619,10 @@ async function handleSubmitProduksi_(body, env) {
   // dikirim (1x POST array, gak ada trigger yang bisa acak urutan) - kalau suatu saat ada
   // laporan potong stok custom-item ketuker antar baris, ini titik pertama yang perlu dicurigai.
   const warnaUtamaPerRow = [];
+  // v.56 (fix bug, request Denny): array paralel buat bedain item CUSTOM (boleh kg null, desain
+  // asli - item custom bisa non-kain) vs item REGULAR/KOMBINASI (kg WAJIB ada, gak ada alasan
+  // legitimate item kain beneran gak punya kg). Dipakai di validasi wajib-kg di bawah.
+  const isCustomPerRow = [];
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
     const ukuran = it.ukuran && typeof it.ukuran === 'object' ? it.ukuran : {};
@@ -2692,12 +2707,23 @@ async function handleSubmitProduksi_(body, env) {
       ref_stok: refStok
     }, ukuranKeKolom_(ukuran)));
     warnaUtamaPerRow.push(warnaCustomUtama);
+    isCustomPerRow.push(!!it.custom);
   }
 
   // v.06: kg WAJIB positif kalau diisi - kg minus/nol gak masuk akal ("pakai kain minus kg")
   // dan pernah kebukti bisa nyebabin bug (kg_terpakai malah NAMBAH balik alih-alih berkurang).
   // v.08 (kombinasi): kg di dalam ref_stok juga dicek positif, bukan cuma kg utama.
+  // v.56 (fix bug, request Denny): SEBELUMNYA kalau pemakaian_kain_kg === null, validasi ini
+  // DI-SKIP TOTAL (niat awal: item CUSTOM boleh non-kain, kg null itu sengaja) - TAPI ini juga
+  // ngebuka celah buat item REGULAR/KOMBINASI (yang jelas-jelas kain, warna udah diwajibkan
+  // beberapa baris di atas) ikut lolos TANPA kg sama sekali kalau validasi client (index.html)
+  // gagal/ke-skip/jalanin versi lama (WebView stale). Kejadian nyata: "RINGER BIRU MUDA" (Anak)
+  // masuk ke tim_potong dengan pemakaian_kain_kg NULL. Sekarang kg null CUMA dibolehin buat item
+  // CUSTOM (isCustomPerRow[i] true) - REGULAR/KOMBINASI WAJIB ada kg positif, gak ada pengecualian.
   for (let i = 0; i < rows.length; i++) {
+    if (!isCustomPerRow[i] && (rows[i].pemakaian_kain_kg === null || rows[i].pemakaian_kain_kg === undefined)) {
+      return jsonResponse({ ok: false, error: 'Item ke-' + (i + 1) + ' ("' + rows[i].jenis_warna_baju + '"): kg kain wajib diisi (manual, Pakai Habis, atau Pakai Estimasi) - kosong sama sekali.' }, 400);
+    }
     if (rows[i].pemakaian_kain_kg !== null && rows[i].pemakaian_kain_kg <= 0) {
       return jsonResponse({ ok: false, error: 'Item ke-' + (i + 1) + ': kg harus lebih besar dari 0 (dikirim: ' + rows[i].pemakaian_kain_kg + ').' }, 400);
     }
