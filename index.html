@@ -1,6 +1,24 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+HTML PRODUKSI (Supabase/testproduksi) - ver.41
+============================================================
+PERUBAHAN ver.41 (2 request Denny, root cause kejadian "RINGER BIRU MUDA" lolos ke antrian tanpa
+kg) -
+1. Fix bug validasi: itemBaruValid() SEBELUMNYA nganggep checkbox "Pakai habis" yang kecentang
+   (boolean doang) sebagai bukti kg udah keisi - padahal proses auto-isi kg-nya BISA GAGAL (mis.
+   kode roll belum dipilih & ambigu), jadi itemBaru.kg tetap kosong walau pakaiHabis=true, tapi
+   TETAP lolos validasi. Syarat "|| itemBaru.pakaiHabis" dihapus - sekarang yang menentukan valid
+   HARUS hasil akhir (kg beneran terisi), bukan status checkbox-nya doang.
+2. "Pakai Habis" sekarang bisa bekerja meski Kode Roll belum dipilih eksplisit, SELAMA warna itu
+   cuma punya 1 (SATU) opsi roll di stok (termasuk yang kode_roll-nya "-"/kosong - kain sisa
+   potongan yang gak dilacak per-nomor) - gak ada ambiguitas kalau cuma 1 opsi, "verifikasi lapis
+   2 nya di nama warna dan kg" (kata2 Denny persis). Kalau ada 2+ opsi atau 0 opsi, checkbox
+   di-uncheck balik + toast jelas kenapa (BUKAN dibiarkan kecentang-tapi-kosong). Fungsi baru:
+   cariRollTunggalUntukWarna_(). Diterapkan di mode item biasa DAN Kombinasi/Ringer slot 0
+   (perlakuan sama, sesuai instruksi Denny).
+Riwayat lengkap: git log.
+============================================================
 HTML PRODUKSI (Supabase/testproduksi) - ver.40
 ============================================================
 PERUBAHAN ver.40 (request Denny) -
@@ -842,6 +860,19 @@ function cariKgRollTerpilih_(warna, kodeRoll) {
   return cocok ? cocok.kg : null;
 }
 
+// v.41 (request Denny): kain yang gak dilacak per-nomor-roll (kode_roll di database "-"/kosong,
+// mis. sisa potongan) sebelumnya gak bisa dipakai "Pakai Habis" sama sekali kalau Kode Roll
+// belum eksplisit dipilih - cariKgRollTerpilih_ butuh kodeRoll gak kosong. Padahal kalau warna
+// itu CUMA PUNYA 1 SATU opsi roll di stok, gak ada ambiguitas - harusnya bisa langsung kepakai
+// tanpa user wajib klik pilih dulu. "Verifikasi lapis 2 nya di nama warna dan kg" (request Denny)
+// - kalau cuma 1 opsi, kecocokan by NAMA WARNA aja udah cukup pasti, gak butuh kode roll spesifik.
+// Return null kalau opsinya 0 (gak ada stok) ATAU 2+ (ambigu, wajib pilih manual biar gak salah).
+function cariRollTunggalUntukWarna_(warna) {
+  if (!warna) return null;
+  const semua = daftarRollUntukWarna(warna);
+  return semua.length === 1 ? semua[0] : null;
+}
+
 // ------------------------------------------------------------
 // AUTOCOMPLETE - filter di memori (data sudah ke-load duluan), jadi instan tanpa
 // nembak server tiap ketik. Cuma update <div> saran-nya doang (bukan render ulang
@@ -1236,8 +1267,34 @@ function pasangEventDetailCard() {
         inputKg.readOnly = chkPakaiHabis.checked;
         inputKg.placeholder = '0';
         if (chkPakaiHabis.checked) {
-          const kgSisa = cariKgRollTerpilih_(itemBaru.warna, itemBaru.kodeRoll);
-          if (kgSisa !== null) { itemBaru.kg = String(kgSisa); inputKg.value = itemBaru.kg; itemBaru.kgSumber = 'Pakai Habis'; }
+          // v.41 (request Denny): kalau Kode Roll belum dipilih eksplisit, coba dulu cari roll
+          // TUNGGAL buat warna ini (gak ambigu kalau cuma 1 opsi, termasuk yang kode_roll-nya
+          // "-"/kosong) - baru kalau itu juga gagal (0 atau 2+ opsi), tolak & kasih tau kenapa.
+          let kgSisa = cariKgRollTerpilih_(itemBaru.warna, itemBaru.kodeRoll);
+          if (kgSisa === null && !itemBaru.kodeRoll) {
+            const rollTunggal = cariRollTunggalUntukWarna_(itemBaru.warna);
+            if (rollTunggal) {
+              itemBaru.kodeRoll = rollTunggal.kodeRoll;
+              const inputRoll = document.getElementById('inputKodeRoll');
+              if (inputRoll) inputRoll.value = 'Roll ' + (rollTunggal.kodeRoll || '-') + ' / ' + rollTunggal.kg + 'kg';
+              kgSisa = rollTunggal.kg;
+            }
+          }
+          if (kgSisa !== null) {
+            itemBaru.kg = String(kgSisa); inputKg.value = itemBaru.kg; itemBaru.kgSumber = 'Pakai Habis';
+          } else {
+            // v.41 (fix bug, request Denny): SEBELUMNYA kalau gagal cari kg, checkbox TETAP
+            // kecentang (itemBaru.pakaiHabis=true) walau kg-nya kosong - itemBaruValid() nganggep
+            // ini "udah lengkap" gara-gara flag doang, padahal kg-nya kosong beneran (root cause
+            // "RINGER BIRU MUDA" lolos ke antrian tanpa kg). Sekarang uncheck balik + kasih tau
+            // jelas kenapa, JANGAN biarin state "checked tapi kosong" yang bikin lolos diam-diam.
+            chkPakaiHabis.checked = false;
+            itemBaru.pakaiHabis = false;
+            inputKg.readOnly = false;
+            tampilkanToast(itemBaru.kodeRoll
+              ? 'Kode roll "' + itemBaru.kodeRoll + '" gak ketemu stoknya buat warna ini.'
+              : 'Warna "' + itemBaru.warna + '" ada lebih dari 1 roll (atau belum ada stok) - pilih kode roll dulu secara manual.');
+          }
         } else {
           itemBaru.kg = '';
           itemBaru.kgSumber = null;
@@ -1312,8 +1369,30 @@ function pasangEventDetailCard() {
         kgInput0.readOnly = chkPakaiHabisKombi0.checked;
         kgInput0.placeholder = 'kg';
         if (chkPakaiHabisKombi0.checked) {
-          const kgSisa = cariKgRollTerpilih_(itemBaru.kombinasi.warna[0], itemBaru.kombinasi.kodeRoll[0]);
-          if (kgSisa !== null) { itemBaru.kombinasi.kg[0] = String(kgSisa); kgInput0.value = itemBaru.kombinasi.kg[0]; if (itemBaru.kombinasi.kgSumber) itemBaru.kombinasi.kgSumber[0] = 'Pakai Habis'; }
+          // v.41 (request Denny): sama pola kayak mode item biasa - coba roll TUNGGAL dulu kalau
+          // Kode Roll belum dipilih eksplisit (gak ambigu kalau warna cuma punya 1 opsi stok).
+          let kgSisa = cariKgRollTerpilih_(itemBaru.kombinasi.warna[0], itemBaru.kombinasi.kodeRoll[0]);
+          if (kgSisa === null && !itemBaru.kombinasi.kodeRoll[0]) {
+            const rollTunggal = cariRollTunggalUntukWarna_(itemBaru.kombinasi.warna[0]);
+            if (rollTunggal) {
+              itemBaru.kombinasi.kodeRoll[0] = rollTunggal.kodeRoll;
+              const rollInput0 = document.querySelector('.roll-mini-input[data-kidx="0"]');
+              if (rollInput0) rollInput0.value = 'Roll ' + (rollTunggal.kodeRoll || '-') + ' / ' + rollTunggal.kg + 'kg';
+              kgSisa = rollTunggal.kg;
+            }
+          }
+          if (kgSisa !== null) {
+            itemBaru.kombinasi.kg[0] = String(kgSisa); kgInput0.value = itemBaru.kombinasi.kg[0]; if (itemBaru.kombinasi.kgSumber) itemBaru.kombinasi.kgSumber[0] = 'Pakai Habis';
+          } else {
+            // v.41 (fix bug, request Denny): jangan biarin checkbox tetap kecentang tapi kg
+            // kosong - uncheck balik + kasih tau jelas, konsisten sama mode item biasa.
+            chkPakaiHabisKombi0.checked = false;
+            itemBaru.kombinasi.pakaiHabis0 = false;
+            kgInput0.readOnly = false;
+            tampilkanToast(itemBaru.kombinasi.kodeRoll[0]
+              ? 'Kode roll "' + itemBaru.kombinasi.kodeRoll[0] + '" gak ketemu stoknya buat warna ini.'
+              : 'Warna "' + itemBaru.kombinasi.warna[0] + '" ada lebih dari 1 roll (atau belum ada stok) - pilih kode roll dulu secara manual.');
+          }
         } else {
           itemBaru.kombinasi.kg[0] = '';
           if (itemBaru.kombinasi.kgSumber) itemBaru.kombinasi.kgSumber[0] = null;
@@ -1656,7 +1735,15 @@ function itemBaruValid() {
   }
   // v.31: Kg Kain Terpakai sekarang WAJIB keisi lewat salah satu cara - manual, "Pakai habis",
   // atau "Pakai Estimasi" (request Denny, sebelumnya boleh kosong sama sekali).
-  const isiLengkap = !!itemBaru.varianLabel && !!itemBaru.warna && (!!itemBaru.kg || itemBaru.pakaiHabis || itemBaru.estimasi);
+  // v.41 (fix bug, request Denny): "|| itemBaru.pakaiHabis" DIHAPUS dari syarat - SEBELUMNYA
+  // checkbox yang KECENTANG (boolean doang) dianggap cukup, padahal proses auto-isi kg-nya BISA
+  // GAGAL (mis. kode roll belum dipilih & ambigu) sehingga itemBaru.kg TETAP KOSONG walau
+  // pakaiHabis=true - lolos validasi tapi kg-nya beneran kosong (root cause "RINGER BIRU MUDA"
+  // masuk antrian tanpa kg). "Pakai Estimasi" TETAP dipertahankan di syarat ini karena kg-nya
+  // MEMANG belum dihitung di titik ini (baru dihitung pas Tambah dipencet, ada validasi ULANG
+  // terpisah setelahnya) - beda kasus sama Pakai Habis yang SEHARUSNYA udah keisi LANGSUNG saat
+  // dicentang.
+  const isiLengkap = !!itemBaru.varianLabel && !!itemBaru.warna && (!!itemBaru.kg || itemBaru.estimasi);
   return isiLengkap && semuaRollCukup_();
 }
 
