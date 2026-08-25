@@ -1,6 +1,20 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+HTML PRODUKSI (Supabase/testproduksi) - ver.42
+============================================================
+PERUBAHAN ver.42 (3 request Denny) -
+1. "Pakai Estimasi" sekarang JUGA butuh Kode Roll kepilih (proteksi sama kayak "Pakai Habis"
+   ver.41) - auto-isi kalau warna cuma 1 opsi roll, tolak (uncheck balik + toast) kalau 2+ opsi.
+   Diterapkan di mode item biasa DAN Kombinasi/Ringer per-slot. SEKALIAN nutup celah terkait:
+   itemBaruValid() sekarang JUGA verifikasi kodeRoll masih ada (bukan cuma flag estimasi) - jaga2
+   kalau warna diganti SETELAH checkbox dicentang (kodeRoll ikut reset tapi flag-nya nyangkut).
+2. Tombol "Salin Teks" dihapus dari layar hasil (setelah kirim) - beserta CSS .preview-actions
+   yang jadi yatim piatu.
+3. "Daftar Item (Siap Dikirim)" dipindah dari paling bawah form ke ATAS, sebelum tab ANAK/DEWASA
+   - langsung kelihatan tanpa scroll.
+Riwayat lengkap: git log.
+============================================================
 HTML PRODUKSI (Supabase/testproduksi) - ver.41
 ============================================================
 PERUBAHAN ver.41 (2 request Denny, root cause kejadian "RINGER BIRU MUDA" lolos ke antrian tanpa
@@ -496,7 +510,6 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
   .preview-center h2 { margin: 0 0 8px; }
   .preview-center p { color: var(--gray-text); font-size: 13px; line-height: 1.5; max-width: 320px; margin: 0 auto; }
   .preview-box { background: #fff; border-radius: 14px; padding: 16px; margin: 20px 0; white-space: pre-wrap; font-size: 14px; line-height: 1.6; min-height: 60px; }
-  .preview-actions { display: flex; gap: 10px; }
   .peringatan-box { background: #fef3c7; border-radius: 10px; padding: 10px 12px; font-size: 12px; color: #92400e; margin-bottom: 14px; }
 
   .kg-suspicious { color: var(--danger) !important; font-weight: 800 !important; }
@@ -515,6 +528,16 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
     <div class="header-right">
       <button class="link-btn refresh" id="btnRefresh"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg></button>
     </div>
+  </div>
+
+  <!-- v.42 (request Denny): "Daftar Item (Siap Dikirim)" dipindah ke sini (atas, sebelum tab
+       Anak/Dewasa) - SEBELUMNYA di paling bawah form. -->
+  <div id="queueWrap" style="display:none">
+    <div class="queue-box">
+      <div class="qtitle"><span>DAFTAR ITEM (SIAP DIKIRIM)</span><span class="qbadge" id="queueBadge">0</span></div>
+      <div id="queueList"></div>
+    </div>
+    <div class="cut-divider"><div class="scissor-chip">✂️</div></div>
   </div>
 
   <div class="kategori-toggle">
@@ -538,14 +561,6 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
     <div class="toggle-ukuran"><a id="toggleUkuranLain">Tampilkan ukuran lain (3XL–6XL)</a></div>
     <div class="total-qty"><span>Total qty item ini</span><span id="totalQtyItem">0 pcs</span></div>
   </div>
-
-  <div id="queueWrap" style="display:none">
-    <div class="cut-divider"><div class="scissor-chip">✂️</div></div>
-    <div class="queue-box">
-      <div class="qtitle"><span>DAFTAR ITEM (SIAP DIKIRIM)</span><span class="qbadge" id="queueBadge">0</span></div>
-      <div id="queueList"></div>
-    </div>
-  </div>
 </div>
 
 <div id="previewScreen" style="display:none">
@@ -562,10 +577,6 @@ diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI
   <div id="peringatanBox"></div>
   <div class="preview-box" id="previewBox"></div>
   <button class="btn kirim" id="btnInputBaru" style="display:none">+ Input Laporan Baru</button>
-  <div style="height:10px"></div>
-  <div class="preview-actions">
-    <button class="btn secondary" id="btnSalinTeks">Salin Teks</button>
-  </div>
 </div>
 
 <div class="bottom-bar" id="bottomBar">
@@ -1238,6 +1249,23 @@ function pasangEventDetailCard() {
         const chkHabis = document.getElementById('chkPakaiHabis');
         if (chkHabis) chkHabis.checked = false;
       }
+      // v.42 (request Denny): "Pakai Estimasi" JUGA butuh Kode Roll kepilih - sama alasan kayak
+      // "Pakai Habis" (biar sistem tau mau potong stok roll yang MANA). Beda dari Pakai Habis,
+      // kg-nya tetap baru dihitung belakangan (pas Tambah dipencet) - yang dicek/diisi DI SINI
+      // cuma Kode Roll-nya (auto kalau warna cuma 1 opsi, tolak kalau 2+ opsi/gak ada opsi).
+      if (chkEstimasi.checked && !itemBaru.kodeRoll) {
+        const rollTunggal = cariRollTunggalUntukWarna_(itemBaru.warna);
+        if (rollTunggal) {
+          itemBaru.kodeRoll = rollTunggal.kodeRoll;
+          const inputRoll = document.getElementById('inputKodeRoll');
+          if (inputRoll) inputRoll.value = 'Roll ' + (rollTunggal.kodeRoll || '-') + ' / ' + rollTunggal.kg + 'kg';
+        } else {
+          chkEstimasi.checked = false;
+          itemBaru.estimasi = false;
+          tampilkanToast('Warna "' + itemBaru.warna + '" ada lebih dari 1 roll (atau belum ada stok) - pilih kode roll dulu secara manual.');
+          return;
+        }
+      }
       const inputKg = document.getElementById('inputKg');
       if (inputKg) {
         inputKg.readOnly = chkEstimasi.checked;
@@ -1418,6 +1446,22 @@ function pasangEventDetailCard() {
         itemBaru.kombinasi.pakaiHabis0 = false;
         const chkHabis0 = document.getElementById('chkPakaiHabisKombi0');
         if (chkHabis0) chkHabis0.checked = false;
+      }
+      // v.42 (request Denny): "Pakai Estimasi" JUGA butuh Kode Roll kepilih di slot ini - sama
+      // alasan kayak "Pakai Habis" (biar sistem tau mau potong stok roll yang MANA). Kg-nya tetap
+      // baru dihitung belakangan pas Tambah dipencet - yang dicek/diisi di sini cuma Kode Roll.
+      if (el.checked && !itemBaru.kombinasi.kodeRoll[idx]) {
+        const rollTunggal = cariRollTunggalUntukWarna_(itemBaru.kombinasi.warna[idx]);
+        if (rollTunggal) {
+          itemBaru.kombinasi.kodeRoll[idx] = rollTunggal.kodeRoll;
+          const rollInput = document.querySelector('.roll-mini-input[data-kidx="' + idx + '"]');
+          if (rollInput) rollInput.value = 'Roll ' + (rollTunggal.kodeRoll || '-') + ' / ' + rollTunggal.kg + 'kg';
+        } else {
+          el.checked = false;
+          itemBaru.kombinasi.estimasiSlot[idx] = false;
+          tampilkanToast('Warna "' + itemBaru.kombinasi.warna[idx] + '" ada lebih dari 1 roll (atau belum ada stok) - pilih kode roll dulu secara manual.');
+          return;
+        }
       }
       itemBaru.kombinasi.kg[idx] = '';
       if (itemBaru.kombinasi.kgSumber) itemBaru.kombinasi.kgSumber[idx] = null; // baru keisi 'Estimasi' pas Tambah dipencet
@@ -1729,7 +1773,12 @@ function itemBaruValid() {
       if (!w) return false;
       if (i > 0 && ringerRibSajaTanpaStok) return true;
       const estSlot = itemBaru.kombinasi.estimasiSlot && itemBaru.kombinasi.estimasiSlot[i];
-      return estSlot || itemBaru.kombinasi.kg[i];
+      // v.42 (fix bug, request Denny): estSlot doang gak cukup - HARUS ADA kodeRoll[i] juga.
+      // Nutup celah: warna slot ini bisa GANTI setelah checkbox estimasi dicentang (kodeRoll
+      // ikut reset ke null via handler ganti warna), tapi flag estimasiSlot[i] TETAP true -
+      // tanpa pengecekan ini, itemBaruValid() masih nganggep lengkap walau kodeRoll-nya kosong
+      // buat warna yang SEKARANG.
+      return (estSlot && !!itemBaru.kombinasi.kodeRoll[i]) || itemBaru.kombinasi.kg[i];
     });
     return isiLengkap && semuaRollCukup_();
   }
@@ -1743,7 +1792,10 @@ function itemBaruValid() {
   // MEMANG belum dihitung di titik ini (baru dihitung pas Tambah dipencet, ada validasi ULANG
   // terpisah setelahnya) - beda kasus sama Pakai Habis yang SEHARUSNYA udah keisi LANGSUNG saat
   // dicentang.
-  const isiLengkap = !!itemBaru.varianLabel && !!itemBaru.warna && (!!itemBaru.kg || itemBaru.estimasi);
+  // v.42 (fix bug, request Denny): itemBaru.estimasi doang gak cukup - HARUS ADA itemBaru.kodeRoll
+  // juga. Nutup celah: warna bisa GANTI setelah checkbox estimasi dicentang (kodeRoll ikut reset
+  // ke null via handler ganti warna), tapi flag estimasi TETAP true.
+  const isiLengkap = !!itemBaru.varianLabel && !!itemBaru.warna && (!!itemBaru.kg || (itemBaru.estimasi && !!itemBaru.kodeRoll));
   return isiLengkap && semuaRollCukup_();
 }
 
@@ -1888,7 +1940,7 @@ document.getElementById('btnBuatTeks').addEventListener('click', function () {
     const ukuranTeks = Object.keys(it.ukuran).map(function (u) { return u + it.ukuran[u] + ' = ' + it.ukuran[u]; }).join('\n');
     return (i + 1) + '. ' + deskripsi + '\n' + ukuranTeks;
   }).join('\n\n');
-  document.getElementById('previewBox').textContent = teks; // dipakai Salin Teks setelah terkirim
+  document.getElementById('previewBox').textContent = teks; // tampilan ringkasan di layar hasil
   document.getElementById('peringatanBox').innerHTML = '';
 
   const btnBuatTeks = this;
@@ -1954,11 +2006,6 @@ document.getElementById('btnInputBaru').addEventListener('click', function () {
   document.getElementById('app').style.display = 'block';
   document.getElementById('bottomBar').style.display = 'flex';
   document.getElementById('btnInputBaru').style.display = 'none';
-});
-
-document.getElementById('btnSalinTeks').addEventListener('click', function () {
-  const teks = document.getElementById('previewBox').textContent;
-  navigator.clipboard.writeText(teks).then(function () { tampilkanToast('Teks disalin'); });
 });
 
 function bangunPayloadItem(it) {
