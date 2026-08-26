@@ -1,6 +1,22 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+DASHBOARD ver.68
+============================================================
+PERUBAHAN ver.68 (fix bug, request Denny): root cause "data jadi 0 dari 0 laporan" pas dashboard
+dibiarkan idle lama - 7 fungsi fetch DATA UTAMA (muatDaftarLaporan, muatStokUtuh, muatRekapQC,
+muatArsip, muatStokHabis, muatStokTerpakaiSebagianGrid_, muatRiwayatPemakaian_) SEBELUMNYA gak
+pernah ngecek apakah response server BENERAN berhasil (HTTP status) & strukturnya SESUAI SEBELUM
+nerima sebagai data baru - pola umum: "Array.isArray(data) ? data : []". Kalau server sempat
+gagal/timeout sesaat (paling sering pas koneksi baru pulih abis HP idle lama), response gagal
+LANGSUNG NIMPA data bagus yang udah tampil jadi array KOSONG - persis gejala "0 dari 0 laporan".
+Sekarang response divalidasi DULU (status + struktur) - kalau gak valid, di-THROW (data LAMA
+dibiarkan apa adanya, dicoba lagi otomatis di siklus berikutnya). SENGAJA gak ada tradeoff baterai
+- ini murni validasi respons di klien, TIDAK menyentuh cara kerja Realtime/koneksi sama sekali.
+Refresh SILENT (background) yang gagal sekarang diam aja (gak toast) - biar konsisten sama
+filosofi "realtime tanpa notif" yang udah ada, cuma refresh MANUAL yang tetap kasih toast kalau gagal.
+Riwayat lengkap: git log.
+============================================================
 DASHBOARD ver.67
 ============================================================
 PERUBAHAN ver.67 (request Denny): modal Edit Stok Kain - fitur Write-off Manual diganti Stock
@@ -1050,9 +1066,18 @@ function muatDaftarLaporan(percobaan, manual) {
     }
   }
   fetch(WORKER_URL + '/data/laporan-qc')
-    .then(function (r) { return r.json(); })
+    .then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
     .then(function (data) {
-      daftarLaporanData = Array.isArray(data) ? data : [];
+      // v.60 (fix bug, request Denny): SEBELUMNYA "Array.isArray(data) ? data : []" - kalau
+      // response GAGAL/GAK SESUAI (server error, koneksi belum stabil abis idle lama, dst),
+      // daftarLaporanData langsung DITIMPA jadi array KOSONG, nampilin "0 dari 0 laporan" walau
+      // data ASLI-nya ada. Sekarang response yang gak valid di-THROW (lompat ke .catch di bawah)
+      // - data LAMA yang udah kelihatan di layar DIBIARKAN APA ADANYA, gak ketiban kosong.
+      if (!Array.isArray(data)) throw new Error('Format data gak sesuai.');
+      daftarLaporanData = data;
       simpanCacheDashboard_('laporan_qc', daftarLaporanData);
       updateJamRefresh(manual);
       renderDaftarLaporan();
@@ -1063,7 +1088,10 @@ function muatDaftarLaporan(percobaan, manual) {
       if (percobaan < 1) { setTimeout(function () { muatDaftarLaporan(percobaan + 1, manual); }, 1500); return; }
       sedangMuatLaporan = false;
       tampilkanLoading(false);
-      tampilkanToast('Gagal memuat laporan: ' + e.message);
+      // v.60: cuma toast kalau manual (refresh sendiri via tombol/tab-switch) - refresh SILENT
+      // (Realtime/visibilitychange di background) yang gagal diam aja, dicoba lagi otomatis di
+      // siklus berikutnya - data lama tetep aman kelihatan, gak perlu ganggu user pakai notif.
+      if (manual) tampilkanToast('Gagal memuat laporan: ' + e.message);
     });
 }
 
@@ -1565,18 +1593,23 @@ document.getElementById('arsipToggle').addEventListener('click', function () {
 });
 function muatArsip() {
   fetch(WORKER_URL + '/data/arsip-selesai?hari=3')
-    .then(function (r) { return r.json(); })
+    .then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
     .then(function (data) {
+      // v.60 (fix bug, request Denny): validasi dulu sebelum nampilin - response gagal/gak
+      // sesuai sebelumnya bisa langsung nimpa tampilan jadi "0 laporan" walau data asli ada.
+      if (!Array.isArray(data)) throw new Error('Format data gak sesuai.');
       arsipDimuat = true;
-      const list = Array.isArray(data) ? data : [];
-      document.getElementById('arsipSub').textContent = list.length + ' laporan';
-      document.getElementById('arsipList').innerHTML = list.map(function (a) {
+      document.getElementById('arsipSub').textContent = data.length + ' laporan';
+      document.getElementById('arsipList').innerHTML = data.map(function (a) {
         return '<div class="arsip-item"><div><div class="nama">' + escapeHtml(a.jenisWarnaBaju) + '</div>' +
           '<div class="meta">' + (a.tanggal || '') + ' · ' + (a.jumlah || 0) + ' pcs</div></div>' +
           '<div class="meta">' + new Date(a.waktu).toLocaleString('id-ID') + '</div></div>';
       }).join('');
     })
-    .catch(function (e) { tampilkanToast('Gagal memuat arsip: ' + e.message); });
+    .catch(function (e) { /* silent - data lama (kalau ada) dibiarkan, dicoba lagi siklus berikutnya */ });
 }
 
 // ------------------------------------------------------------
@@ -1592,21 +1625,26 @@ document.getElementById('stokHabisToggle').addEventListener('click', function ()
 });
 function muatStokHabis() {
   fetch(WORKER_URL + '/data/stok-habis')
-    .then(function (r) { return r.json(); })
+    .then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
     .then(function (data) {
+      // v.60 (fix bug, request Denny): validasi dulu sebelum nampilin - sama alasan kayak
+      // muatArsip/muatDaftarLaporan dst.
+      if (!Array.isArray(data)) throw new Error('Format data gak sesuai.');
       stokHabisDimuat = true;
-      const list = Array.isArray(data) ? data : [];
-      document.getElementById('stokHabisSub').textContent = list.length + ' roll';
-      if (list.length === 0) {
+      document.getElementById('stokHabisSub').textContent = data.length + ' roll';
+      if (data.length === 0) {
         document.getElementById('stokHabisList').innerHTML = '<div class="arsip-item" style="justify-content:center;color:var(--gray-text)">Belum ada roll yang habis.</div>';
         return;
       }
-      document.getElementById('stokHabisList').innerHTML = list.map(function (x) {
+      document.getElementById('stokHabisList').innerHTML = data.map(function (x) {
         return '<div class="stok-habis-item"><span class="nama">' + escapeHtml(x.warna) + '</span>' +
           '<span class="roll">Roll ' + (x.kodeRoll ? escapeHtml(x.kodeRoll) : '-') + '</span>' + tombolEditRoll_(x) + '</div>';
       }).join('');
     })
-    .catch(function (e) { tampilkanToast('Gagal memuat stok habis: ' + e.message); });
+    .catch(function (e) { /* silent - data lama (kalau ada) dibiarkan, dicoba lagi siklus berikutnya */ });
 }
 
 // v.50: SEBELUMNYA sort chip (kg/nama/roll) dan chip "Terpakai Sebagian" independen -
@@ -1751,15 +1789,24 @@ function muatStokTerpakaiSebagianGrid_() {
   if (sedangMuatTerpakaiSebagian) return;
   sedangMuatTerpakaiSebagian = true;
   fetch(WORKER_URL + '/data/stok-terpakai-sebagian')
-    .then(function (r) { return r.json(); })
+    .then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
     .then(function (data) {
-      stokTerpakaiSebagianRaw = Array.isArray(data) ? data : [];
+      // v.60 (fix bug, request Denny): SEBELUMNYA "Array.isArray(data) ? data : []" - kalau
+      // gagal, stokTerpakaiSebagianRaw jadi ARRAY KOSONG ([], truthy di JS) - daftarWarnaAktif_()
+      // nganggep "udah dimuat tapi kosong", nampilin 0 padahal cuma gagal fetch. Sekarang
+      // response gak valid di-THROW, stokTerpakaiSebagianRaw TETAP null (retry otomatis lewat
+      // renderWarnaGrid's null-branch), bukan ke-anggap "kosong beneran".
+      if (!Array.isArray(data)) throw new Error('Format data gak sesuai.');
+      stokTerpakaiSebagianRaw = data;
       sedangMuatTerpakaiSebagian = false;
       renderWarnaGrid();
     })
     .catch(function (e) {
       sedangMuatTerpakaiSebagian = false;
-      tampilkanToast('Gagal memuat data terpakai sebagian: ' + e.message);
+      // silent - stokTerpakaiSebagianRaw tetap null, dicoba lagi otomatis siklus berikutnya
     });
 }
 
@@ -1797,8 +1844,15 @@ function muatStokUtuh(percobaan, manual) {
     }
   }
   fetch(WORKER_URL + '/data/stok-utuh')
-    .then(function (r) { return r.json(); })
+    .then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
     .then(function (data) {
+      // v.60 (fix bug, request Denny): sama root cause kayak muatDaftarLaporan - validasi
+      // struktur SEBELUM nerima sebagai data baru, biar response gagal/gak sesuai gak nimpa
+      // stokUtuhData jadi kosong.
+      if (!data || !Array.isArray(data.perWarna)) throw new Error('Format data gak sesuai.');
       stokUtuhData = data;
       simpanCacheDashboard_('stok_utuh', data);
       updateJamRefresh(manual);
@@ -1812,7 +1866,7 @@ function muatStokUtuh(percobaan, manual) {
       if (percobaan < 1) { setTimeout(function () { muatStokUtuh(percobaan + 1, manual); }, 1500); return; }
       sedangMuatStok = false;
       tampilkanLoading(false);
-      tampilkanToast('Gagal memuat stok: ' + e.message);
+      if (manual) tampilkanToast('Gagal memuat stok: ' + e.message);
     });
 }
 
@@ -1824,16 +1878,21 @@ function muatRiwayatPemakaian_() {
   if (riwayatPemakaianData || sedangMuatRiwayat) return;
   sedangMuatRiwayat = true;
   fetch(WORKER_URL + '/data/riwayat-pemakaian-kain')
-    .then(function (r) { return r.json(); })
+    .then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
     .then(function (data) {
-      riwayatPemakaianData = Array.isArray(data) ? data : [];
+      // v.60 (fix bug, request Denny): sama pola kayak muatStokTerpakaiSebagianGrid_ - array
+      // kosong ([]) truthy di JS, bikin dianggap "udah dimuat tapi kosong" kalau gagal fetch.
+      if (!Array.isArray(data)) throw new Error('Format data gak sesuai.');
+      riwayatPemakaianData = data;
       sedangMuatRiwayat = false;
       renderWarnaGrid();
     })
     .catch(function (e) {
       sedangMuatRiwayat = false;
-      tampilkanToast('Gagal memuat riwayat pemakaian: ' + e.message);
-      renderWarnaGrid();
+      // silent - riwayatPemakaianData tetap null, dicoba lagi otomatis siklus berikutnya
     });
 }
 // v.59 (request Denny): sama pola kayak segarkanTerpakaiSebagian_ - riwayatPemakaianData
@@ -2277,9 +2336,17 @@ function muatRekapQC(percobaan, manual) {
   // Rentang tanggal buat NARROW-in tampilan sekarang ditangani via slider di client, bukan lewat
   // parameter fetch ini - biar geser slider gak perlu nembak ulang ke server tiap kali.
   fetch(WORKER_URL + '/data/rekap-qc?hari=3650')
-    .then(function (r) { return r.json(); })
+    .then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
     .then(function (data) {
-      rekapItemsRaw = Array.isArray(data) ? data : [];
+      // v.60 (fix bug, request Denny): SEBELUMNYA "Array.isArray(data) ? data : []" nerima
+      // response apa pun sebagai "sukses" (termasuk yang gak sesuai/gagal) SEBELUM sempat masuk
+      // .catch() di bawah (yang udah bener logicnya - gak ngosongin tampilan kalau udah ada
+      // data). Sekarang divalidasi DULU, response gak sesuai di-THROW biar beneran masuk .catch().
+      if (!Array.isArray(data)) throw new Error('Format data gak sesuai.');
+      rekapItemsRaw = data;
       simpanCacheDashboard_('rekap_qc', rekapItemsRaw);
       updateJamRefresh(manual);
       renderRekapQC();
@@ -2291,7 +2358,7 @@ function muatRekapQC(percobaan, manual) {
       sedangMuatRekap = false;
       tampilkanLoading(false);
       if (rekapItemsRaw.length > 0) {
-        tampilkanToast('Gagal refresh Rekap QC: ' + e.message);
+        if (manual) tampilkanToast('Gagal refresh Rekap QC: ' + e.message);
       } else {
         document.getElementById('rekapSummary').textContent = 'Gagal memuat';
         document.getElementById('rekapList').innerHTML = '<div class="rekap-row" style="grid-template-columns:1fr"><div class="rekap-muted">Gagal memuat: ' + escapeHtml(e.message) + '</div></div>';
