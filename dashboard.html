@@ -1,6 +1,21 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+DASHBOARD ver.69
+============================================================
+PERUBAHAN ver.69 (2 request Denny) -
+1. Judul "DASHBOARD QC" diperbesar setinggi tombol Sync (font-size 20px->26px, line-height 36px
+   - dihitung dari tinggi total kotak tombol Sync: padding 8+8 + border 1.5+1.5 + tinggi teks
+   ~15.6px ≈ 34.6px, dibulatkan 36px).
+2. Panel "Stok Habis" - tap card warna sekarang bisa buka riwayat pemakaian per-roll (reuse
+   renderRiwayatPanel_ yang udah ada di grid Stok Kain utama, kgSisa selalu 0 buat roll yang
+   udah habis). Daftar dibatasi 10 baris/roll teratas dulu, sisanya auto-collapse - tombol
+   "Tampilkan N lainnya" buat expand. ASUMSI: "10 warna teratas" ditafsirkan sebagai 10 baris
+   (panel ini per-roll, bukan dikelompokkan per warna kayak grid utama) - kalau ternyata maksud
+   Denny beda, bisa direvisi. Fungsi baru: renderStokHabisList_(). Data sekarang disimpan di
+   state (stokHabisData) biar toggle gak perlu fetch ulang ke server.
+Riwayat lengkap: git log.
+============================================================
 DASHBOARD ver.68
 ============================================================
 PERUBAHAN ver.68 (fix bug, request Denny): root cause "data jadi 0 dari 0 laporan" pas dashboard
@@ -327,7 +342,7 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   #app { max-width: 520px; margin: 0 auto; padding: 16px; }
 
   .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
-  .header h1 { font-size: 20px; margin: 0; }
+  .header h1 { font-size: 26px; line-height: 36px; margin: 0; }
   .header-right { text-align: right; position: relative; display: flex; gap: 8px; align-items: flex-start; justify-content: flex-end; flex-wrap: wrap; }
   /* v.31: koreksi lagi - Denny minta balik ke emoji 🔄 biru polos, TANPA background/roundbox
      sama sekali, tinggal disamain ukurannya sama tombol Sync sebelahnya (~36px tinggi) biar
@@ -506,6 +521,13 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .stok-habis-item .roll { color: var(--gray-text); font-weight: 600; font-size: 11.5px; white-space: nowrap; flex-shrink: 0; }
   /* v.47: kg dipakai di list "Terpakai Sebagian" (Stok Habis gak perlu, angkanya selalu ~0) */
   .stok-habis-item .kg { font-weight: 800; font-size: 12px; white-space: nowrap; flex-shrink: 0; }
+  /* v.61 (request Denny): riwayat pemakaian per-roll - tap card buat expand, sama gaya kayak
+     .warna-detail .roll-row yang udah ada di grid Stok Kain utama. */
+  .stok-habis-item[data-habistoggle] { cursor: pointer; }
+  .stok-habis-item .chev { font-size: 9px; color: var(--gray-label); transition: transform 0.15s; flex-shrink: 0; }
+  .stok-habis-item.terbuka .chev { transform: rotate(90deg); }
+  .stok-habis-item .jumlah-pakai { font-size: 10px; font-weight: 600; color: var(--indigo); flex-shrink: 0; }
+  .stok-habis-expand { text-align: center; padding: 10px; font-size: 12px; font-weight: 700; color: var(--indigo); cursor: pointer; }
 
   .total-card { background: #fff; border-radius: 16px; padding: 16px; margin-bottom: 14px; border-top: 3px solid var(--green); }
   .total-card .label { font-size: 12px; color: var(--gray-text); }
@@ -1616,6 +1638,11 @@ function muatArsip() {
 // STOK HABIS (arsip roll yang udah kg_sisa <= 0, di bawah tab Stok Kain)
 // ------------------------------------------------------------
 let stokHabisDimuat = false;
+let stokHabisData = null; // v.61 (request Denny): SEBELUMNYA langsung di-render ke innerHTML abis
+// fetch, gak disimpan - toggle riwayat/expand butuh render ULANG tanpa fetch ulang ke server.
+let stokHabisTerbukaKunci = null; // roll mana yang lagi kebuka riwayat pemakaiannya (id stok_kain)
+let stokHabisSemuaTerbuka = false; // v.61: default cuma 10 teratas, true = tampilin semua
+const STOK_HABIS_BATAS_ = 10;
 document.getElementById('stokHabisToggle').addEventListener('click', function () {
   const list = document.getElementById('stokHabisList');
   const terbuka = list.style.display === 'block';
@@ -1634,17 +1661,46 @@ function muatStokHabis() {
       // muatArsip/muatDaftarLaporan dst.
       if (!Array.isArray(data)) throw new Error('Format data gak sesuai.');
       stokHabisDimuat = true;
-      document.getElementById('stokHabisSub').textContent = data.length + ' roll';
-      if (data.length === 0) {
-        document.getElementById('stokHabisList').innerHTML = '<div class="arsip-item" style="justify-content:center;color:var(--gray-text)">Belum ada roll yang habis.</div>';
-        return;
-      }
-      document.getElementById('stokHabisList').innerHTML = data.map(function (x) {
-        return '<div class="stok-habis-item"><span class="nama">' + escapeHtml(x.warna) + '</span>' +
-          '<span class="roll">Roll ' + (x.kodeRoll ? escapeHtml(x.kodeRoll) : '-') + '</span>' + tombolEditRoll_(x) + '</div>';
-      }).join('');
+      stokHabisData = data;
+      renderStokHabisList_();
     })
     .catch(function (e) { /* silent - data lama (kalau ada) dibiarkan, dicoba lagi siklus berikutnya */ });
+}
+// v.61 (request Denny): "10 warna teratas" ditafsirkan sebagai 10 BARIS/roll teratas (panel ini
+// per-roll, bukan dikelompokkan per warna kayak grid utama) - kalau ternyata maksudnya
+// dikelompokkan per warna, bisa direvisi belakangan.
+function renderStokHabisList_() {
+  if (!stokHabisData) return;
+  document.getElementById('stokHabisSub').textContent = stokHabisData.length + ' roll';
+  if (stokHabisData.length === 0) {
+    document.getElementById('stokHabisList').innerHTML = '<div class="arsip-item" style="justify-content:center;color:var(--gray-text)">Belum ada roll yang habis.</div>';
+    return;
+  }
+  const dipotong = !stokHabisSemuaTerbuka && stokHabisData.length > STOK_HABIS_BATAS_;
+  const tampil = dipotong ? stokHabisData.slice(0, STOK_HABIS_BATAS_) : stokHabisData;
+  let html = tampil.map(function (x) {
+    const jumlahPakai = riwayatPemakaianData
+      ? riwayatPemakaianData.filter(function (r) { return r.stokKainId === x.id; }).length
+      : 0;
+    const terbuka = (stokHabisTerbukaKunci === x.id);
+    if (jumlahPakai === 0) {
+      return '<div class="stok-habis-item" style="cursor:default"><span class="nama">' + escapeHtml(x.warna) + '</span>' +
+        '<span class="roll">Roll ' + (x.kodeRoll ? escapeHtml(x.kodeRoll) : '-') + '</span>' + tombolEditRoll_(x) + '</div>';
+    }
+    const hintPakai = !terbuka ? '<span class="jumlah-pakai">' + jumlahPakai + 'X</span>' : '';
+    let satu = '<div class="stok-habis-item' + (terbuka ? ' terbuka' : '') + '" data-habistoggle="' + x.id + '">' +
+      '<span class="chev">▶</span><span class="nama">' + escapeHtml(x.warna) + '</span>' + hintPakai +
+      '<span class="roll">Roll ' + (x.kodeRoll ? escapeHtml(x.kodeRoll) : '-') + '</span>' + tombolEditRoll_(x) + '</div>';
+    if (terbuka) satu += renderRiwayatPanel_(x.id, 0);
+    return satu;
+  }).join('');
+  if (dipotong) {
+    html += '<div class="stok-habis-expand" id="btnExpandStokHabis">Tampilkan ' + (stokHabisData.length - STOK_HABIS_BATAS_) + ' lainnya ▾</div>';
+  } else if (stokHabisSemuaTerbuka && stokHabisData.length > STOK_HABIS_BATAS_) {
+    html += '<div class="stok-habis-expand" id="btnExpandStokHabis">Sembunyikan ▴</div>';
+  }
+  document.getElementById('stokHabisList').innerHTML = html;
+  if (!riwayatPemakaianData) muatRiwayatPemakaian_();
 }
 
 // v.50: SEBELUMNYA sort chip (kg/nama/roll) dan chip "Terpakai Sebagian" independen -
@@ -1889,6 +1945,9 @@ function muatRiwayatPemakaian_() {
       riwayatPemakaianData = data;
       sedangMuatRiwayat = false;
       renderWarnaGrid();
+      // v.61 (request Denny): "Stok Habis" sekarang juga makai riwayatPemakaianData (fitur
+      // riwayat per-roll) - ikut di-refresh di sini, bukan cuma warnaGrid.
+      if (stokHabisData) renderStokHabisList_();
     })
     .catch(function (e) {
       sedangMuatRiwayat = false;
@@ -2247,7 +2306,15 @@ document.getElementById('warnaGrid').addEventListener('click', function (e) {
 });
 document.getElementById('stokHabisList').addEventListener('click', function (e) {
   const btnEdit = e.target.closest('[data-editstok]');
-  if (btnEdit) bukaModalEditStok_(parseInt(btnEdit.dataset.editstok, 10));
+  if (btnEdit) { e.stopPropagation(); bukaModalEditStok_(parseInt(btnEdit.dataset.editstok, 10)); return; }
+  const btnExpand = e.target.closest('#btnExpandStokHabis');
+  if (btnExpand) { stokHabisSemuaTerbuka = !stokHabisSemuaTerbuka; renderStokHabisList_(); return; }
+  const btnToggle = e.target.closest('[data-habistoggle]');
+  if (btnToggle) {
+    const id = parseInt(btnToggle.dataset.habistoggle, 10);
+    stokHabisTerbukaKunci = (stokHabisTerbukaKunci === id) ? null : id; // cuma 1 kebuka sekaligus
+    renderStokHabisList_();
+  }
 });
 
 document.getElementById('searchWarna').addEventListener('input', function () {
