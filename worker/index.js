@@ -1,14 +1,17 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.56
+// CODE WORKER PRODUKSI ver.57
 // ============================================================
-// PERUBAHAN ver.56 (fix bug, request Denny): item REGULAR/KOMBINASI (bukan Item Custom) sekarang
-// WAJIB ada kg - SEBELUMNYA validasi "kg wajib positif" cuma jalan KALAU kg terisi, jadi kg=null
-// (kosong sama sekali) LOLOS TANPA DICEK di server sama sekali (niat awal: dukung Item Custom
-// yang MEMANG boleh non-kain). Kejadian nyata: "RINGER BIRU MUDA" (Anak) berhasil masuk ke
-// tim_potong dengan pemakaian_kain_kg NULL - validasi client (index.html) SEHARUSNYA mencegah
-// ini tapi entah kenapa lolos (dugaan: WebView jalanin JS versi lama/stale). Sekarang server
-// PUNYA PERTAHANAN SENDIRI yang gak bergantung ke client - item REGULAR/KOMBINASI (warna udah
-// wajib diisi validasinya) WAJIB ada kg juga, cuma Item Custom yang tetap boleh kg null.
+// PERUBAHAN ver.57 (3 request Denny):
+// 1. /data/laporan-qc sekarang ikut balikin field "varian" per laporan (sebelumnya cuma
+//    kategoriBadge Anak/Dewasa) - datanya udah dihitung dari cariKategoriQC_, cuma belum ikut
+//    di-passing. Dipakai buat sort "Varian A-Z" di dashboard tab Proses & QC.
+// 2. /data/stok-habis sekarang cuma balikin roll yang PUNYA history pemakaian produksi (hide
+//    yang tanpa history), udah ke-sort dari yang PALING BARU habis, plus "terakhir"
+//    {tanggal, status} per roll. /data/riwayat-pemakaian-kain ikut nambah field "status" per
+//    entri (dipakai bareng di panel riwayat roll aktif juga).
+// 3. Endpoint baru /data/hpp (admin-only) - biaya kain + jahit per laporan, basis SEMUA pcs yang
+//    DIPOTONG (bukan cuma yang selesai QC). Data belum lengkap (harga roll/tarif jahit kosong)
+//    ditandai kainLengkap/jahitLengkap false, bukan disembunyikan/digenapin ke 0.
 // ============================================================
 // CODE WORKER PRODUKSI ver.55
 // ============================================================
@@ -253,6 +256,14 @@ export default {
     // kategori terpisah di tab Stok Kain (request Denny).
     if (url.pathname === '/data/stok-terpakai-sebagian' && request.method === 'GET') {
       return await handleStokTerpakaiSebagian_(env);
+    }
+
+    // v.57 - HPP (biaya kain + jahit) per laporan, KHUSUS admin. Sama filosofi soal harga kayak
+    // /data/detail-stok-kain - info biaya SENGAJA gak pernah lewat endpoint publik.
+    if (url.pathname === '/data/hpp' && request.method === 'POST') {
+      let body;
+      try { body = await request.json(); } catch (e) { return jsonResponse({ ok: false, error: 'Body harus JSON.' }, 400); }
+      return await handleHpp_(body, env);
     }
 
     // v.41 - detail 1 roll KHUSUS admin: harga_rp_kg, diskon_rp_kg, subtotal (nilai SISA stok =
@@ -1076,7 +1087,7 @@ async function handleExportTimPotongMentah_(env, bulan) {
 // ============================================================
 async function handleRiwayatPemakaianKain_(env) {
   try {
-    const rows = await ambilDariSupabase_(env, '/rest/v1/log_pemakaian_kain?select=id,stok_kain_id,kg,item_produksi,waktu_wib,tim_potong(jumlah,tanggal)&order=waktu.desc');
+    const rows = await ambilDariSupabase_(env, '/rest/v1/log_pemakaian_kain?select=id,stok_kain_id,kg,item_produksi,waktu_wib,tim_potong(jumlah,tanggal,sumber_kg)&order=waktu.desc');
     const hasil = rows.map(function (r) {
       return {
         id: r.id,
@@ -1084,7 +1095,8 @@ async function handleRiwayatPemakaianKain_(env) {
         namaItem: r.item_produksi,
         kg: parseFloat(r.kg) || 0,
         tanggal: r.tim_potong ? r.tim_potong.tanggal : null,
-        jumlah: r.tim_potong ? r.tim_potong.jumlah : null
+        jumlah: r.tim_potong ? r.tim_potong.jumlah : null,
+        status: r.tim_potong ? (r.tim_potong.sumber_kg || null) : null
       };
     });
     return jsonResponse(hasil);
@@ -1585,9 +1597,15 @@ async function handleStokUtuh_(env) {
 // ============================================================
 async function handleStokHabis_(env) {
   try {
-    const [rowsStok, rowsKamus] = await Promise.all([
-      ambilDariSupabase_(env, '/rest/v1/stok_kain?select=id,warna,kode_roll,kg_sisa&kg_sisa=lte.0&order=kode_roll.desc'),
-      ambilDariSupabase_(env, '/rest/v1/kamus_sinonim_warna?select=kanonik,sinonim')
+    const [rowsStok, rowsKamus, rowsPakai] = await Promise.all([
+      ambilDariSupabase_(env, '/rest/v1/stok_kain?select=id,warna,kode_roll,kg_sisa&kg_sisa=lte.0'),
+      ambilDariSupabase_(env, '/rest/v1/kamus_sinonim_warna?select=kanonik,sinonim'),
+      // v.57 (koreksi Denny): "history kain habis secara detail" - tanggal+status (Pakai
+      // Habis/Estimasi) pemakaian TERAKHIR per roll (bukan per warna), buat ditampilin langsung
+      // di baris Stok Habis tanpa perlu expand. Roll yang gak punya baris di sini sama sekali
+      // (habis lewat write-off manual, bukan produksi) DIKECUALIKAN dari hasil - lihat filter
+      // di bawah ("hide yang tanpa history").
+      ambilDariSupabase_(env, '/rest/v1/log_pemakaian_kain?select=stok_kain_id,tim_potong(tanggal,sumber_kg)&order=waktu.desc')
     ]);
     const petaKanonik = {};
     rowsKamus.forEach(function (row) {
@@ -1596,16 +1614,25 @@ async function handleStokHabis_(env) {
       petaKanonik[kanonik] = kanonik;
       (row.sinonim || []).forEach(function (s) { const su = String(s || '').toUpperCase(); if (su) petaKanonik[su] = kanonik; });
     });
+    // baris udah keurut waktu.desc - baris PERTAMA yang ketemu buat tiap stok_kain_id otomatis
+    // jadi yang PALING BARU.
+    const terakhirPerRoll = {};
+    rowsPakai.forEach(function (row) {
+      if (!row.stok_kain_id || !row.tim_potong || terakhirPerRoll[row.stok_kain_id]) return;
+      terakhirPerRoll[row.stok_kain_id] = { tanggal: row.tim_potong.tanggal, status: row.tim_potong.sumber_kg || null };
+    });
     const hasil = rowsStok
       .map(function (row) {
         const warnaRaw = String(row.warna || '').trim();
-        if (!warnaRaw) return null;
+        const terakhir = terakhirPerRoll[row.id] || null;
+        if (!warnaRaw || !terakhir) return null; // hide yang tanpa history pemakaian produksi
         const kanonik = petaKanonik[warnaRaw.toUpperCase()] || warnaRaw.toUpperCase();
         // v.41: sertakan id - dibutuhkan buat fitur batal write-off (roll yang jadi habis
         // KARENA write-off tetap harus bisa dibuka form-nya buat dibatalkan).
-        return { id: row.id, warna: kanonik, kodeRoll: row.kode_roll || null };
+        return { id: row.id, warna: kanonik, kodeRoll: row.kode_roll || null, terakhir: terakhir };
       })
-      .filter(function (x) { return x; });
+      .filter(function (x) { return x; })
+      .sort(function (a, b) { return String(b.terakhir.tanggal || '').localeCompare(String(a.terakhir.tanggal || '')); });
     return jsonResponse(hasil);
   } catch (e) {
     return jsonResponse({ ok: false, error: e.message }, 500);
@@ -1637,6 +1664,80 @@ async function handleStokTerpakaiSebagian_(env) {
         return { id: row.id, warna: kanonik, kodeRoll: row.kode_roll || null, kg: parseFloat(row.kg_sisa) || 0 };
       })
       .filter(function (x) { return x; });
+    return jsonResponse(hasil);
+  } catch (e) {
+    return jsonResponse({ ok: false, error: e.message }, 500);
+  }
+}
+
+// v.57 (request Denny, admin-only): HPP per laporan - biaya kain + biaya jahit, basis SEMUA pcs
+// yang DIPOTONG (tim_potong.jumlah), BUKAN cuma yang udah selesai QC. Data yang belum lengkap
+// (harga roll kosong / varian belum ada tarif jahit) TETAP ditampilkan (bukan disembunyikan/
+// dianggap 0 diam-diam) - ditandai kainLengkap/jahitLengkap false, frontend yang kasih tanda
+// visual "perlu dilengkapi" (request Denny eksplisit).
+async function handleHpp_(body, env) {
+  const validasi = await validasiInitData_(body.initData, env);
+  if (!validasi.ok) return jsonResponse(validasi, 401);
+  if (!cekAdmin_(validasi.userId, env)) {
+    return jsonResponse({ ok: false, error: 'Kamu tidak punya izin melihat data ini.' }, 403);
+  }
+
+  try {
+    const [rowsTP, daftarPrefixInfo, tarifMap, rowsPakai] = await Promise.all([
+      ambilDariSupabase_(env, '/rest/v1/tim_potong?select=id,tanggal,jenis_warna_baju,jumlah,pemakaian_kain_kg&order=tanggal.desc'),
+      ambilDaftarPrefixQC_(env),
+      ambilTarifJahitMap_(env),
+      ambilDariSupabase_(env, '/rest/v1/log_pemakaian_kain?select=tim_potong_id,kg,stok_kain(harga_rp_kg,diskon_rp_kg)')
+    ]);
+
+    // Total biaya kain per laporan - dijumlah dari SEMUA baris log_pemakaian_kain punya laporan
+    // itu (bisa lebih dari 1 roll per laporan). lengkap=false kalau ADA SALAH SATU baris yang
+    // harga rollnya belum diisi (harga_rp_kg null) - total yang dibalikin cuma dari baris yang
+    // KETAHUAN harganya, sisanya dianggap "belum diketahui" (bukan digenapin ke 0).
+    const kainPerLaporan = {};
+    rowsPakai.forEach(function (r) {
+      if (!r.tim_potong_id) return;
+      if (!kainPerLaporan[r.tim_potong_id]) kainPerLaporan[r.tim_potong_id] = { total: 0, lengkap: true };
+      const kg = parseFloat(r.kg) || 0;
+      const harga = r.stok_kain ? parseFloat(r.stok_kain.harga_rp_kg) : NaN;
+      if (isNaN(harga)) { kainPerLaporan[r.tim_potong_id].lengkap = false; return; }
+      const diskon = (r.stok_kain && r.stok_kain.diskon_rp_kg) ? parseFloat(r.stok_kain.diskon_rp_kg) : 0;
+      kainPerLaporan[r.tim_potong_id].total += kg * Math.max(harga - diskon, 0);
+    });
+
+    const hasil = rowsTP.map(function (tp) {
+      const cocok = cariKategoriQC_(tp.jenis_warna_baju, daftarPrefixInfo);
+      const varian = cocok ? (cocok.varian || '') : '';
+      const jumlah = tp.jumlah || 0;
+
+      const kain = kainPerLaporan[tp.id];
+      const pakaiKg = parseFloat(tp.pemakaian_kain_kg) || 0;
+      let biayaKain = 0, kainLengkap = true;
+      if (kain) {
+        biayaKain = Math.round(kain.total);
+        kainLengkap = kain.lengkap;
+      } else if (pakaiKg > 0) {
+        // ada kg dilaporkan dipakai tapi gak ke-log ke roll manapun (gagal matching pas submit)
+        kainLengkap = false;
+      }
+
+      const tarif = varian ? tarifMap[varian.toUpperCase()] : null;
+      const jahitLengkap = !!tarif;
+      const biayaJahit = tarif ? Math.round(jumlah * tarif) : 0;
+
+      return {
+        id: tp.id,
+        tanggal: tp.tanggal,
+        varian: varian,
+        warna: tp.jenis_warna_baju,
+        jumlahDipotong: jumlah,
+        biayaKain: biayaKain,
+        kainLengkap: kainLengkap,
+        biayaJahit: biayaJahit,
+        jahitLengkap: jahitLengkap
+      };
+    });
+
     return jsonResponse(hasil);
   } catch (e) {
     return jsonResponse({ ok: false, error: e.message }, 500);
@@ -2247,6 +2348,7 @@ async function handleDaftarLaporanQC_(env) {
         createdAt: tp.created_at,
         jenisWarnaBaju: tp.jenis_warna_baju,
         kategoriBadge: kategoriBadge,
+        varian: cocok ? (cocok.varian || '') : '',
         kodeRoll: tp.kode_roll,
         pemakaianKainKg: tp.pemakaian_kain_kg,
         jumlah: tp.jumlah,

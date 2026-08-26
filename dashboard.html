@@ -1,6 +1,31 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+DASHBOARD ver.70
+============================================================
+PERUBAHAN ver.70 (4 request Denny) -
+1. Tab Proses & QC: chip sort baru "Varian A-Z" di samping "Paling lama" - keduanya sekarang
+   grup exclusive (aktifin satu otomatis matiin yang lain). Field "varian" per laporan dikirim
+   Worker ver.57 (sebelumnya cuma kategoriBadge Anak/Dewasa yang di-passing, padahal cocok.varian
+   udah lama dihitung di server).
+2. Tab Proses & QC: detail qty per ukuran (badge M12/L8/dst) dipindah ke FRONT card (di bawah
+   baris tanggal/roll/kg/"X hari lalu"), sebelumnya cuma kelihatan pas card di-expand (tap).
+   Dihapus dari bagian expand biar gak dobel tampil.
+3. Tab Stok Kain - Stok Habis: tiap roll sekarang nampilin baris "🕓 Habis [tanggal] ·
+   Pakai Habis/Estimasi" langsung tanpa perlu expand (dari Worker ver.57). List sekarang cuma
+   isi roll yang PUNYA history pemakaian produksi (roll yang habis lewat write-off manual gak
+   ikut muncul di sini lagi - histori write-off-nya tetap ada di modal Edit Stok Kain), urut dari
+   yang PALING BARU habis. Panel riwayat per-entri (pas expand) sekarang juga nampilin tag
+   Estimasi/Habis per baris (CSS estimasi-tag yang lama - sebelumnya kebuat tapi gak pernah
+   kepake - sekarang jalan, plus habis-tag baru pasangannya).
+4. Tab baru "💰 HPP" (admin-only, tombolnya cuma muncul abis status admin kekonfirmasi) - kartu
+   ringkasan biaya kain/jahit/total/rata-rata per pcs + rincian per varian, basis SEMUA pcs yang
+   DIPOTONG (bukan cuma yang udah selesai QC). Filter Varian + Bulan. Baris yang datanya belum
+   lengkap (harga roll kain atau tarif jahit varian itu belum diisi) TETAP ditampilkan dengan
+   tanda "perlu dilengkapi" - bukan disembunyikan atau digenapin ke 0 diam-diam. Endpoint baru
+   Worker ver.57: POST /data/hpp.
+Riwayat lengkap: git log.
+============================================================
 DASHBOARD ver.69
 ============================================================
 PERUBAHAN ver.69 (2 request Denny) -
@@ -514,9 +539,13 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .arsip-item .nama { font-weight: 700; }
   .arsip-item .meta { color: var(--gray-text); font-size: 11px; }
   /* v.37: FIX tampilan "Stok Habis" numpuk/overlap di HP (request Denny) - dedicated class,
-     bukan pakai .arsip-item lagi (itu didesain buat 2 baris info, bukan 1 baris rata kanan-
-     kiri). Nama warna di-truncate (...) kalau kepanjangan, kode roll SELALU utuh 1 baris. */
-  .stok-habis-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: #fff; border-radius: 10px; padding: 9px 12px; margin-bottom: 6px; }
+     bukan pakai .arsip-item lagi. Nama warna di-truncate (...) kalau kepanjangan, kode roll
+     SELALU utuh 1 baris.
+     v.57 (koreksi Denny): baris pertama (nama/roll/edit) tetap 1 baris rata kanan-kiri kayak
+     semula (dibungkus .stok-habis-item-top) - yang berubah cuma DITAMBAH baris ke-2 di bawahnya
+     (tanggal+status habis, lihat .item-terakhir), bukan diganti total ke gaya .arsip-item. */
+  .stok-habis-item { display: flex; flex-direction: column; gap: 2px; background: #fff; border-radius: 10px; padding: 9px 12px; margin-bottom: 6px; }
+  .stok-habis-item-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .stok-habis-item .nama { font-weight: 700; font-size: 12.5px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .stok-habis-item .roll { color: var(--gray-text); font-weight: 600; font-size: 11.5px; white-space: nowrap; flex-shrink: 0; }
   /* v.47: kg dipakai di list "Terpakai Sebagian" (Stok Habis gak perlu, angkanya selalu ~0) */
@@ -546,6 +575,9 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .warna-card .nama { font-weight: 700; font-size: 13px; flex: 1; }
   .warna-card .kg { font-weight: 800; font-size: 13px; }
   .warna-card .roll-count { font-size: 11px; color: var(--gray-text); margin-top: 2px; }
+  .item-terakhir { font-size: 11px; color: var(--gray-text); margin-top: 4px; }
+  .item-terakhir .status-habis { color: var(--danger); font-weight: 700; }
+  .item-terakhir .status-estimasi { color: var(--orange-link); font-weight: 700; }
   .warna-detail { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 5px; }
   /* v.45: lebih compact (request Denny poin 4) - padding vertikal dirapatkan 8px->6px, garis
      putus-putus di akhir baris DIBUANG (sebelumnya border-bottom dashed). */
@@ -590,6 +622,7 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .riwayat-item .nama-item { font-weight: 700; font-size: 12px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .riwayat-item .kg-terpakai { font-weight: 700; font-size: 12px; color: var(--danger); white-space: nowrap; }
   .riwayat-item .estimasi-tag { font-size: 9px; font-weight: 700; color: var(--orange-link); background: #FDF3E3; padding: 1px 5px; border-radius: 4px; margin-left: 5px; }
+  .riwayat-item .habis-tag { font-size: 9px; font-weight: 700; color: var(--danger); background: var(--danger-bg); padding: 1px 5px; border-radius: 4px; margin-left: 5px; }
   .riwayat-item .sub { font-size: 11px; font-weight: 400; color: var(--gray-text); margin-top: 2px; display: flex; justify-content: space-between; }
   .riwayat-item .sub .qty { font-weight: 600; }
   .riwayat-kosong { text-align: center; padding: 12px; color: var(--gray-text); font-size: 11.5px; font-weight: 400; }
@@ -653,6 +686,23 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .wo-item .btn-batal-wo { background: none; border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; font-size: 10.5px; font-weight: 700; color: var(--gray-text); cursor: pointer; flex-shrink: 0; }
   .wo-kosong { text-align: center; padding: 10px; color: var(--gray-text); font-size: 11.5px; }
   .mf-peringatan { background: #FDF3E3; color: var(--orange-link); border-radius: 10px; padding: 9px 10px; font-size: 11.5px; font-weight: 600; margin-top: 8px; }
+  /* v.57 (request Denny, admin-only): tab HPP - grid 2x2 kartu ringkasan + list per varian. */
+  .hpp-filter-row { display: flex; gap: 8px; margin-bottom: 12px; }
+  .hpp-filter-row .varian-filter-trigger { flex: 1; margin-bottom: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hpp-metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+  .hpp-metric { background: #fff; border-radius: 12px; padding: 12px; }
+  .hpp-metric.aksen { background: var(--indigo); }
+  .hpp-metric .label { font-size: 11.5px; color: var(--gray-text); }
+  .hpp-metric.aksen .label { color: rgba(255,255,255,.75); }
+  .hpp-metric .value { font-size: 17px; font-weight: 800; margin-top: 2px; }
+  .hpp-metric.aksen .value { color: #fff; }
+  .hpp-item { background: #fff; border-radius: 12px; padding: 10px 12px; margin-bottom: 6px; }
+  .hpp-item-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .hpp-item .nama { font-weight: 700; font-size: 13px; }
+  .hpp-item .hpp-pcs { font-weight: 700; font-size: 13px; white-space: nowrap; }
+  .hpp-item .hpp-pcs.belum-lengkap { color: var(--orange-link); }
+  .hpp-item .hpp-sub { font-size: 11.5px; color: var(--gray-text); margin: 2px 0 0; }
+  .hpp-item .hpp-warn { font-size: 11px; color: var(--orange-link); font-weight: 600; margin: 4px 0 0; }
 </style>
 </head>
 <body>
@@ -679,6 +729,7 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
     <button class="tab-btn active" data-tab="qc">✅ Proses & QC</button>
     <button class="tab-btn" data-tab="stok">📦 Stok Kain</button>
     <button class="tab-btn" data-tab="rekap">📊 Rekap QC</button>
+    <button class="tab-btn" data-tab="hpp" id="btnTabHpp" style="display:none">💰 HPP</button>
   </div>
 
   <!-- ============ TAB: PROSES & QC ============ -->
@@ -699,6 +750,7 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
       <div class="chip" data-filter="anak">Anak</div>
       <div class="chip" data-filter="dewasa">Dewasa</div>
       <div class="chip" data-sort="lama">Paling lama</div>
+      <div class="chip" data-sort="varian">Varian A-Z</div>
     </div>
 
     <div class="laporan-wrap"><div id="daftarLaporan"></div></div>
@@ -788,6 +840,30 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
       <div id="rekapList"></div>
       <div class="rekap-foot" id="rekapFoot"></div>
     </div>
+  </div>
+
+  <!-- ============ TAB: HPP (admin-only) ============ -->
+  <div id="tabHpp" style="display:none">
+    <div class="hpp-filter-row">
+      <div class="varian-filter-trigger" id="filterVarianHppTrigger">
+        <span id="filterVarianHppValue">Pilih Varian</span>
+        <span class="chevron">▾</span>
+      </div>
+      <div class="varian-filter-trigger" id="filterBulanHppTrigger">
+        <span id="filterBulanHppValue">Pilih Bulan</span>
+        <span class="chevron">▾</span>
+      </div>
+    </div>
+    <div class="varian-filter-list" id="filterVarianHppList" style="display:none"></div>
+    <div class="varian-filter-list" id="filterBulanHppList" style="display:none"></div>
+    <div class="hpp-metric-grid">
+      <div class="hpp-metric"><div class="label">Biaya kain</div><div class="value" id="hppTotalKain">Rp 0</div></div>
+      <div class="hpp-metric"><div class="label">Biaya jahit</div><div class="value" id="hppTotalJahit">Rp 0</div></div>
+      <div class="hpp-metric aksen"><div class="label">Total HPP</div><div class="value" id="hppTotalHpp">Rp 0</div></div>
+      <div class="hpp-metric"><div class="label">Rata-rata / pcs</div><div class="value" id="hppRataRata">Rp 0</div></div>
+    </div>
+    <div class="section-label">RINCIAN PER VARIAN</div>
+    <div id="hppList"></div>
   </div>
 </div>
 
@@ -879,9 +955,12 @@ if (tg && tg.initData) {
       // v.42: renderWarnaGrid ditambahin ke daftar re-render - biar tombol Edit Stok Kain
       // langsung muncul kalau tab Stok Kain udah kebuka duluan sebelum status admin kekonfirmasi.
       // v.55: tombol Pilih (write-off massal) juga admin-only, sama pola.
+      // v.57: tombol tab HPP juga admin-only - baru dimunculkan setelah status admin kekonfirmasi
+      // (defaultnya display:none di HTML).
       if (isAdmin) {
         renderDaftarLaporan(); renderRekapQC(); if (stokUtuhData) renderWarnaGrid();
         perbaruiVisibilitasBtnPilihMassal_();
+        document.getElementById('btnTabHpp').style.display = 'flex';
       }
     })
     .catch(function () { /* diamkan - anggap bukan admin */ });
@@ -947,6 +1026,7 @@ document.querySelectorAll('.tab-btn').forEach(function (btn) {
     document.getElementById('tabQC').style.display = tab === 'qc' ? 'block' : 'none';
     document.getElementById('tabStok').style.display = tab === 'stok' ? 'block' : 'none';
     document.getElementById('tabRekap').style.display = tab === 'rekap' ? 'block' : 'none';
+    document.getElementById('tabHpp').style.display = tab === 'hpp' ? 'block' : 'none';
     document.getElementById('pageTitle').textContent = 'DASHBOARD QC';
     // v.58: root cause KEDUA "Terpakai Sebagian gak realtime" (request Denny) - beda dari v.57.
     // SEBELUMNYA fetch stok cuma jalan kalau tab ini BELUM PERNAH dibuka sama sekali (!stokUtuhData)
@@ -967,6 +1047,7 @@ document.querySelectorAll('.tab-btn').forEach(function (btn) {
     // bukan cuma nunggu Realtime nyala pas tab-nya lagi keliatan.
     if (tab === 'qc' && arsipDimuat) muatArsip();
     if (tab === 'rekap') muatRekapQC();
+    if (tab === 'hpp') muatHpp_();
     perbaruiBarPilihMassal_(); // v.55: bar write-off massal cuma boleh kelihatan pas tab Stok Kain aktif
     perbaruiVisibilitasBtnPilihMassal_();
   });
@@ -1153,6 +1234,10 @@ function renderDaftarLaporan() {
     data = data.filter(function (r) { return String(r.jenisWarnaBaju || '').toLowerCase().indexOf(q) !== -1; });
   }
   data.sort(function (a, b) {
+    if (sortLaporan === 'varian') {
+      const cmp = String(a.varian || '').localeCompare(String(b.varian || ''));
+      return cmp !== 0 ? cmp : new Date(a.tanggal) - new Date(b.tanggal);
+    }
     if (sortLaporan === 'lama') return new Date(a.tanggal) - new Date(b.tanggal);
     return new Date(b.tanggal) - new Date(a.tanggal);
   });
@@ -1172,6 +1257,11 @@ function renderLaporanCard(r, nomor) {
   const badgeClass = String(r.kategoriBadge || '').toLowerCase() === 'anak' ? 'anak' : '';
   const badgeJam = pending.jumlahEntri > 0 ? '<span class="pending-badge">🕓</span>' : '';
   const sudahDiAntrian = pending.jumlahEntri > 0;
+  // v.70 (request Denny): detail qty per ukuran sekarang tampil di FRONT card (bawah baris
+  // tanggal/roll/kg/"X hari lalu"), gak perlu expand lagi buat lihat - dipindah dari
+  // renderLaporanExpand (lihat sana, sekarang dihapus dari situ biar gak dobel).
+  const perUkuranSorted = r.perUkuran.slice().sort(function (a, b) { return DAFTAR_UKURAN_URUT.indexOf(a.ukuran) - DAFTAR_UKURAN_URUT.indexOf(b.ukuran); });
+  const ukuranBadgesHtml = '<div class="ukuran-badges">' + perUkuranSorted.map(function (u) { return '<span class="ukuran-badge">' + u.ukuran + '<span class="n">' + u.qty + '</span></span>'; }).join('') + '</div>';
 
   // v.02: lingkaran cuma muncul kalau UDAH ADA progress (totalSelesai > 0) - biar mata
   // langsung fokus ke angka yang lagi dikerjakan. Kalau masih 0, tampil "-/jumlah" polos
@@ -1190,6 +1280,7 @@ function renderLaporanCard(r, nomor) {
     '<span class="nama">' + escapeHtml(r.jenisWarnaBaju) + '</span>' +
     (r.kategoriBadge ? '<span class="badge-kat ' + badgeClass + '">' + escapeHtml(r.kategoriBadge) + '</span>' : '') +
     '<div class="laporan-meta">' + formatTanggalPendek(r.tanggal) + ' · <span class="roll">Roll ' + (r.kodeRoll ? escapeHtml(r.kodeRoll) : '-') + '</span> · ' + formatKg(r.pemakaianKainKg) + ' · ' + hariLaluTeks(r.tanggal) + '</div>' +
+    ukuranBadgesHtml +
     '</div>' +
     '<div class="progress-circle" data-toggle="' + r.id + '">' + fraksiHtml +
     '<div class="progress-bar-mini"><div class="fill" style="width:' + persen + '%"></div></div></div>' +
@@ -1212,8 +1303,8 @@ function renderLaporanExpand(r) {
   const mode = modePerLaporan[r.id] || 'ringkas';
   const perUkuranSorted = r.perUkuran.slice().sort(function (a, b) { return DAFTAR_UKURAN_URUT.indexOf(a.ukuran) - DAFTAR_UKURAN_URUT.indexOf(b.ukuran); });
 
-  let html = '<div class="laporan-expand">' +
-    '<div class="ukuran-badges">' + perUkuranSorted.map(function (u) { return '<span class="ukuran-badge">' + u.ukuran + '<span class="n">' + u.qty + '</span></span>'; }).join('') + '</div>';
+  // v.70: baris ukuran-badges yang dulu di sini udah dipindah ke renderLaporanCard (front card).
+  let html = '<div class="laporan-expand">';
 
   if (pending.jumlahEntri > 0) {
     html += '<div class="pending-pill">🕓 ' + pending.jumlahEntri + ' di antrian (+' + pending.pendingSelesai + ' sel / +' + pending.pendingReject + ' rej)</div>';
@@ -1592,11 +1683,13 @@ document.querySelectorAll('.chip[data-filter]').forEach(function (el) {
 });
 document.querySelectorAll('.chip[data-sort]').forEach(function (el) {
   el.addEventListener('click', function () {
-    // v.11: cuma 1 chip sort ("Paling lama") - tanggal terbaru sekarang default bawaan, jadi
-    // chip ini berfungsi TOGGLE: tap buat urut dari yang paling lama, tap lagi buat balik ke
-    // default (tanggal terbaru).
+    // v.11: tanggal terbaru sekarang default bawaan, chip sort berfungsi TOGGLE: tap buat aktifin
+    // sort itu, tap lagi buat balik ke default (tanggal terbaru).
+    // v.70: sekarang ada 2 chip sort ("Paling lama", "Varian A-Z") - exclusive, aktifin satu
+    // otomatis matiin yang lain (gak bisa 2 sort barengan).
     const aktifSebelumnya = el.classList.contains('active');
-    el.classList.toggle('active');
+    document.querySelectorAll('.chip[data-sort]').forEach(function (c) { c.classList.remove('active'); });
+    if (!aktifSebelumnya) el.classList.add('active');
     sortLaporan = aktifSebelumnya ? 'baru' : el.dataset.sort;
     renderDaftarLaporan();
   });
@@ -1669,6 +1762,10 @@ function muatStokHabis() {
 // v.61 (request Denny): "10 warna teratas" ditafsirkan sebagai 10 BARIS/roll teratas (panel ini
 // per-roll, bukan dikelompokkan per warna kayak grid utama) - kalau ternyata maksudnya
 // dikelompokkan per warna, bisa direvisi belakangan.
+// v.57 (koreksi Denny): SEBELUMNYA salah sasaran ke grid Stok Kain aktif (sudah dicabut) - yang
+// dimaksud Denny justru DI SINI, Stok Habis. Server (handleStokHabis_) sekarang cuma balikin roll
+// yang PUNYA history pemakaian produksi (x.terakhir selalu ada), udah ke-sort dari yang PALING
+// BARU habis - urutan tampil di sini APA ADANYA dari server, gak di-sort ulang di client.
 function renderStokHabisList_() {
   if (!stokHabisData) return;
   document.getElementById('stokHabisSub').textContent = stokHabisData.length + ' roll';
@@ -1683,16 +1780,21 @@ function renderStokHabisList_() {
       ? riwayatPemakaianData.filter(function (r) { return r.stokKainId === x.id; }).length
       : 0;
     const terbuka = (stokHabisTerbukaKunci === x.id);
+    // defensif: x.terakhir seharusnya SELALU ada (server udah filter), tapi kalau riwayatPemakaianData
+    // (buat badge "NX") belum sempat termuat, jumlahPakai bisa 0 sesaat - tetep tampil, cuma gak
+    // bisa di-expand.
     if (jumlahPakai === 0) {
-      return '<div class="stok-habis-item" style="cursor:default"><span class="nama">' + escapeHtml(x.warna) + '</span>' +
-        '<span class="roll">Roll ' + (x.kodeRoll ? escapeHtml(x.kodeRoll) : '-') + '</span>' + tombolEditRoll_(x) + '</div>';
+      return '<div class="stok-habis-item" style="cursor:default"><div class="stok-habis-item-top"><span class="nama">' + escapeHtml(x.warna) + '</span>' +
+        '<span class="roll">Roll ' + (x.kodeRoll ? escapeHtml(x.kodeRoll) : '-') + '</span>' + tombolEditRoll_(x) + '</div>' +
+        renderTerakhirPakai_(x.terakhir) + '</div>';
     }
     const hintPakai = !terbuka ? '<span class="jumlah-pakai">' + jumlahPakai + 'X</span>' : '';
     let satu = '<div class="stok-habis-item' + (terbuka ? ' terbuka' : '') + '" data-habistoggle="' + x.id + '">' +
-      '<span class="chev">▶</span><span class="nama">' + escapeHtml(x.warna) + '</span>' + hintPakai +
-      '<span class="roll">Roll ' + (x.kodeRoll ? escapeHtml(x.kodeRoll) : '-') + '</span>' + tombolEditRoll_(x) + '</div>';
+      '<div class="stok-habis-item-top"><span class="chev">▶</span><span class="nama">' + escapeHtml(x.warna) + '</span>' + hintPakai +
+      '<span class="roll">Roll ' + (x.kodeRoll ? escapeHtml(x.kodeRoll) : '-') + '</span>' + tombolEditRoll_(x) + '</div>' +
+      renderTerakhirPakai_(x.terakhir);
     if (terbuka) satu += renderRiwayatPanel_(x.id, 0);
-    return satu;
+    return satu + '</div>';
   }).join('');
   if (dipotong) {
     html += '<div class="stok-habis-expand" id="btnExpandStokHabis">Tampilkan ' + (stokHabisData.length - STOK_HABIS_BATAS_) + ' lainnya ▾</div>';
@@ -1970,6 +2072,19 @@ function kunciRoll_(w, r) {
   return w.warna + '::' + (r.kodeRoll || '-') + '::' + r.kg;
 }
 
+// v.57 (koreksi Denny): baris "terakhir dipakai" di tiap roll Stok Habis - tanggal + status
+// (Pakai Habis/Estimasi kalau ada, kosong berarti pemakaian normal by timbangan). Dipakai di
+// renderStokHabisList_ - x.terakhir dari server SELALU ada di sini (roll tanpa history udah
+// difilter di handleStokHabis_).
+function renderTerakhirPakai_(terakhir) {
+  if (!terakhir) return '';
+  const status = terakhir.status;
+  const statusHtml = status === 'Pakai Habis' ? ' · <span class="status-habis">Pakai Habis</span>'
+    : status === 'Estimasi' ? ' · <span class="status-estimasi">Estimasi</span>'
+    : '';
+  return '<div class="item-terakhir">🕓 Habis ' + formatTanggalPendek(terakhir.tanggal) + statusHtml + '</div>';
+}
+
 function renderWarnaGrid() {
   const listDasar = daftarWarnaAktif_();
   if (listDasar === null) {
@@ -2099,8 +2214,11 @@ function renderRiwayatPanel_(rollId, kgSisa) {
   let html = '<div class="riwayat-wrap">' +
     '<div class="riwayat-meta"><span>Kg awal (estimasi): <b>' + formatAngka(kgAwalEstimasi) + ' kg</b></span><span>Sisa sekarang: <b>' + formatAngka(kgSisa) + ' kg</b></span></div>';
   html += cocok.map(function (x) {
+    const tag = x.status === 'Estimasi' ? '<span class="estimasi-tag">Estimasi</span>'
+      : x.status === 'Pakai Habis' ? '<span class="habis-tag">Habis</span>'
+      : '';
     return '<div class="riwayat-item">' +
-      '<div class="riwayat-item-top"><span class="nama-item">' + escapeHtml(x.namaItem || '-') + '</span>' +
+      '<div class="riwayat-item-top"><span class="nama-item">' + escapeHtml(x.namaItem || '-') + '</span>' + tag +
       '<span class="kg-terpakai">-' + formatAngka(x.kg) + ' kg</span></div>' +
       '<div class="sub"><span>' + (x.tanggal ? formatTanggalPendek(x.tanggal) : '-') + '</span><span class="qty">' + (x.jumlah != null ? x.jumlah : '-') + ' pcs</span></div>' +
       '</div>';
@@ -2377,6 +2495,15 @@ document.querySelectorAll('.chip[data-chip]').forEach(function (el) {
 // pernah kebukti rusak di webview Telegram, lihat catatan CSS di atas).
 // ------------------------------------------------------------
 let rekapItemsRaw = [];
+// v.57 (request Denny, admin-only): state tab HPP - hppData mentah per laporan dari server,
+// diagregasi per varian pas render (renderHpp_). Filter varian/bulan murni client-side, sama
+// pola kayak dropdown Varian di Rekap QC (perbaruiOpsiFilterVarian_).
+let hppData = null;
+let hppDimuat = false;
+let filterVarianHppAktif = '';
+let filterBulanHppAktif = '';
+let filterVarianHppTerbuka = false;
+let filterBulanHppTerbuka = false;
 
 let sedangMuatRekap = false;
 function muatRekapQC(percobaan, manual) {
@@ -2762,6 +2889,145 @@ function renderRekapQC() {
   const totalRej = items.reduce(function (s, it) { return s + it.rejectTotal; }, 0);
   document.getElementById('rekapFoot').innerHTML =
     '<span>Total selesai: <b>' + totalSel + '</b></span><span>Total reject: <b>' + totalRej + '</b></span>';
+}
+
+// ------------------------------------------------------------
+// TAB HPP (admin-only, v.57) - biaya kain + jahit per varian, basis SEMUA pcs yang dipotong.
+// Data mentah per laporan (hppData) dari /data/hpp, diagregasi per varian pas render. Baris yang
+// datanya belum lengkap (harga kain/tarif jahit kosong) TETAP ditampilkan, ditandai "perlu
+// dilengkapi" - bukan disembunyikan/digenapin ke 0 diam-diam (request Denny eksplisit).
+// ------------------------------------------------------------
+function muatHpp_() {
+  if (!tg || !tg.initData) { tampilkanToast('Harus dibuka lewat Telegram.'); return; }
+  fetch(WORKER_URL + '/data/hpp', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ initData: tg.initData })
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (!Array.isArray(data)) throw new Error((data && data.error) || 'Format data gak sesuai.');
+      hppDimuat = true;
+      hppData = data;
+      renderHpp_();
+    })
+    .catch(function (e) { tampilkanToast('Gagal memuat HPP: ' + e.message); });
+}
+
+function perbaruiOpsiFilterVarianHpp_(items) {
+  const list = document.getElementById('filterVarianHppList');
+  const unik = Array.from(new Set(items.map(function (it) { return it.varian; }).filter(Boolean))).sort();
+  const kunciBaru = unik.join('|') + '::' + filterVarianHppAktif;
+  if (list.dataset.kunci === kunciBaru) return;
+  list.dataset.kunci = kunciBaru;
+  const semuaOpsi = [''].concat(unik);
+  list.innerHTML = semuaOpsi.map(function (v) {
+    const label = v || 'Semua Varian';
+    const aktifClass = (v === filterVarianHppAktif) ? ' aktif' : '';
+    return '<div class="varian-filter-item' + aktifClass + '" data-varian="' + escapeAttr(v) + '">' + escapeHtml(label) + '</div>';
+  }).join('');
+  list.querySelectorAll('[data-varian]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      filterVarianHppAktif = el.dataset.varian;
+      filterVarianHppTerbuka = false;
+      list.style.display = 'none';
+      renderHpp_();
+    });
+  });
+  document.getElementById('filterVarianHppValue').textContent = filterVarianHppAktif || 'Pilih Varian';
+}
+
+const BULAN_ID_ = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+function perbaruiOpsiFilterBulanHpp_(items) {
+  const list = document.getElementById('filterBulanHppList');
+  const unik = Array.from(new Set(items.map(function (it) { return String(it.tanggal || '').slice(0, 7); }).filter(Boolean))).sort().reverse();
+  const kunciBaru = unik.join('|') + '::' + filterBulanHppAktif;
+  if (list.dataset.kunci === kunciBaru) return;
+  list.dataset.kunci = kunciBaru;
+  function labelBulan(ym) {
+    const parts = ym.split('-');
+    return BULAN_ID_[parseInt(parts[1], 10) - 1] + ' ' + parts[0];
+  }
+  const semuaOpsi = [''].concat(unik);
+  list.innerHTML = semuaOpsi.map(function (ym) {
+    const label = ym ? labelBulan(ym) : 'Semua Bulan';
+    const aktifClass = (ym === filterBulanHppAktif) ? ' aktif' : '';
+    return '<div class="varian-filter-item' + aktifClass + '" data-bulan="' + escapeAttr(ym) + '">' + escapeHtml(label) + '</div>';
+  }).join('');
+  list.querySelectorAll('[data-bulan]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      filterBulanHppAktif = el.dataset.bulan;
+      filterBulanHppTerbuka = false;
+      list.style.display = 'none';
+      renderHpp_();
+    });
+  });
+  document.getElementById('filterBulanHppValue').textContent = filterBulanHppAktif ? labelBulan(filterBulanHppAktif) : 'Pilih Bulan';
+}
+
+document.getElementById('filterVarianHppTrigger').addEventListener('click', function () {
+  filterVarianHppTerbuka = !filterVarianHppTerbuka;
+  document.getElementById('filterVarianHppList').style.display = filterVarianHppTerbuka ? 'block' : 'none';
+});
+document.getElementById('filterBulanHppTrigger').addEventListener('click', function () {
+  filterBulanHppTerbuka = !filterBulanHppTerbuka;
+  document.getElementById('filterBulanHppList').style.display = filterBulanHppTerbuka ? 'block' : 'none';
+});
+
+function renderHpp_() {
+  if (!hppData) return;
+  perbaruiOpsiFilterVarianHpp_(hppData);
+  perbaruiOpsiFilterBulanHpp_(hppData);
+
+  let items = hppData;
+  if (filterVarianHppAktif) items = items.filter(function (x) { return x.varian === filterVarianHppAktif; });
+  if (filterBulanHppAktif) items = items.filter(function (x) { return String(x.tanggal || '').slice(0, 7) === filterBulanHppAktif; });
+
+  const grup = {};
+  items.forEach(function (x) {
+    const key = x.varian || '(tanpa varian)';
+    if (!grup[key]) grup[key] = { varian: key, jumlah: 0, kain: 0, jahit: 0, kainLengkap: true, jahitLengkap: true };
+    grup[key].jumlah += x.jumlahDipotong;
+    grup[key].kain += x.biayaKain;
+    grup[key].jahit += x.biayaJahit;
+    if (!x.kainLengkap) grup[key].kainLengkap = false;
+    if (!x.jahitLengkap) grup[key].jahitLengkap = false;
+  });
+  const rows = Object.keys(grup).map(function (k) { return grup[k]; })
+    .sort(function (a, b) { return (b.kain + b.jahit) - (a.kain + a.jahit); });
+
+  const totalKain = rows.reduce(function (s, r) { return s + r.kain; }, 0);
+  const totalJahit = rows.reduce(function (s, r) { return s + r.jahit; }, 0);
+  const totalPcs = rows.reduce(function (s, r) { return s + r.jumlah; }, 0);
+  const totalHpp = totalKain + totalJahit;
+  const rataRata = totalPcs > 0 ? Math.round(totalHpp / totalPcs) : 0;
+
+  document.getElementById('hppTotalKain').textContent = 'Rp ' + formatAngka(totalKain);
+  document.getElementById('hppTotalJahit').textContent = 'Rp ' + formatAngka(totalJahit);
+  document.getElementById('hppTotalHpp').textContent = 'Rp ' + formatAngka(totalHpp);
+  document.getElementById('hppRataRata').textContent = 'Rp ' + formatAngka(rataRata) + '/pcs';
+
+  if (rows.length === 0) {
+    document.getElementById('hppList').innerHTML = '<div class="arsip-item" style="justify-content:center;color:var(--gray-text)">Belum ada data.</div>';
+    return;
+  }
+
+  document.getElementById('hppList').innerHTML = rows.map(function (r) {
+    const perluLengkap = !r.kainLengkap || !r.jahitLengkap;
+    const hppPcs = r.jumlah > 0 ? Math.round((r.kain + r.jahit) / r.jumlah) : 0;
+    const angkaHtml = perluLengkap
+      ? '<span class="hpp-pcs belum-lengkap">perlu dilengkapi</span>'
+      : '<span class="hpp-pcs">Rp ' + formatAngka(hppPcs) + '/pcs</span>';
+    const jahitTeks = r.jahitLengkap ? ('Rp ' + formatAngka(r.jahit)) : '-';
+    const kainTeks = 'Rp ' + formatAngka(r.kain) + (r.kainLengkap ? '' : ' (parsial)');
+    let warn = '';
+    if (!r.kainLengkap && !r.jahitLengkap) warn = 'Harga kain dan tarif jahit belum lengkap';
+    else if (!r.kainLengkap) warn = 'Harga sebagian roll kain belum diisi';
+    else if (!r.jahitLengkap) warn = 'Tarif jahit varian ini belum diatur';
+    return '<div class="hpp-item">' +
+      '<div class="hpp-item-top"><span class="nama">' + escapeHtml(r.varian) + '</span>' + angkaHtml + '</div>' +
+      '<p class="hpp-sub">' + r.jumlah + ' pcs · kain ' + kainTeks + ' + jahit ' + jahitTeks + '</p>' +
+      (warn ? '<p class="hpp-warn">⚠️ ' + warn + '</p>' : '') +
+      '</div>';
+  }).join('');
 }
 
 // ------------------------------------------------------------
