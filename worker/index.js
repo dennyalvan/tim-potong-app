@@ -1,4 +1,12 @@
 // ============================================================
+// CODE WORKER PRODUKSI ver.58
+// ============================================================
+// PERUBAHAN ver.58 (request Denny, "arsip selesai tampilkan detail juga seperti stok kain
+// habis"): /data/arsip-selesai sekarang ikut balikin breakdown per ukuran (qty/selesai/reject),
+// pemakaianKainKg, varian - sebelumnya cuma jenisWarnaBaju/jumlah/kodeRoll/tanggal. Reuse PERSIS
+// logic yang sama kayak handleDaftarLaporanQC_ (cariKategoriQC_, kolomKeUkuran_,
+// parseRejectNotasi_), diterapkan ke baris arsip_selesai.
+// ============================================================
 // CODE WORKER PRODUKSI ver.57
 // ============================================================
 // PERUBAHAN ver.57 (3 request Denny):
@@ -1503,23 +1511,67 @@ async function handleGasDebugProxy_(request, env) {
 // ============================================================
 // DASHBOARD - Arsip Selesai (Tahap 4)
 // ============================================================
+// v.58 (request Denny): Arsip Selesai sekarang sedetail Stok Habis - bukan cuma nama/tanggal/pcs,
+// tapi juga breakdown per ukuran (qty/selesai/reject), kg kain, varian. Reuse PERSIS logic yang
+// sama kayak handleDaftarLaporanQC_ (cariKategoriQC_, kolomKeUkuran_, parseRejectNotasi_), cuma
+// diterapkan ke baris arsip_selesai (bukan tim_potong yang masih aktif).
 async function handleArsipSelesai_(env, hari) {
   try {
     const batasWaktu = new Date(Date.now() - hari * 24 * 60 * 60 * 1000).toISOString();
     // PostgREST bisa "embed" data tim_potong terkait langsung dalam 1 request (lewat relasi FK
     // tim_potong_id -> tim_potong.id yang udah ada), jadi gak perlu 2x fetch terpisah.
-    const path = '/rest/v1/arsip_selesai?select=waktu,tim_potong(id,jenis_warna_baju,jumlah,kode_roll,tanggal)' +
+    const path = '/rest/v1/arsip_selesai?select=waktu,tim_potong(id,jenis_warna_baju,jumlah,kode_roll,tanggal,pemakaian_kain_kg,' + Object.values(KOLOM_UKURAN_MAP).join(',') + ')' +
       '&waktu=gte.' + encodeURIComponent(batasWaktu) + '&order=waktu.desc';
-    const rows = await ambilDariSupabase_(env, path);
+    const [rows, daftarPrefix] = await Promise.all([
+      ambilDariSupabase_(env, path),
+      ambilDaftarPrefixQC_(env)
+    ]);
+
+    if (rows.length === 0) return jsonResponse([]);
+
+    const idList = rows.map(function (r) { return r.tim_potong ? r.tim_potong.id : null; }).filter(function (x) { return x; }).join(',');
+    const rowsLog = idList ? await ambilDariSupabase_(env, '/rest/v1/log_qc?select=tim_potong_id,' + Object.values(KOLOM_UKURAN_MAP).join(',') + ',reject&status=eq.aktif&tim_potong_id=in.(' + idList + ')') : [];
+
+    const agregasi = {}; // { [tim_potong_id]: { [ukuran]: { selesai, reject } } }
+    rowsLog.forEach(function (log) {
+      if (!agregasi[log.tim_potong_id]) agregasi[log.tim_potong_id] = {};
+      const selesaiBarisIni = kolomKeUkuran_(log);
+      const rejectBarisIni = parseRejectNotasi_(log.reject);
+      DAFTAR_UKURAN_TIMPOTONG.forEach(function (u) {
+        if (!agregasi[log.tim_potong_id][u]) agregasi[log.tim_potong_id][u] = { selesai: 0, reject: 0 };
+        agregasi[log.tim_potong_id][u].selesai += selesaiBarisIni[u] || 0;
+        agregasi[log.tim_potong_id][u].reject += rejectBarisIni[u] || 0;
+      });
+    });
+
     const hasil = rows.map(function (r) {
       const tp = r.tim_potong || {};
+      const cocok = cariKategoriQC_(tp.jenis_warna_baju, daftarPrefix);
+      const kategoriBadge = cocok ? String(cocok.kategoriQc).split(' ')[0] : '';
+
+      const progresPerTP = agregasi[tp.id] || {};
+      const ukuranAsliTP = kolomKeUkuran_(tp);
+      const perUkuran = Object.keys(ukuranAsliTP).map(function (u) {
+        const qty = ukuranAsliTP[u];
+        const p = progresPerTP[u] || { selesai: 0, reject: 0 };
+        return { ukuran: u, qty: qty, selesai: p.selesai, reject: p.reject };
+      });
+      const totalSelesai = perUkuran.reduce(function (s, u) { return s + u.selesai; }, 0);
+      const totalReject = perUkuran.reduce(function (s, u) { return s + u.reject; }, 0);
+
       return {
         waktu: r.waktu,
         timPotongId: tp.id || null,
         jenisWarnaBaju: tp.jenis_warna_baju || null,
+        kategoriBadge: kategoriBadge,
+        varian: cocok ? (cocok.varian || '') : '',
         jumlah: tp.jumlah || null,
         kodeRoll: tp.kode_roll || null,
-        tanggal: tp.tanggal || null
+        tanggal: tp.tanggal || null,
+        pemakaianKainKg: tp.pemakaian_kain_kg || null,
+        perUkuran: perUkuran,
+        totalSelesai: totalSelesai,
+        totalReject: totalReject
       };
     });
     return jsonResponse(hasil);

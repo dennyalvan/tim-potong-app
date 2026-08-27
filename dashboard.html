@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+DASHBOARD ver.71
+============================================================
+PERUBAHAN ver.71 (request Denny, "arsip selesai tampilkan detail juga seperti stok kain habis"):
+Arsip Selesai sekarang bisa di-tap buat expand, sama pola kayak Stok Habis - nampilin breakdown
+qty per ukuran (reuse .ukuran-badges yang sama kayak front card laporan aktif), roll, kg kain,
+varian, dan jumlah reject kalau ada. Data dari Worker ver.58.
+Riwayat lengkap: git log.
+============================================================
 DASHBOARD ver.70
 ============================================================
 PERUBAHAN ver.70 (4 request Denny) -
@@ -535,9 +543,17 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .arsip-toggle { background: #fff; border-radius: 14px; padding: 14px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; margin-top: 14px; font-weight: 700; font-size: 13px; }
   .arsip-toggle .sub { display: block; font-weight: 400; color: var(--gray-text); font-size: 12px; margin-top: 2px; }
   .arsip-list { margin-top: 8px; }
-  .arsip-item { background: #fff; border-radius: 12px; padding: 10px 12px; margin-bottom: 6px; font-size: 13px; display: flex; justify-content: space-between; }
+  .arsip-item { background: #fff; border-radius: 12px; padding: 10px 12px; margin-bottom: 6px; font-size: 13px; cursor: pointer; }
+  .arsip-item-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .arsip-item .chev { font-size: 9px; color: var(--gray-label); transition: transform 0.15s; flex-shrink: 0; }
+  .arsip-item.terbuka .chev { transform: rotate(90deg); }
   .arsip-item .nama { font-weight: 700; }
   .arsip-item .meta { color: var(--gray-text); font-size: 11px; }
+  /* v.58 (request Denny, "detail juga seperti stok kain habis"): panel detail per laporan arsip -
+     breakdown qty per ukuran (reuse .ukuran-badges yang sama kayak front card laporan aktif). */
+  .arsip-detail { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
+  .arsip-detail .ukuran-badges { margin-bottom: 4px; }
+  .arsip-detail-meta { font-size: 11px; color: var(--gray-text); margin: 2px 0 0; }
   /* v.37: FIX tampilan "Stok Habis" numpuk/overlap di HP (request Denny) - dedicated class,
      bukan pakai .arsip-item lagi. Nama warna di-truncate (...) kalau kepanjangan, kode roll
      SELALU utuh 1 baris.
@@ -1699,6 +1715,9 @@ document.querySelectorAll('.chip[data-sort]').forEach(function (el) {
 // ARSIP SELESAI
 // ------------------------------------------------------------
 let arsipDimuat = false;
+let arsipData = null; // v.58 (request Denny): disimpan (bukan langsung di-render) - toggle detail
+// per baris butuh render ULANG tanpa fetch ulang, sama pola kayak stokHabisData.
+let arsipTerbukaKunci = null; // timPotongId mana yang lagi kebuka detailnya (cuma 1 sekaligus)
 document.getElementById('arsipToggle').addEventListener('click', function () {
   const list = document.getElementById('arsipList');
   const terbuka = list.style.display === 'block';
@@ -1717,15 +1736,40 @@ function muatArsip() {
       // sesuai sebelumnya bisa langsung nimpa tampilan jadi "0 laporan" walau data asli ada.
       if (!Array.isArray(data)) throw new Error('Format data gak sesuai.');
       arsipDimuat = true;
-      document.getElementById('arsipSub').textContent = data.length + ' laporan';
-      document.getElementById('arsipList').innerHTML = data.map(function (a) {
-        return '<div class="arsip-item"><div><div class="nama">' + escapeHtml(a.jenisWarnaBaju) + '</div>' +
-          '<div class="meta">' + (a.tanggal || '') + ' · ' + (a.jumlah || 0) + ' pcs</div></div>' +
-          '<div class="meta">' + new Date(a.waktu).toLocaleString('id-ID') + '</div></div>';
-      }).join('');
+      arsipData = data;
+      renderArsip_();
     })
     .catch(function (e) { /* silent - data lama (kalau ada) dibiarkan, dicoba lagi siklus berikutnya */ });
 }
+
+function renderArsip_() {
+  if (!arsipData) return;
+  document.getElementById('arsipSub').textContent = arsipData.length + ' laporan';
+  document.getElementById('arsipList').innerHTML = arsipData.map(function (a) {
+    const terbuka = (arsipTerbukaKunci === a.timPotongId);
+    let satu = '<div class="arsip-item' + (terbuka ? ' terbuka' : '') + '" data-arsiptoggle="' + a.timPotongId + '">' +
+      '<div class="arsip-item-top"><span class="chev">▶</span><div><div class="nama">' + escapeHtml(a.jenisWarnaBaju) + '</div>' +
+      '<div class="meta">' + (a.tanggal || '') + ' · ' + (a.jumlah || 0) + ' pcs</div></div>' +
+      '<div class="meta">' + new Date(a.waktu).toLocaleString('id-ID') + '</div></div>';
+    if (terbuka) {
+      const perUkuranSorted = (a.perUkuran || []).slice().sort(function (x, y) { return DAFTAR_UKURAN_URUT.indexOf(x.ukuran) - DAFTAR_UKURAN_URUT.indexOf(y.ukuran); });
+      const badges = perUkuranSorted.map(function (u) { return '<span class="ukuran-badge">' + u.ukuran + '<span class="n">' + u.selesai + '</span></span>'; }).join('');
+      const rejectTeks = a.totalReject > 0 ? ' · <span style="color:var(--danger);font-weight:700">' + a.totalReject + ' reject</span>' : '';
+      satu += '<div class="arsip-detail"><div class="ukuran-badges">' + badges + '</div>' +
+        '<p class="arsip-detail-meta">Roll ' + (a.kodeRoll ? escapeHtml(a.kodeRoll) : '-') + ' · ' + (a.pemakaianKainKg != null ? formatAngka(a.pemakaianKainKg) + ' kg' : '-') +
+        (a.varian ? ' · ' + escapeHtml(a.varian) : '') + rejectTeks + '</p></div>';
+    }
+    return satu + '</div>';
+  }).join('');
+}
+document.getElementById('arsipList').addEventListener('click', function (e) {
+  const btnToggle = e.target.closest('[data-arsiptoggle]');
+  if (btnToggle) {
+    const id = parseInt(btnToggle.dataset.arsiptoggle, 10);
+    arsipTerbukaKunci = (arsipTerbukaKunci === id) ? null : id;
+    renderArsip_();
+  }
+});
 
 // ------------------------------------------------------------
 // STOK HABIS (arsip roll yang udah kg_sisa <= 0, di bawah tab Stok Kain)
@@ -1770,7 +1814,7 @@ function renderStokHabisList_() {
   if (!stokHabisData) return;
   document.getElementById('stokHabisSub').textContent = stokHabisData.length + ' roll';
   if (stokHabisData.length === 0) {
-    document.getElementById('stokHabisList').innerHTML = '<div class="arsip-item" style="justify-content:center;color:var(--gray-text)">Belum ada roll yang habis.</div>';
+    document.getElementById('stokHabisList').innerHTML = '<div class="arsip-item" style="display:flex;justify-content:center;color:var(--gray-text)">Belum ada roll yang habis.</div>';
     return;
   }
   const dipotong = !stokHabisSemuaTerbuka && stokHabisData.length > STOK_HABIS_BATAS_;
@@ -3006,7 +3050,7 @@ function renderHpp_() {
   document.getElementById('hppRataRata').textContent = 'Rp ' + formatAngka(rataRata) + '/pcs';
 
   if (rows.length === 0) {
-    document.getElementById('hppList').innerHTML = '<div class="arsip-item" style="justify-content:center;color:var(--gray-text)">Belum ada data.</div>';
+    document.getElementById('hppList').innerHTML = '<div class="arsip-item" style="display:flex;justify-content:center;color:var(--gray-text)">Belum ada data.</div>';
     return;
   }
 
