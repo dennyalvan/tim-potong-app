@@ -1,4 +1,13 @@
 // ============================================================
+// CODE WORKER PRODUKSI ver.66
+// ============================================================
+// PERUBAHAN ver.66 (fix bug, request Denny - laporan "LT NAVY CREAM roll 1842 gak ketemu PERSIS
+// di stok_kain"): badan item Kombinasi sekarang dipotong pakai warna PERTAMA-nya doang ("NAVY"),
+// bukan nama gabungan badan+tangan ("NAVY CREAM") yang cuma buat tampilan/nama item. Bug ini
+// bikin potong stok badan kombinasi SELALU gagal ketemu roll kecuali warna badan & tangan
+// pertama kebetulan sama. Data tim_potong id=1049 yang kena bug ini kg badannya (4.57kg,
+// roll 1842) BELUM terpotong dari stok - nunggu arahan Denny mau dikoreksi manual atau enggak.
+// ============================================================
 // CODE WORKER PRODUKSI ver.65
 // ============================================================
 // PERUBAHAN ver.65 (request Denny, ketemu dari screenshot nota FOCUS yang kesimpen sebagai
@@ -3014,6 +3023,13 @@ async function handleSubmitProduksi_(body, env) {
       kgUtama = kgArr[0] || null;
       kodeRollUtama = rollArr[0] || null;
       sumberKgUtama = sumberKgArr[0] || null;
+      // v.66 (fix bug, request Denny - root cause kasus "LT NAVY CREAM" / roll 1842 gak ketemu
+      // "PERSIS di stok_kain"): badan kombinasi WAJIB dipotong pakai warna PERTAMA-nya doang
+      // (warnaArr[0], mis. "NAVY"), BUKAN nama gabungan badan+tangan ("NAVY CREAM") yang dipakai
+      // buat namaItem/tampilan. SEBELUMNYA warnaCustomUtama tetap null buat kombinasi, jadi
+      // kurangiStokKain_ di bawah fallback ke row.jenis_warna_baju (nama gabungan 2 kata) - gak
+      // pernah ketemu roll aslinya yang warnanya cuma 1 kata.
+      warnaCustomUtama = warnaArr[0];
       // v.54 (request Denny): RINGER DEWASA (kodeItem "RING") - warna KE-2 di namanya (mis.
       // "NAVY" di "MUSTARD NAVY") BUKAN kain, cuma asesoris rib - gak ambil dari stok kain sama
       // sekali. Namanya TETAP 2 kata (buat identifikasi, warnaArr[1] masih wajib diisi di
