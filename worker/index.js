@@ -1,4 +1,9 @@
 // ============================================================
+// CODE WORKER PRODUKSI ver.64
+// ============================================================
+// PERUBAHAN ver.64 (request Denny): batalkan ver.63 - caption foto balik cuma nerima kata
+// "nota" lagi, kata "focus" dicabut sebagai pemicu.
+// ============================================================
 // CODE WORKER PRODUKSI ver.63
 // ============================================================
 // PERUBAHAN ver.63 (request Denny): caption foto yang memicu fitur baca nota otomatis sekarang
@@ -3688,14 +3693,14 @@ async function handleTelegramWebhook_(request, env) {
   const message = update.message;
 
   // v.38: foto nota (fitur baca nota kain otomatis) - dicegat di sini, SEBELUM pengecekan
-  // message.text di bawah (foto gak punya field .text sama sekali). WAJIB ada kata "nota" ATAU
-  // "focus" di CAPTION foto (gak peduli besar/kecil huruf, v.63 nambah "focus" - request Denny)
-  // baru diproses sebagai nota - foto tanpa caption/gak ada kata itu DIABAIKAN DIAM-DIAM, sama
-  // seperti perilaku lama.
+  // message.text di bawah (foto gak punya field .text sama sekali). WAJIB ada kata "nota" di
+  // CAPTION foto (gak peduli besar/kecil huruf) baru diproses sebagai nota - foto tanpa
+  // caption/gak ada kata "nota" DIABAIKAN DIAM-DIAM, sama seperti perilaku lama. (v.64: sempat
+  // nambah "focus" sebagai kata pemicu alternatif di v.63, tapi dibatalkan lagi - request Denny.)
   if (message && message.photo && message.photo.length > 0) {
     const captionFoto = (message.caption || '').toLowerCase();
-    if (captionFoto.indexOf('nota') === -1 && captionFoto.indexOf('focus') === -1) {
-      return jsonResponse({ ok: true, pesan: 'foto tanpa caption nota/focus, diabaikan' });
+    if (captionFoto.indexOf('nota') === -1) {
+      return jsonResponse({ ok: true, pesan: 'foto tanpa caption nota, diabaikan' });
     }
     return await handleFotoNota_(env, message);
   }
