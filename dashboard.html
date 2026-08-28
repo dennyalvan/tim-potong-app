@@ -1,6 +1,15 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+DASHBOARD ver.73
+============================================================
+PERUBAHAN ver.73 (request Denny, "tampilkan detail perbandingan...biar saya paham kenapa itu
+bisa terjadi"): sub-tab Akurasi Estimasi sekarang expandable 2 level - tap nama varian buat
+lihat SEMUA data poin di baliknya (bukan cuma rata-ratanya), tap 1 data poin (di situ ATAU di
+list Temuan) buat lihat rincian breakdown per ukuran (qty x standar = subtotal) yang menyusun
+angka estimasinya. Data dari Worker ver.61.
+Riwayat lengkap: git log.
+============================================================
 DASHBOARD ver.72
 ============================================================
 PERUBAHAN ver.72 (request Denny): tab HPP sekarang punya sub-tab "📐 Akurasi Estimasi" -
@@ -729,6 +738,19 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .hpp-item .hpp-warn { font-size: 11px; color: var(--orange-link); font-weight: 600; margin: 4px 0 0; }
   .hpp-item .hpp-pcs.ekstrem { color: var(--danger); }
   .hpp-item .hpp-pcs.sedang { color: var(--orange-link); }
+  /* v.61 (request Denny, "biar saya paham kenapa itu bisa terjadi"): breakdown rincian per
+     ukuran (qty x standar = subtotal) di tab Akurasi Estimasi. */
+  .akurasi-rincian { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+  .rincian-head { display: flex; font-size: 10px; color: var(--gray-label); text-transform: uppercase; letter-spacing: .02em; margin-bottom: 4px; }
+  .rincian-row { display: flex; font-size: 12px; padding: 3px 0; }
+  .rincian-head span, .rincian-row span { flex: 1; }
+  .rincian-head span:last-child, .rincian-row span:last-child { text-align: right; }
+  .rincian-row span:nth-child(2) { text-align: center; color: var(--gray-text); }
+  .rincian-total { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 6px !important; font-weight: 700; }
+  .rincian-poin { padding: 7px 0; border-bottom: 1px solid var(--border); cursor: pointer; }
+  .rincian-poin:last-child { border-bottom: none; }
+  .rincian-poin-top { display: flex; justify-content: space-between; font-size: 12px; }
+  .rincian-poin-top .ekstrem-teks { color: var(--danger); font-weight: 700; }
 </style>
 </head>
 <body>
@@ -3111,6 +3133,117 @@ function renderHpp_() {
 const AMBANG_EKSTREM_ = 30;
 let akurasiData = null;
 let akurasiDimuat = false;
+let akurasiVarianTerbukaKunci = null; // nama varian mana yang lagi kebuka daftar poinnya
+let akurasiPoinTerbukaKunci = null; // poin individual mana yang lagi kebuka rinciannya (dipakai
+// bareng di list Temuan MAUPUN di dalam expand varian - cuma 1 yang kebuka sekaligus)
+
+function kunciAkurasiPoin_(x) {
+  return x.timPotongId + '|' + (x.bagian || '');
+}
+
+// v.61 (request Denny, "tampilkan detail perbandingan...biar saya paham kenapa itu bisa
+// terjadi"): breakdown per ukuran yang menyusun kg estimasi - tabel qty x standar = subtotal,
+// plus info roll & tanggal.
+function renderRincianAkurasi_(x) {
+  const baris = (x.rincianUkuran || []).map(function (r) {
+    return '<div class="rincian-row"><span>' + r.ukuran + '</span><span>' + r.qty + ' pcs × ' + r.kgPerPcs.toFixed(4) + '</span><span>' + formatAngka(r.subtotal) + ' kg</span></div>';
+  }).join('');
+  return '<div class="akurasi-rincian">' +
+    '<p class="hpp-sub" style="margin:0 0 6px">Roll ' + (x.kodeRoll ? escapeHtml(x.kodeRoll) : '-') + ' · ' + formatTanggalPendek(x.tanggal) + '</p>' +
+    '<div class="rincian-head"><span>Ukuran</span><span>Qty × standar</span><span>Subtotal</span></div>' +
+    baris +
+    '<div class="rincian-row rincian-total"><span>Estimasi</span><span></span><span>' + formatAngka(x.kgEstimasi) + ' kg</span></div>' +
+    '<div class="rincian-row rincian-total"><span>Aktual (Pakai Habis)</span><span></span><span>' + formatAngka(x.kgAktual) + ' kg</span></div>' +
+    '</div>';
+}
+
+function renderAkurasi_() {
+  if (!akurasiData) return;
+  document.getElementById('akurasiSub').textContent = akurasiData.length + ' data poin (dari laporan "Pakai Habis")';
+
+  if (akurasiData.length === 0) {
+    document.getElementById('akurasiRekapList').innerHTML = '<div class="arsip-item" style="display:flex;justify-content:center;color:var(--gray-text)">Belum ada data "Pakai Habis" yang bisa dibandingkan.</div>';
+    document.getElementById('akurasiTemuanList').innerHTML = '';
+    return;
+  }
+
+  const grup = {};
+  akurasiData.forEach(function (x) {
+    const key = x.kategori + ' - ' + x.varian + (x.bagian ? ' (' + x.bagian.replace(/ (Kanan|Kiri)$/, '') + ')' : '');
+    if (!grup[key]) grup[key] = [];
+    grup[key].push(x);
+  });
+  const rekapRows = Object.keys(grup).map(function (key) {
+    const arr = grup[key];
+    const avg = arr.reduce(function (a, b) { return a + b.selisihPersen; }, 0) / arr.length;
+    return { nama: key, n: arr.length, avg: avg, poin: arr };
+  }).sort(function (a, b) { return Math.abs(b.avg) - Math.abs(a.avg); });
+
+  document.getElementById('akurasiRekapList').innerHTML = rekapRows.map(function (r) {
+    const kelas = Math.abs(r.avg) >= AMBANG_EKSTREM_ ? ' ekstrem' : (Math.abs(r.avg) >= 15 ? ' sedang' : '');
+    const tanda = r.avg > 0 ? '+' : '';
+    const terbukaVarian = (akurasiVarianTerbukaKunci === r.nama);
+    let satu = '<div class="hpp-item" data-akurasivariantoggle="' + escapeAttr(r.nama) + '" style="cursor:pointer">' +
+      '<div class="hpp-item-top"><span class="nama">' + escapeHtml(r.nama) + '</span><span class="hpp-pcs' + kelas + '">' + tanda + r.avg.toFixed(1) + '%</span></div>' +
+      '<p class="hpp-sub">' + r.n + ' data poin' + (r.avg > 0 ? ' · aktual rata-rata LEBIH BESAR dari estimasi' : ' · aktual rata-rata LEBIH KECIL dari estimasi') + '</p>';
+    if (terbukaVarian) {
+      const poinTerurut = r.poin.slice().sort(function (a, b) { return new Date(b.tanggal) - new Date(a.tanggal); });
+      satu += '<div class="akurasi-rincian">' + poinTerurut.map(function (x) {
+        const kunciPoin = kunciAkurasiPoin_(x);
+        const terbukaPoin = (akurasiPoinTerbukaKunci === kunciPoin);
+        const tandaX = x.selisihPersen > 0 ? '+' : '';
+        let baris = '<div class="rincian-poin" data-akurasipoin="' + escapeAttr(kunciPoin) + '">' +
+          '<div class="rincian-poin-top"><span>' + escapeHtml(x.jenisWarnaBaju) + (x.bagian ? ' - ' + x.bagian : '') + '</span>' +
+          '<span class="' + (Math.abs(x.selisihPersen) >= AMBANG_EKSTREM_ ? 'ekstrem-teks' : '') + '">' + tandaX + x.selisihPersen.toFixed(1) + '%</span></div>';
+        if (terbukaPoin) baris += renderRincianAkurasi_(x);
+        return baris + '</div>';
+      }).join('') + '</div>';
+    }
+    return satu + '</div>';
+  }).join('');
+
+  const temuan = akurasiData.filter(function (x) { return Math.abs(x.selisihPersen) >= AMBANG_EKSTREM_; })
+    .sort(function (a, b) { return Math.abs(b.selisihPersen) - Math.abs(a.selisihPersen); });
+
+  if (temuan.length === 0) {
+    document.getElementById('akurasiTemuanList').innerHTML = '<div class="arsip-item" style="display:flex;justify-content:center;color:var(--gray-text)">Gak ada selisih ekstrem (semua di bawah ' + AMBANG_EKSTREM_ + '%).</div>';
+    return;
+  }
+  document.getElementById('akurasiTemuanList').innerHTML = temuan.map(function (x) {
+    const tanda = x.selisihPersen > 0 ? '+' : '';
+    const kunciPoin = kunciAkurasiPoin_(x);
+    const terbukaPoin = (akurasiPoinTerbukaKunci === kunciPoin);
+    let satu = '<div class="hpp-item" data-akurasipoin="' + escapeAttr(kunciPoin) + '" style="cursor:pointer">' +
+      '<div class="hpp-item-top"><span class="nama">' + escapeHtml(x.jenisWarnaBaju) + (x.bagian ? ' - ' + x.bagian : '') + '</span><span class="hpp-pcs ekstrem">' + tanda + x.selisihPersen.toFixed(1) + '%</span></div>' +
+      '<p class="hpp-sub">' + formatTanggalPendek(x.tanggal) + ' · aktual ' + formatAngka(x.kgAktual) + 'kg vs estimasi ' + formatAngka(x.kgEstimasi) + 'kg</p>';
+    if (terbukaPoin) satu += renderRincianAkurasi_(x);
+    return satu + '</div>';
+  }).join('');
+}
+
+document.getElementById('akurasiRekapList').addEventListener('click', function (e) {
+  const btnVarian = e.target.closest('[data-akurasivariantoggle]');
+  const btnPoin = e.target.closest('[data-akurasipoin]');
+  if (btnPoin) {
+    const kunci = btnPoin.dataset.akurasipoin;
+    akurasiPoinTerbukaKunci = (akurasiPoinTerbukaKunci === kunci) ? null : kunci;
+    renderAkurasi_();
+  } else if (btnVarian) {
+    const kunci = btnVarian.dataset.akurasivariantoggle;
+    akurasiVarianTerbukaKunci = (akurasiVarianTerbukaKunci === kunci) ? null : kunci;
+    akurasiPoinTerbukaKunci = null; // tutup poin yang mungkin lagi kebuka pas ganti varian
+    renderAkurasi_();
+  }
+});
+document.getElementById('akurasiTemuanList').addEventListener('click', function (e) {
+  const btnPoin = e.target.closest('[data-akurasipoin]');
+  if (!btnPoin) return;
+  const kunci = btnPoin.dataset.akurasipoin;
+  akurasiPoinTerbukaKunci = (akurasiPoinTerbukaKunci === kunci) ? null : kunci;
+  renderAkurasi_();
+});
+
+
 
 document.querySelectorAll('.chip[data-hppsub]').forEach(function (el) {
   el.addEventListener('click', function () {
@@ -3136,53 +3269,6 @@ function muatAkurasiEstimasi_() {
       renderAkurasi_();
     })
     .catch(function (e) { tampilkanToast('Gagal memuat Akurasi Estimasi: ' + e.message); });
-}
-
-function renderAkurasi_() {
-  if (!akurasiData) return;
-  document.getElementById('akurasiSub').textContent = akurasiData.length + ' data poin (dari laporan "Pakai Habis")';
-
-  if (akurasiData.length === 0) {
-    document.getElementById('akurasiRekapList').innerHTML = '<div class="arsip-item" style="display:flex;justify-content:center;color:var(--gray-text)">Belum ada data "Pakai Habis" yang bisa dibandingkan.</div>';
-    document.getElementById('akurasiTemuanList').innerHTML = '';
-    return;
-  }
-
-  const grup = {};
-  akurasiData.forEach(function (x) {
-    const key = x.kategori + ' - ' + x.varian + (x.bagian ? ' (' + x.bagian.replace(/ (Kanan|Kiri)$/, '') + ')' : '');
-    if (!grup[key]) grup[key] = [];
-    grup[key].push(x.selisihPersen);
-  });
-  const rekapRows = Object.keys(grup).map(function (key) {
-    const arr = grup[key];
-    const avg = arr.reduce(function (a, b) { return a + b; }, 0) / arr.length;
-    return { nama: key, n: arr.length, avg: avg };
-  }).sort(function (a, b) { return Math.abs(b.avg) - Math.abs(a.avg); });
-
-  document.getElementById('akurasiRekapList').innerHTML = rekapRows.map(function (r) {
-    const kelas = Math.abs(r.avg) >= AMBANG_EKSTREM_ ? ' ekstrem' : (Math.abs(r.avg) >= 15 ? ' sedang' : '');
-    const tanda = r.avg > 0 ? '+' : '';
-    return '<div class="hpp-item">' +
-      '<div class="hpp-item-top"><span class="nama">' + escapeHtml(r.nama) + '</span><span class="hpp-pcs' + kelas + '">' + tanda + r.avg.toFixed(1) + '%</span></div>' +
-      '<p class="hpp-sub">' + r.n + ' data poin' + (r.avg > 0 ? ' · aktual rata-rata LEBIH BESAR dari estimasi' : ' · aktual rata-rata LEBIH KECIL dari estimasi') + '</p>' +
-      '</div>';
-  }).join('');
-
-  const temuan = akurasiData.filter(function (x) { return Math.abs(x.selisihPersen) >= AMBANG_EKSTREM_; })
-    .sort(function (a, b) { return Math.abs(b.selisihPersen) - Math.abs(a.selisihPersen); });
-
-  if (temuan.length === 0) {
-    document.getElementById('akurasiTemuanList').innerHTML = '<div class="arsip-item" style="display:flex;justify-content:center;color:var(--gray-text)">Gak ada selisih ekstrem (semua di bawah ' + AMBANG_EKSTREM_ + '%).</div>';
-    return;
-  }
-  document.getElementById('akurasiTemuanList').innerHTML = temuan.map(function (x) {
-    const tanda = x.selisihPersen > 0 ? '+' : '';
-    return '<div class="hpp-item">' +
-      '<div class="hpp-item-top"><span class="nama">' + escapeHtml(x.jenisWarnaBaju) + (x.bagian ? ' - ' + x.bagian : '') + '</span><span class="hpp-pcs ekstrem">' + tanda + x.selisihPersen.toFixed(1) + '%</span></div>' +
-      '<p class="hpp-sub">' + formatTanggalPendek(x.tanggal) + ' · aktual ' + formatAngka(x.kgAktual) + 'kg vs estimasi ' + formatAngka(x.kgEstimasi) + 'kg</p>' +
-      '</div>';
-  }).join('');
 }
 
 // ------------------------------------------------------------

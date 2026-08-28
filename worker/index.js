@@ -1,4 +1,12 @@
 // ============================================================
+// CODE WORKER PRODUKSI ver.61
+// ============================================================
+// PERUBAHAN ver.61 (request Denny, "tampilkan detail perbandingan...biar saya paham kenapa itu
+// bisa terjadi"): /data/akurasi-estimasi sekarang ikut balikin rincianUkuran (breakdown qty x
+// standar = subtotal per ukuran, bukan cuma total kg estimasi) + kodeRoll - dipakai buat detail
+// expand di tab Akurasi Estimasi. Fix sekalian: kode_roll kelupaan gak ke-select (jadi selalu
+// null sebelum fix ini).
+// ============================================================
 // CODE WORKER PRODUKSI ver.60
 // ============================================================
 // PERUBAHAN ver.60 (2 request Denny):
@@ -1877,17 +1885,25 @@ function klasifikasiVarianProduksi_(jenisWarnaBaju, adaKombinasi, daftarPrefixSo
   return null;
 }
 
+// v.61 (request Denny, "tampilkan detail perbandingan...biar saya paham kenapa itu bisa
+// terjadi"): sekarang balikin {kg, rincian} - bukan cuma total, tapi juga breakdown per ukuran
+// (qty x kg/pcs = subtotal) yang MENYUSUN total itu, biar bisa dicek persis dari mana asal
+// angka estimasinya (dipakai buat detail di tab Akurasi Estimasi).
 function hitungEstimasiKg_(ukuran, standarRow) {
   if (!standarRow) return null;
   let total = 0;
+  const rincian = [];
   for (const u in ukuran) {
     const qty = ukuran[u];
     if (!qty) continue;
     const kgPerPcs = standarRow['kg_per_pcs_' + u.toLowerCase()];
     if (kgPerPcs === null || kgPerPcs === undefined) return null; // ukuran ini belum ada standarnya
-    total += qty * parseFloat(kgPerPcs);
+    const subtotal = qty * parseFloat(kgPerPcs);
+    total += subtotal;
+    rincian.push({ ukuran: u, qty: qty, kgPerPcs: parseFloat(kgPerPcs), subtotal: subtotal });
   }
-  return total;
+  rincian.sort(function (a, b) { return DAFTAR_UKURAN_TIMPOTONG.indexOf(a.ukuran) - DAFTAR_UKURAN_TIMPOTONG.indexOf(b.ukuran); });
+  return { kg: total, rincian: rincian };
 }
 
 async function handleAkurasiEstimasi_(body, env) {
@@ -1899,7 +1915,7 @@ async function handleAkurasiEstimasi_(body, env) {
 
   try {
     const [rowsTP, rowsPrefix, rowsStandar] = await Promise.all([
-      ambilDariSupabase_(env, '/rest/v1/tim_potong?select=id,tanggal,jenis_warna_baju,sumber_kg,pemakaian_kain_kg,ref_stok,' + Object.values(KOLOM_UKURAN_MAP).join(',')),
+      ambilDariSupabase_(env, '/rest/v1/tim_potong?select=id,tanggal,jenis_warna_baju,sumber_kg,pemakaian_kain_kg,kode_roll,ref_stok,' + Object.values(KOLOM_UKURAN_MAP).join(',')),
       ambilDariSupabase_(env, '/rest/v1/kategori_varian_produksi?select=kategori,label_varian,prefix_tele'),
       ambilDariSupabase_(env, '/rest/v1/standar_pemakaian?select=*')
     ]);
@@ -1926,14 +1942,15 @@ async function handleAkurasiEstimasi_(body, env) {
       if (tp.sumber_kg === 'Pakai Habis') {
         const posisi = adaKombinasi ? 'badan' : '';
         const std = standarMap[k.kategori + '|' + k.varian + '|' + posisi];
-        const kgEstimasi = hitungEstimasiKg_(ukuran, std);
-        if (kgEstimasi !== null && kgEstimasi > 0) {
+        const est = hitungEstimasiKg_(ukuran, std);
+        if (est !== null && est.kg > 0) {
           const kgAktual = parseFloat(tp.pemakaian_kain_kg) || 0;
           hasil.push({
             timPotongId: tp.id, tanggal: tp.tanggal, jenisWarnaBaju: tp.jenis_warna_baju,
             kategori: k.kategori, varian: k.varian, bagian: adaKombinasi ? 'Badan' : null,
-            kgAktual: kgAktual, kgEstimasi: kgEstimasi,
-            selisihPersen: (kgAktual - kgEstimasi) / kgEstimasi * 100
+            kodeRoll: tp.kode_roll || null,
+            kgAktual: kgAktual, kgEstimasi: est.kg, rincianUkuran: est.rincian,
+            selisihPersen: (kgAktual - est.kg) / est.kg * 100
           });
         }
       }
@@ -1941,16 +1958,17 @@ async function handleAkurasiEstimasi_(body, env) {
       // TANGAN (tiap entry di ref_stok, masing2 dicek status Pakai Habis-nya sendiri)
       if (adaKombinasi) {
         const std = standarMap[k.kategori + '|' + k.varian + '|tangan'];
-        const kgEstimasi = hitungEstimasiKg_(ukuran, std);
+        const est = hitungEstimasiKg_(ukuran, std);
         tp.ref_stok.forEach(function (rs, idx) {
           if (rs.sumberKg !== 'Pakai Habis') return;
-          if (kgEstimasi === null || kgEstimasi <= 0) return;
+          if (est === null || est.kg <= 0) return;
           const kgAktual = parseFloat(rs.kg) || 0;
           hasil.push({
             timPotongId: tp.id, tanggal: tp.tanggal, jenisWarnaBaju: tp.jenis_warna_baju,
             kategori: k.kategori, varian: k.varian, bagian: 'Tangan' + (tp.ref_stok.length > 1 ? (idx === 0 ? ' Kanan' : ' Kiri') : ''),
-            kgAktual: kgAktual, kgEstimasi: kgEstimasi,
-            selisihPersen: (kgAktual - kgEstimasi) / kgEstimasi * 100
+            kodeRoll: rs.kodeRoll || null,
+            kgAktual: kgAktual, kgEstimasi: est.kg, rincianUkuran: est.rincian,
+            selisihPersen: (kgAktual - est.kg) / est.kg * 100
           });
         });
       }
