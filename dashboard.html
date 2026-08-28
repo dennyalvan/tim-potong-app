@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+DASHBOARD ver.72
+============================================================
+PERUBAHAN ver.72 (request Denny): tab HPP sekarang punya sub-tab "📐 Akurasi Estimasi" -
+bandingkan kg aktual (laporan "Pakai Habis") vs kg estimasi (rumus standar_pemakaian), rata-rata
+selisih per varian + daftar temuan selisih ekstrem (>=30%) buat ditinjau manual. Data dari
+Worker ver.60 (endpoint baru /data/akurasi-estimasi).
+Riwayat lengkap: git log.
+============================================================
 DASHBOARD ver.71
 ============================================================
 PERUBAHAN ver.71 (request Denny, "arsip selesai tampilkan detail juga seperti stok kain habis"):
@@ -719,6 +727,8 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .hpp-item .hpp-pcs.belum-lengkap { color: var(--orange-link); }
   .hpp-item .hpp-sub { font-size: 11.5px; color: var(--gray-text); margin: 2px 0 0; }
   .hpp-item .hpp-warn { font-size: 11px; color: var(--orange-link); font-weight: 600; margin: 4px 0 0; }
+  .hpp-item .hpp-pcs.ekstrem { color: var(--danger); }
+  .hpp-item .hpp-pcs.sedang { color: var(--orange-link); }
 </style>
 </head>
 <body>
@@ -860,26 +870,41 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
 
   <!-- ============ TAB: HPP (admin-only) ============ -->
   <div id="tabHpp" style="display:none">
-    <div class="hpp-filter-row">
-      <div class="varian-filter-trigger" id="filterVarianHppTrigger">
-        <span id="filterVarianHppValue">Pilih Varian</span>
-        <span class="chevron">▾</span>
-      </div>
-      <div class="varian-filter-trigger" id="filterBulanHppTrigger">
-        <span id="filterBulanHppValue">Pilih Bulan</span>
-        <span class="chevron">▾</span>
-      </div>
+    <div class="filter-chips" style="margin-bottom:12px">
+      <div class="chip active" data-hppsub="biaya">💰 Biaya</div>
+      <div class="chip" data-hppsub="akurasi">📐 Akurasi Estimasi</div>
     </div>
-    <div class="varian-filter-list" id="filterVarianHppList" style="display:none"></div>
-    <div class="varian-filter-list" id="filterBulanHppList" style="display:none"></div>
-    <div class="hpp-metric-grid">
-      <div class="hpp-metric"><div class="label">Biaya kain</div><div class="value" id="hppTotalKain">Rp 0</div></div>
-      <div class="hpp-metric"><div class="label">Biaya jahit</div><div class="value" id="hppTotalJahit">Rp 0</div></div>
-      <div class="hpp-metric aksen"><div class="label">Total HPP</div><div class="value" id="hppTotalHpp">Rp 0</div></div>
-      <div class="hpp-metric"><div class="label">Rata-rata / pcs</div><div class="value" id="hppRataRata">Rp 0</div></div>
+
+    <div id="hppSubBiaya">
+      <div class="hpp-filter-row">
+        <div class="varian-filter-trigger" id="filterVarianHppTrigger">
+          <span id="filterVarianHppValue">Pilih Varian</span>
+          <span class="chevron">▾</span>
+        </div>
+        <div class="varian-filter-trigger" id="filterBulanHppTrigger">
+          <span id="filterBulanHppValue">Pilih Bulan</span>
+          <span class="chevron">▾</span>
+        </div>
+      </div>
+      <div class="varian-filter-list" id="filterVarianHppList" style="display:none"></div>
+      <div class="varian-filter-list" id="filterBulanHppList" style="display:none"></div>
+      <div class="hpp-metric-grid">
+        <div class="hpp-metric"><div class="label">Biaya kain</div><div class="value" id="hppTotalKain">Rp 0</div></div>
+        <div class="hpp-metric"><div class="label">Biaya jahit</div><div class="value" id="hppTotalJahit">Rp 0</div></div>
+        <div class="hpp-metric aksen"><div class="label">Total HPP</div><div class="value" id="hppTotalHpp">Rp 0</div></div>
+        <div class="hpp-metric"><div class="label">Rata-rata / pcs</div><div class="value" id="hppRataRata">Rp 0</div></div>
+      </div>
+      <div class="section-label">RINCIAN PER VARIAN</div>
+      <div id="hppList"></div>
     </div>
-    <div class="section-label">RINCIAN PER VARIAN</div>
-    <div id="hppList"></div>
+
+    <div id="hppSubAkurasi" style="display:none">
+      <p class="hpp-sub" id="akurasiSub" style="margin:0 0 12px">Memuat...</p>
+      <div class="section-label">RATA-RATA SELISIH PER VARIAN</div>
+      <div id="akurasiRekapList"></div>
+      <div class="section-label">⚠️ TEMUAN (SELISIH EKSTREM)</div>
+      <div id="akurasiTemuanList"></div>
+    </div>
   </div>
 </div>
 
@@ -3070,6 +3095,92 @@ function renderHpp_() {
       '<div class="hpp-item-top"><span class="nama">' + escapeHtml(r.varian) + '</span>' + angkaHtml + '</div>' +
       '<p class="hpp-sub">' + r.jumlah + ' pcs · kain ' + kainTeks + ' + jahit ' + jahitTeks + '</p>' +
       (warn ? '<p class="hpp-warn">⚠️ ' + warn + '</p>' : '') +
+      '</div>';
+  }).join('');
+}
+
+// ------------------------------------------------------------
+// SUB-TAB "AKURASI ESTIMASI" (di dalam tab HPP, admin-only, v.60) - bandingkan kg AKTUAL
+// (laporan "Pakai Habis" - ground truth) vs kg ESTIMASI (rumus standar_pemakaian), tujuannya
+// nambah akurasi standar_pemakaian dari waktu ke waktu (request Denny). Data mentah per titik
+// perbandingan (bisa lebih dari 1 titik per laporan buat item Kombinasi - badan+tangan
+// terpisah), diagregasi per varian+bagian pas render.
+// AMBANG_EKSTREM_: selisih % di atas ini (absolut) masuk ke daftar "Temuan" - kandidat cek
+// manual (data salah input ATAU rumus emang perlu dikoreksi).
+// ------------------------------------------------------------
+const AMBANG_EKSTREM_ = 30;
+let akurasiData = null;
+let akurasiDimuat = false;
+
+document.querySelectorAll('.chip[data-hppsub]').forEach(function (el) {
+  el.addEventListener('click', function () {
+    document.querySelectorAll('.chip[data-hppsub]').forEach(function (c) { c.classList.remove('active'); });
+    el.classList.add('active');
+    const sub = el.dataset.hppsub;
+    document.getElementById('hppSubBiaya').style.display = sub === 'biaya' ? 'block' : 'none';
+    document.getElementById('hppSubAkurasi').style.display = sub === 'akurasi' ? 'block' : 'none';
+    if (sub === 'akurasi' && !akurasiDimuat) muatAkurasiEstimasi_();
+  });
+});
+
+function muatAkurasiEstimasi_() {
+  if (!tg || !tg.initData) { tampilkanToast('Harus dibuka lewat Telegram.'); return; }
+  fetch(WORKER_URL + '/data/akurasi-estimasi', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ initData: tg.initData })
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (!Array.isArray(data)) throw new Error((data && data.error) || 'Format data gak sesuai.');
+      akurasiDimuat = true;
+      akurasiData = data;
+      renderAkurasi_();
+    })
+    .catch(function (e) { tampilkanToast('Gagal memuat Akurasi Estimasi: ' + e.message); });
+}
+
+function renderAkurasi_() {
+  if (!akurasiData) return;
+  document.getElementById('akurasiSub').textContent = akurasiData.length + ' data poin (dari laporan "Pakai Habis")';
+
+  if (akurasiData.length === 0) {
+    document.getElementById('akurasiRekapList').innerHTML = '<div class="arsip-item" style="display:flex;justify-content:center;color:var(--gray-text)">Belum ada data "Pakai Habis" yang bisa dibandingkan.</div>';
+    document.getElementById('akurasiTemuanList').innerHTML = '';
+    return;
+  }
+
+  const grup = {};
+  akurasiData.forEach(function (x) {
+    const key = x.kategori + ' - ' + x.varian + (x.bagian ? ' (' + x.bagian.replace(/ (Kanan|Kiri)$/, '') + ')' : '');
+    if (!grup[key]) grup[key] = [];
+    grup[key].push(x.selisihPersen);
+  });
+  const rekapRows = Object.keys(grup).map(function (key) {
+    const arr = grup[key];
+    const avg = arr.reduce(function (a, b) { return a + b; }, 0) / arr.length;
+    return { nama: key, n: arr.length, avg: avg };
+  }).sort(function (a, b) { return Math.abs(b.avg) - Math.abs(a.avg); });
+
+  document.getElementById('akurasiRekapList').innerHTML = rekapRows.map(function (r) {
+    const kelas = Math.abs(r.avg) >= AMBANG_EKSTREM_ ? ' ekstrem' : (Math.abs(r.avg) >= 15 ? ' sedang' : '');
+    const tanda = r.avg > 0 ? '+' : '';
+    return '<div class="hpp-item">' +
+      '<div class="hpp-item-top"><span class="nama">' + escapeHtml(r.nama) + '</span><span class="hpp-pcs' + kelas + '">' + tanda + r.avg.toFixed(1) + '%</span></div>' +
+      '<p class="hpp-sub">' + r.n + ' data poin' + (r.avg > 0 ? ' · aktual rata-rata LEBIH BESAR dari estimasi' : ' · aktual rata-rata LEBIH KECIL dari estimasi') + '</p>' +
+      '</div>';
+  }).join('');
+
+  const temuan = akurasiData.filter(function (x) { return Math.abs(x.selisihPersen) >= AMBANG_EKSTREM_; })
+    .sort(function (a, b) { return Math.abs(b.selisihPersen) - Math.abs(a.selisihPersen); });
+
+  if (temuan.length === 0) {
+    document.getElementById('akurasiTemuanList').innerHTML = '<div class="arsip-item" style="display:flex;justify-content:center;color:var(--gray-text)">Gak ada selisih ekstrem (semua di bawah ' + AMBANG_EKSTREM_ + '%).</div>';
+    return;
+  }
+  document.getElementById('akurasiTemuanList').innerHTML = temuan.map(function (x) {
+    const tanda = x.selisihPersen > 0 ? '+' : '';
+    return '<div class="hpp-item">' +
+      '<div class="hpp-item-top"><span class="nama">' + escapeHtml(x.jenisWarnaBaju) + (x.bagian ? ' - ' + x.bagian : '') + '</span><span class="hpp-pcs ekstrem">' + tanda + x.selisihPersen.toFixed(1) + '%</span></div>' +
+      '<p class="hpp-sub">' + formatTanggalPendek(x.tanggal) + ' · aktual ' + formatAngka(x.kgAktual) + 'kg vs estimasi ' + formatAngka(x.kgEstimasi) + 'kg</p>' +
       '</div>';
   }).join('');
 }

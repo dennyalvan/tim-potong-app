@@ -1,4 +1,15 @@
 // ============================================================
+// CODE WORKER PRODUKSI ver.60
+// ============================================================
+// PERUBAHAN ver.60 (2 request Denny):
+// 1. Preview nota (foto struk kain, sebelum tap Konfirmasi) sekarang ikut nampilin harga per kg
+//    (+diskon kalau ada) yang udah dibaca AI - sebelumnya cuma warna/kg/kode roll yang kelihatan,
+//    harga gak bisa dicek/dikoreksi sebelum kesimpan.
+// 2. Endpoint baru /data/akurasi-estimasi (admin-only) - bandingkan kg AKTUAL (laporan "Pakai
+//    Habis") vs kg ESTIMASI (rumus standar_pemakaian), termasuk item Kombinasi (badan+tangan
+//    dihitung terpisah, masing2 status Pakai Habis-nya sendiri). Tujuannya nambah akurasi
+//    standar_pemakaian dari waktu ke waktu pakai data produksi nyata.
+// ============================================================
 // CODE WORKER PRODUKSI ver.59
 // ============================================================
 // PERUBAHAN ver.59 (request Denny): placeholder kode roll "0" / "-" / kosong di alur "Masuk ..."
@@ -275,12 +286,20 @@ export default {
       return await handleStokTerpakaiSebagian_(env);
     }
 
-    // v.57 - HPP (biaya kain + jahit) per laporan, KHUSUS admin. Sama filosofi soal harga kayak
+    // v.60 - biaya kain + jahit per laporan, KHUSUS admin. Sama filosofi soal harga kayak
     // /data/detail-stok-kain - info biaya SENGAJA gak pernah lewat endpoint publik.
     if (url.pathname === '/data/hpp' && request.method === 'POST') {
       let body;
       try { body = await request.json(); } catch (e) { return jsonResponse({ ok: false, error: 'Body harus JSON.' }, 400); }
       return await handleHpp_(body, env);
+    }
+
+    // v.60 - perbandingan kg AKTUAL (Pakai Habis) vs kg ESTIMASI (standar_pemakaian), admin-only,
+    // digabung ke tab HPP sebagai sub-tab "Akurasi Estimasi".
+    if (url.pathname === '/data/akurasi-estimasi' && request.method === 'POST') {
+      let body;
+      try { body = await request.json(); } catch (e) { return jsonResponse({ ok: false, error: 'Body harus JSON.' }, 400); }
+      return await handleAkurasiEstimasi_(body, env);
     }
 
     // v.41 - detail 1 roll KHUSUS admin: harga_rp_kg, diskon_rp_kg, subtotal (nilai SISA stok =
@@ -1827,6 +1846,123 @@ async function handleHpp_(body, env) {
   }
 }
 
+// v.60 (request Denny, admin-only, digabung ke tab HPP): bandingkan kg AKTUAL (laporan yang
+// ditandai "Pakai Habis" - ground truth, roll fisiknya beneran habis) vs kg ESTIMASI (rumus
+// standar_pemakaian, SAMA PERSIS logic yang dipakai checkbox "Pakai Estimasi" di index.html) -
+// tujuannya nambah akurasi standar_pemakaian dari waktu ke waktu pakai data produksi nyata.
+//
+// Item KOMBINASI (badan+tangan, mis. Trico) ditangani terpisah: kg badan ada di
+// tim_potong.pemakaian_kain_kg/sumber_kg (row utama), kg tangan ada di tim_potong.ref_stok[]
+// (array, masing2 entry punya sumberKg SENDIRI - badan & tangan bisa beda status). Satu laporan
+// kombinasi bisa hasilin sampe 3 titik perbandingan (badan + tangan kanan + tangan kiri) kalau
+// semuanya kebetulan "Pakai Habis" bareng, atau 0 titik kalau gak ada yang Pakai Habis sama sekali.
+//
+// Klasifikasi (kategori+varian) di-re-derive dari jenis_warna_baju pakai prefix_tele di
+// kategori_varian_produksi (BUKAN kategori_varian_qc - beda tabel, beda tujuan: yang ini
+// penamaan variannya PERSIS sama kayak standar_pemakaian.varian, sumber yang dipakai
+// hitungKgEstimasi_ di client). Kasus ambigu: varian ANAK dengan prefix_tele KOSONG ("PENDEK"
+// vs "PENDEK KOMBINASI" - keduanya prefix kosong, teksnya sama2 mulai "ANAK ...") dibedain
+// pakai ref_stok (kalau ada isinya = pasti KOMBINASI, ground truth dari DB, bukan tebakan teks).
+function klasifikasiVarianProduksi_(jenisWarnaBaju, adaKombinasi, daftarPrefixSorted) {
+  const text = String(jenisWarnaBaju || '').trim().toUpperCase();
+  for (let i = 0; i < daftarPrefixSorted.length; i++) {
+    const p = daftarPrefixSorted[i];
+    if (!p.prefix) continue;
+    if (text === p.prefix || text.indexOf(p.prefix + ' ') === 0) return { kategori: p.kategori, varian: p.varian };
+  }
+  // fallback prefix kosong: sejauh ini cuma "Anak" yang punya varian prefix kosong (PENDEK /
+  // PENDEK KOMBINASI) - Dewasa gak ada.
+  const kataPertama = text.split(' ')[0];
+  if (kataPertama === 'ANAK') return { kategori: 'Anak', varian: adaKombinasi ? 'PENDEK KOMBINASI' : 'PENDEK' };
+  return null;
+}
+
+function hitungEstimasiKg_(ukuran, standarRow) {
+  if (!standarRow) return null;
+  let total = 0;
+  for (const u in ukuran) {
+    const qty = ukuran[u];
+    if (!qty) continue;
+    const kgPerPcs = standarRow['kg_per_pcs_' + u.toLowerCase()];
+    if (kgPerPcs === null || kgPerPcs === undefined) return null; // ukuran ini belum ada standarnya
+    total += qty * parseFloat(kgPerPcs);
+  }
+  return total;
+}
+
+async function handleAkurasiEstimasi_(body, env) {
+  const validasi = await validasiInitData_(body.initData, env);
+  if (!validasi.ok) return jsonResponse(validasi, 401);
+  if (!cekAdmin_(validasi.userId, env)) {
+    return jsonResponse({ ok: false, error: 'Kamu tidak punya izin melihat data ini.' }, 403);
+  }
+
+  try {
+    const [rowsTP, rowsPrefix, rowsStandar] = await Promise.all([
+      ambilDariSupabase_(env, '/rest/v1/tim_potong?select=id,tanggal,jenis_warna_baju,sumber_kg,pemakaian_kain_kg,ref_stok,' + Object.values(KOLOM_UKURAN_MAP).join(',')),
+      ambilDariSupabase_(env, '/rest/v1/kategori_varian_produksi?select=kategori,label_varian,prefix_tele'),
+      ambilDariSupabase_(env, '/rest/v1/standar_pemakaian?select=*')
+    ]);
+
+    const daftarPrefixSorted = rowsPrefix
+      .map(function (r) { return { kategori: r.kategori, varian: r.label_varian, prefix: String(r.prefix_tele || '').trim().toUpperCase() }; })
+      .sort(function (a, b) { return b.prefix.length - a.prefix.length; });
+
+    const standarMap = {}; // "kategori|varian|posisi" -> row standar_pemakaian
+    rowsStandar.forEach(function (s) {
+      const key = s.kategori + '|' + s.varian + '|' + (s.posisi || '');
+      standarMap[key] = s;
+    });
+
+    const hasil = [];
+    rowsTP.forEach(function (tp) {
+      const ukuran = kolomKeUkuran_(tp);
+      if (Object.keys(ukuran).length === 0) return;
+      const adaKombinasi = Array.isArray(tp.ref_stok) && tp.ref_stok.length > 0;
+      const k = klasifikasiVarianProduksi_(tp.jenis_warna_baju, adaKombinasi, daftarPrefixSorted);
+      if (!k) return;
+
+      // BADAN (item kombinasi) atau item tunggal biasa
+      if (tp.sumber_kg === 'Pakai Habis') {
+        const posisi = adaKombinasi ? 'badan' : '';
+        const std = standarMap[k.kategori + '|' + k.varian + '|' + posisi];
+        const kgEstimasi = hitungEstimasiKg_(ukuran, std);
+        if (kgEstimasi !== null && kgEstimasi > 0) {
+          const kgAktual = parseFloat(tp.pemakaian_kain_kg) || 0;
+          hasil.push({
+            timPotongId: tp.id, tanggal: tp.tanggal, jenisWarnaBaju: tp.jenis_warna_baju,
+            kategori: k.kategori, varian: k.varian, bagian: adaKombinasi ? 'Badan' : null,
+            kgAktual: kgAktual, kgEstimasi: kgEstimasi,
+            selisihPersen: (kgAktual - kgEstimasi) / kgEstimasi * 100
+          });
+        }
+      }
+
+      // TANGAN (tiap entry di ref_stok, masing2 dicek status Pakai Habis-nya sendiri)
+      if (adaKombinasi) {
+        const std = standarMap[k.kategori + '|' + k.varian + '|tangan'];
+        const kgEstimasi = hitungEstimasiKg_(ukuran, std);
+        tp.ref_stok.forEach(function (rs, idx) {
+          if (rs.sumberKg !== 'Pakai Habis') return;
+          if (kgEstimasi === null || kgEstimasi <= 0) return;
+          const kgAktual = parseFloat(rs.kg) || 0;
+          hasil.push({
+            timPotongId: tp.id, tanggal: tp.tanggal, jenisWarnaBaju: tp.jenis_warna_baju,
+            kategori: k.kategori, varian: k.varian, bagian: 'Tangan' + (tp.ref_stok.length > 1 ? (idx === 0 ? ' Kanan' : ' Kiri') : ''),
+            kgAktual: kgAktual, kgEstimasi: kgEstimasi,
+            selisihPersen: (kgAktual - kgEstimasi) / kgEstimasi * 100
+          });
+        });
+      }
+    });
+
+    hasil.sort(function (a, b) { return new Date(b.tanggal) - new Date(a.tanggal); });
+    return jsonResponse(hasil);
+  } catch (e) {
+    return jsonResponse({ ok: false, error: e.message }, 500);
+  }
+}
+
 async function handleDetailStokKainAdmin_(body, env) {
   const validasi = await validasiInitData_(body.initData, env);
   if (!validasi.ok) return jsonResponse(validasi, 401);
@@ -3317,6 +3453,16 @@ function prosesItemNota_(petaKanonik, parsedAI, supplierOverride) {
 }
 
 // Format ulang TOTAL sesuai contoh Denny - gaya beda buat 1 rol vs banyak rol.
+// v.60 (request Denny): preview sebelumnya CUMA nampilin warna/kg/roll - harga & diskon yang
+// udah dibaca AI gak pernah kelihatan sebelum dikonfirmasi, jadi salah baca angka harga gak
+// ketauan sampai dicek manual ke Supabase. Sekarang harga (+diskon kalau ada) ikut ditampilkan
+// per baris, biar bisa dicross-check sama pola verifikasi yang udah dipakai buat warna/kg/roll.
+// v.60: format angka rupiah simpel buat teks preview nota (mis. 45000 -> "45.000") - Cloudflare
+// Workers udah include full ICU, jadi toLocaleString('id-ID') aman dipakai di runtime ini.
+function formatRupiah_(n) {
+  return Number(n).toLocaleString('id-ID');
+}
+
 function bangunTeksPreviewNota_(hasil) {
   const jumlah = hasil.rows.length;
   let teks = htmlEscape_(hasil.tglBeli) + '\n';
@@ -3324,6 +3470,8 @@ function bangunTeksPreviewNota_(hasil) {
   hasil.rows.forEach(function (r, i) {
     const kodeKg = r.kg + ' / ' + r.kodeRoll;
     teks += (i + 1) + '. ' + htmlEscape_(r.warna) + ' ' + (jumlah > 1 ? '(' + kodeKg + ')' : kodeKg) + '\n';
+    const hargaTeks = r.harga ? formatRupiah_(r.harga) + '/kg' : '(harga gak kebaca)';
+    teks += '    ' + hargaTeks + (r.diskon ? ' - diskon ' + formatRupiah_(r.diskon) + '/kg' : '') + '\n';
   });
   teks += (jumlah > 1 ? '\n' : '') + '\nTOTAL ' + jumlah + ' ROL';
   return teks;
