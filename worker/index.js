@@ -1,4 +1,13 @@
 // ============================================================
+// CODE WORKER PRODUKSI ver.67
+// ============================================================
+// PERUBAHAN ver.67 (fix bug, request Denny - screenshot Riwayat Pemakaian roll 1842 nampilin
+// label "NAVY" doang, seharusnya "LT NAVY CREAM"): kurangiStokKain_ sekarang punya parameter
+// terpisah namaTampilan buat item_produksi (label di Riwayat Pemakaian) - beda dari itemName
+// yang tetap warna tunggal buat matching stok (fix ver.66 gak berubah). Berlaku buat badan &
+// tangan Kombinasi. Data lama tim_potong id=1049 (log_pemakaian_kain id=555) dikoreksi manual
+// dari "NAVY" ke "LT NAVY CREAM".
+// ============================================================
 // CODE WORKER PRODUKSI ver.66
 // ============================================================
 // PERUBAHAN ver.66 (fix bug, request Denny - laporan "LT NAVY CREAM roll 1842 gak ketemu PERSIS
@@ -2763,7 +2772,15 @@ function cariInfoQCLengkap_(namaItem, info) {
 // Roll EXACT MATCH (kalau kode roll disebutkan - TIDAK ADA fallback tebak-tebak), 2) Warna+Kg
 // terdekat (cuma kalau kode roll TIDAK disebutkan sama sekali).
 // ============================================================
-async function kurangiStokKain_(env, itemName, kainKg, kodeRoll, timPotongId, kamusMap) {
+// v.67 (fix bug, request Denny - screenshot "Roll 1842" nampilin "NAVY" doang di Riwayat
+// Pemakaian, sebelumnya "LT NAVY CREAM"): itemName dipakai buat 2 hal beda - (1) cari warna yang
+// cocok di stok (HARUS warna tunggal, ini yang dibenerin ver.66 buat badan Kombinasi), dan (2)
+// label item_produksi yang ditampilin di Riwayat Pemakaian (HARUS nama lengkap item, biar
+// kebaca laporan produksi mana yang makai roll ini). SEBELUMNYA 1 parameter dipakai buat
+// keduanya - begitu ver.66 ganti itemName jadi warna tunggal doang buat fix matching, labelnya
+// ikut kepotong jadi cuma warna doang. namaTampilan (opsional, default ke itemName - caller lama
+// kayak handleEditProduksi_ gak perlu ubah apa-apa) motong konsep itu jadi 2 parameter terpisah.
+async function kurangiStokKain_(env, itemName, kainKg, kodeRoll, timPotongId, kamusMap, namaTampilan) {
   const kataWarna = ekstrakKataWarna_(itemName);
   if (kataWarna.length === 0) {
     return { matched: false, keterangan: 'Tidak ada kata warna terdeteksi dari nama "' + itemName + '"' };
@@ -2839,7 +2856,7 @@ async function kurangiStokKain_(env, itemName, kainKg, kodeRoll, timPotongId, ka
       kg: kainKg,
       waktu: new Date().toISOString(),
       warna: matched.warna,
-      item_produksi: itemName
+      item_produksi: namaTampilan || itemName
     }])
   });
 
@@ -3151,7 +3168,7 @@ async function handleSubmitProduksi_(body, env) {
         // v.16: item custom pakai warna eksplisit (warnaUtamaPerRow) kalau ada, bukan nebak dari
         // jenis_warna_baju yang bebas format - item biasa/kombinasi tetap seperti sebelumnya.
         const namaBuatPotong = warnaUtamaPerRow[i] || row.jenis_warna_baju;
-        const hasilStok = await kurangiStokKain_(env, namaBuatPotong, parseFloat(row.pemakaian_kain_kg), row.kode_roll, row.id, kamusMap);
+        const hasilStok = await kurangiStokKain_(env, namaBuatPotong, parseFloat(row.pemakaian_kain_kg), row.kode_roll, row.id, kamusMap, row.jenis_warna_baju);
         if (!hasilStok.matched) {
           peringatanStok.push('Item "' + row.jenis_warna_baju + '": ' + hasilStok.keterangan);
         }
@@ -3160,7 +3177,7 @@ async function handleSubmitProduksi_(body, env) {
       // masing-masing dicocokkan lewat namanya sendiri (bukan lewat nama item gabungan).
       if (Array.isArray(row.ref_stok)) {
         for (const bd of row.ref_stok) {
-          const hasilBd = await kurangiStokKain_(env, bd.warna, parseFloat(bd.kg), bd.kodeRoll, row.id, kamusMap);
+          const hasilBd = await kurangiStokKain_(env, bd.warna, parseFloat(bd.kg), bd.kodeRoll, row.id, kamusMap, row.jenis_warna_baju);
           if (!hasilBd.matched) {
             peringatanStok.push('Item "' + row.jenis_warna_baju + '" (breakdown warna "' + bd.warna + '"): ' + hasilBd.keterangan);
           }
