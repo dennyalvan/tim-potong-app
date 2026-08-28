@@ -1,4 +1,13 @@
 // ============================================================
+// CODE WORKER PRODUKSI ver.59
+// ============================================================
+// PERUBAHAN ver.59 (request Denny): placeholder kode roll "0" / "-" / kosong di alur "Masuk ..."
+// (teks, foto nota, endpoint internal) sekarang KONSISTEN disimpan NULL beneran ke stok_kain
+// (sebelumnya "-" tersimpan sebagai teks literal - ketemu 2 baris lama kena ini, sudah dibersihkan
+// manual). Ditambah: baris "Masuk" yang CUMA angka kg doang tanpa "/" (mis. "12.0") sekarang bener
+// dikenali sebagai kg TANPA kode roll - sebelumnya salah kena tangkep sebagai pergantian nama
+// warna baru. Cara ketik tim gak berubah sama sekali, ini murni perbaikan di sisi parsing/insert.
+// ============================================================
 // CODE WORKER PRODUKSI ver.58
 // ============================================================
 // PERUBAHAN ver.58 (request Denny, "arsip selesai tampilkan detail juga seperti stok kain
@@ -1142,6 +1151,16 @@ async function handleExportLogQCMentah_(env, bulan) {
   }
 }
 
+// v.59 (request Denny): placeholder "0" atau "-" (atau kosong) buat kode roll SEHARUSNYA berarti
+// "gak ada kode roll" -> disimpan NULL beneran di Supabase, bukan teks literal "0"/"-". Dipakai
+// di tambahStokKainMasukSupabase_ - satu titik ini nutup SEMUA jalur insert stok_kain (teks
+// "Masuk ...", foto nota Claude Vision, endpoint internal legacy) sekaligus.
+function normalisasiKodeRollTeks_(teks) {
+  const t = String(teks || '').trim();
+  if (!t || t === '-' || t === '0') return null;
+  return t;
+}
+
 // ============================================================
 // v.29 - INSERT stok_kain. Endpoint HTTP ini TETAP ADA (dipakai gas-debug/tools lain kalau
 // perlu), tapi sejak v.37 logic intinya dipindah ke tambahStokKainMasukSupabase_() di bawah,
@@ -1154,7 +1173,7 @@ async function tambahStokKainMasukSupabase_(env, data) {
     supplier: data.supplier || null,
     warna: data.warna,
     kg: data.kg,
-    kode_roll: data.kodeRoll || null,
+    kode_roll: normalisasiKodeRollTeks_(data.kodeRoll),
     kg_terpakai: 0
   };
   if (data.harga !== undefined && data.harga !== null && data.harga !== '') payload.harga_rp_kg = data.harga;
@@ -1332,6 +1351,18 @@ function parseBarisMasuk_(lines) {
           const kodeD = mKgKodeD[2].trim();
           if (isNaN(kgD)) { semuaBarisCocokD = false; break; }
           hasilD.push({ warna: warnaSaatIni, kg: kgD, kodeRoll: kodeD, supplier: supplierD });
+          continue;
+        }
+        // v.59 (request Denny): baris CUMA angka kg doang (gak ada "/" sama sekali) - berarti kg
+        // TANPA kode roll (bakal dinormalisasi jadi NULL di tambahStokKainMasukSupabase_),
+        // BUKAN pergantian warna baru. Sebelumnya baris kayak "12.0" salah kena tangkep sebagai
+        // nama warna baru di cabang "t.indexOf('/') === -1" di bawah - makanya cek ini WAJIB
+        // duluan sebelum itu.
+        const mKgSajaD = t.match(/^([\d]+[.,]?[\d]*)\s*(?:kg)?\s*$/i);
+        if (mKgSajaD) {
+          const kgSajaD = parseFloat(mKgSajaD[1].replace(',', '.'));
+          if (isNaN(kgSajaD)) { semuaBarisCocokD = false; break; }
+          hasilD.push({ warna: warnaSaatIni, kg: kgSajaD, kodeRoll: null, supplier: supplierD });
           continue;
         }
         if (t.indexOf('/') === -1) { warnaSaatIni = t.toUpperCase(); continue; }

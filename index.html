@@ -1,6 +1,21 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+HTML PRODUKSI (Supabase/testproduksi) - ver.43
+============================================================
+PERUBAHAN ver.43 (request Denny, "aturan utama": tim potong cuma boleh input/pilih kain yang
+emang ada di stok):
+1. Kode roll yang gak ketemu di database sekarang BLOCKING (gak bisa ditambah ke antrian),
+   sebelumnya cuma warning kuning yang bisa di-skip. Kotak kode roll tetap bisa diketik (buat
+   filter/cari cepat di daftar saran), tapi cuma lolos kalau hasilnya persis sama salah satu
+   roll asli di database.
+2. Kode roll BOLEH dikosongkan (buat kain sisa tanpa nomor roll) - TAPI warna-nya sendiri tetap
+   wajib match ke stok yang beneran ada, gak bisa warna ngasal/typo asal kode rollnya kosong.
+Berlaku di semua mode (item biasa, Kombinasi, Ringer, Custom) - satu fungsi bersama
+cekKodeRollTakDikenal_ dipakai di semuanya. Validasi kg gak boleh lebih dari stok sudah lebih
+dulu blocking (gak ada perubahan di situ).
+Riwayat lengkap: git log.
+============================================================
 HTML PRODUKSI (Supabase/testproduksi) - ver.42
 ============================================================
 PERUBAHAN ver.42 (3 request Denny) -
@@ -650,12 +665,34 @@ function cekKgLebih99(el, warnEl) {
 function cekKodeRollTakDikenal_(warna, kodeInput, warnEl, kgInput) {
   if (!warnEl) return true;
   const kode = String(kodeInput || '').trim();
-  if (!kode || !warna) { warnEl.style.display = 'none'; warnEl.textContent = ''; return true; }
+  if (!warna) { warnEl.style.display = 'none'; warnEl.textContent = ''; return true; }
+  if (!kode) {
+    // v.43 (koreksi menyeluruh, request Denny): kode roll BOLEH dikosongkan (kain sisa tanpa
+    // nomor roll), TAPI warna-nya SENDIRI tetap wajib match ke stok yang beneran ada. SEBELUMNYA
+    // return true langsung di sini gak pernah nyentuh daftarRollUntukWarna() sama sekali - celah
+    // ini bikin warna ngasal/typo lolos tanpa ketauan asal kode rollnya dikosongkan.
+    if (daftarRollUntukWarna(warna).length === 0) {
+      warnEl.style.display = 'block';
+      warnEl.textContent = '⛔ Warna "' + warna + '" gak ketemu stoknya sama sekali - pilih dari daftar saran warna.';
+      return false;
+    }
+    warnEl.style.display = 'none'; warnEl.textContent = '';
+    return true;
+  }
   const roll = daftarRollUntukWarna(warna).find(function (r) { return String(r.kodeRoll || '').toUpperCase() === kode.toUpperCase(); });
   if (!roll) {
+    // v.43 (request Denny, "aturan utama": tim potong cuma boleh input/pilih kain yang emang ada
+    // di stok) - SEBELUMNYA return true (cuma warning, tetap bisa ditambah ke antrian walau kode
+    // rollnya ngasal/gak ada di database - lihat kasus "OSH MAGENTA / Roll 0010"). Sekarang
+    // BLOCKING sama kayak kasus kg gak cukup di bawah - kotak kode roll TETAP bisa diketik
+    // (buat filter/cari cepat di daftar saran), tapi kalau hasil akhirnya gak persis sama
+    // salah satu roll asli buat warna ini, gak bisa ditambah ke antrian sama sekali. Satu-
+    // satunya jalan lolos: pilih dari daftar saran (termasuk "Roll - / Xkg" kalau ada stok
+    // tanpa kode), atau kosongkan total kotaknya (tetap sah - biar sistem cocokkan otomatis
+    // dari kg, buat kain sisa yang emang gak ada nomor rollnya).
     warnEl.style.display = 'block';
-    warnEl.textContent = '⚠️ Kode roll "' + kode + '" gak ketemu di database buat warna ' + warna + ' - cek ulang, atau pilih dari daftar saran.';
-    return true;
+    warnEl.textContent = '⛔ Kode roll "' + kode + '" gak ketemu di database buat warna ' + warna + ' - pilih dari daftar saran, atau kosongkan kalau kainnya emang gak ada nomor roll.';
+    return false;
   }
   const kg = parseFloat(kgInput);
   if (!isNaN(kg) && kg > 0 && kg > roll.kg) {
