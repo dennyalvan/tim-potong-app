@@ -1,6 +1,15 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+DASHBOARD ver.74
+============================================================
+PERUBAHAN ver.74 (request Denny, "detail hpp per pekerjaan seperti di tab proses, agar tau
+detail per tasknya"): sub-tab HPP > Biaya sekarang expandable - tap nama varian di "Rincian per
+Varian" buat lihat kartu per pekerjaan (laporan) di baliknya: tanggal, jumlah, kg pemakaian,
+biaya kain, biaya jahit, HPP/pcs laporan itu sendiri. Kode roll sengaja gak ditampilkan (request
+Denny). Data dari Worker ver.62.
+Riwayat lengkap: git log.
+============================================================
 DASHBOARD ver.73
 ============================================================
 PERUBAHAN ver.73 (request Denny, "tampilkan detail perbandingan...biar saya paham kenapa itu
@@ -751,6 +760,7 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .rincian-poin:last-child { border-bottom: none; }
   .rincian-poin-top { display: flex; justify-content: space-between; font-size: 12px; }
   .rincian-poin-top .ekstrem-teks { color: var(--danger); font-weight: 700; }
+  .rincian-poin-top .belum-lengkap { color: var(--orange-link); font-weight: 700; }
 </style>
 </head>
 <body>
@@ -2595,6 +2605,7 @@ let filterVarianHppAktif = '';
 let filterBulanHppAktif = '';
 let filterVarianHppTerbuka = false;
 let filterBulanHppTerbuka = false;
+let hppVarianTerbukaKunci = null; // nama varian mana yang lagi kebuka daftar per-pekerjaannya
 
 let sedangMuatRekap = false;
 function muatRekapQC(percobaan, manual) {
@@ -3075,12 +3086,13 @@ function renderHpp_() {
   const grup = {};
   items.forEach(function (x) {
     const key = x.varian || '(tanpa varian)';
-    if (!grup[key]) grup[key] = { varian: key, jumlah: 0, kain: 0, jahit: 0, kainLengkap: true, jahitLengkap: true };
+    if (!grup[key]) grup[key] = { varian: key, jumlah: 0, kain: 0, jahit: 0, kainLengkap: true, jahitLengkap: true, poin: [] };
     grup[key].jumlah += x.jumlahDipotong;
     grup[key].kain += x.biayaKain;
     grup[key].jahit += x.biayaJahit;
     if (!x.kainLengkap) grup[key].kainLengkap = false;
     if (!x.jahitLengkap) grup[key].jahitLengkap = false;
+    grup[key].poin.push(x);
   });
   const rows = Object.keys(grup).map(function (k) { return grup[k]; })
     .sort(function (a, b) { return (b.kain + b.jahit) - (a.kain + a.jahit); });
@@ -3113,13 +3125,44 @@ function renderHpp_() {
     if (!r.kainLengkap && !r.jahitLengkap) warn = 'Harga kain dan tarif jahit belum lengkap';
     else if (!r.kainLengkap) warn = 'Harga sebagian roll kain belum diisi';
     else if (!r.jahitLengkap) warn = 'Tarif jahit varian ini belum diatur';
-    return '<div class="hpp-item">' +
+    const terbuka = (hppVarianTerbukaKunci === r.varian);
+    let html = '<div class="hpp-item" data-hppvariantoggle="' + escapeAttr(r.varian) + '" style="cursor:pointer">' +
       '<div class="hpp-item-top"><span class="nama">' + escapeHtml(r.varian) + '</span>' + angkaHtml + '</div>' +
       '<p class="hpp-sub">' + r.jumlah + ' pcs · kain ' + kainTeks + ' + jahit ' + jahitTeks + '</p>' +
-      (warn ? '<p class="hpp-warn">⚠️ ' + warn + '</p>' : '') +
-      '</div>';
+      (warn ? '<p class="hpp-warn">⚠️ ' + warn + '</p>' : '');
+    if (terbuka) {
+      const poinTerurut = r.poin.slice().sort(function (a, b) { return new Date(b.tanggal) - new Date(a.tanggal); });
+      html += '<div class="akurasi-rincian">' + poinTerurut.map(renderPekerjaanHpp_).join('') + '</div>';
+    }
+    return html + '</div>';
   }).join('');
 }
+
+// v.62 (request Denny, "detail per pekerjaan seperti di tab proses, agar tau detail per
+// tasknya"): 1 kartu = 1 laporan tim_potong, isi expand per varian di atas. Cukup 2 tingkat
+// (varian -> pekerjaan), gak ada expand lanjutan lagi - beda dari Akurasi Estimasi yang punya
+// tingkat ke-3 (rincian per ukuran), karena di sini gak diminta serinci itu. Kode roll SENGAJA
+// gak ditampilkan (request Denny), kg pemakaian ditampilkan.
+function renderPekerjaanHpp_(x) {
+  const perluLengkap = !x.kainLengkap || !x.jahitLengkap;
+  const hppPcsX = x.jumlahDipotong > 0 ? Math.round((x.biayaKain + x.biayaJahit) / x.jumlahDipotong) : 0;
+  const angkaHtml = perluLengkap
+    ? '<span class="belum-lengkap">perlu dilengkapi</span>'
+    : '<span>Rp ' + formatAngka(hppPcsX) + '/pcs</span>';
+  const jahitTeks = x.jahitLengkap ? ('Rp ' + formatAngka(x.biayaJahit)) : '-';
+  const kainTeks = 'Rp ' + formatAngka(x.biayaKain) + (x.kainLengkap ? '' : ' (parsial)');
+  return '<div class="rincian-poin">' +
+    '<div class="rincian-poin-top"><span>' + escapeHtml(x.warna) + '</span>' + angkaHtml + '</div>' +
+    '<p class="hpp-sub" style="margin:2px 0 0">' + formatTanggalPendek(x.tanggal) + ' · ' + x.jumlahDipotong + ' pcs · ' + formatKg(x.pemakaianKg) + ' · kain ' + kainTeks + ' + jahit ' + jahitTeks + '</p>' +
+    '</div>';
+}
+
+document.getElementById('hppList').addEventListener('click', function (e) {
+  const btn = e.target.closest('[data-hppvariantoggle]');
+  if (!btn) return;
+  hppVarianTerbukaKunci = (hppVarianTerbukaKunci === btn.dataset.hppvariantoggle) ? null : btn.dataset.hppvariantoggle;
+  renderHpp_();
+});
 
 // ------------------------------------------------------------
 // SUB-TAB "AKURASI ESTIMASI" (di dalam tab HPP, admin-only, v.60) - bandingkan kg AKTUAL

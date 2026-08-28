@@ -1,4 +1,10 @@
 // ============================================================
+// CODE WORKER PRODUKSI ver.62
+// ============================================================
+// PERUBAHAN ver.62 (request Denny, "detail per pekerjaan seperti di tab proses"): /data/hpp
+// sekarang ikut balikin pemakaianKg per laporan - dipakai buat kartu detail per pekerjaan (expand
+// per varian) di tab HPP > Biaya. Kode roll sengaja gak ditambahin (request Denny).
+// ============================================================
 // CODE WORKER PRODUKSI ver.61
 // ============================================================
 // PERUBAHAN ver.61 (request Denny, "tampilkan detail perbandingan...biar saya paham kenapa itu
@@ -1841,6 +1847,7 @@ async function handleHpp_(body, env) {
         varian: varian,
         warna: tp.jenis_warna_baju,
         jumlahDipotong: jumlah,
+        pemakaianKg: pakaiKg,
         biayaKain: biayaKain,
         kainLengkap: kainLengkap,
         biayaJahit: biayaJahit,
