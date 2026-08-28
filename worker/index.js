@@ -1,4 +1,12 @@
 // ============================================================
+// CODE WORKER PRODUKSI ver.65
+// ============================================================
+// PERUBAHAN ver.65 (request Denny, ketemu dari screenshot nota FOCUS yang kesimpen sebagai
+// supplier "NOTA FOCUS"): fix bug caption foto nota - kata pemicu "nota" sekarang dibuang dulu
+// dari caption sebelum dipakai sebagai override nama supplier, jadi caption "nota focus"
+// hasilnya bersih "FOCUS" bukan "NOTA FOCUS". Data lama (4 baris stok_kain id 1050-1053) yang
+// kena bug ini dikoreksi manual ke Supabase.
+// ============================================================
 // CODE WORKER PRODUKSI ver.64
 // ============================================================
 // PERUBAHAN ver.64 (request Denny): batalkan ver.63 - caption foto balik cuma nerima kata
@@ -3577,7 +3585,14 @@ async function handleFotoNota_(env, message) {
     if (!hasilAI.ok) throw new Error(hasilAI.error);
 
     const petaKanonik = await ambilPetaWarnaKanonik_(env);
-    const hasil = prosesItemNota_(petaKanonik, hasilAI.data, message.caption);
+    // v.65 (request Denny, root cause dari bug supplier kesimpen "NOTA FOCUS"): caption dipakai
+    // APA ADANYA sebagai override supplier - caption "nota focus" jadinya kesimpen "NOTA FOCUS",
+    // bukan cuma "FOCUS". Sekarang kata pemicu "nota" dibuang dulu dari caption sebelum dipakai
+    // sebagai override, biar hasilnya bersih kayak nama supplier di alur teks "Masuk ... -
+    // <supplier>" (mis. "ochim") - caption "nota" doang (tanpa nama supplier) jadi override
+    // kosong, otomatis balik ke supplier hasil bacaan AI dari fotonya sendiri.
+    const supplierDariCaption = String(message.caption || '').replace(/nota/i, '').replace(/^[\s:.\-]+/, '').trim();
+    const hasil = prosesItemNota_(petaKanonik, hasilAI.data, supplierDariCaption);
 
     if (hasil.rows.length === 0) {
       await kirimPesanTelegramLengkap_(env, chatId, '⚠️ Tidak ada baris yang bisa dibaca dari foto ini (atau semuanya RIB).');
