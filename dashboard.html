@@ -1,6 +1,15 @@
 <!DOCTYPE html>
 <!--
 ============================================================
+DASHBOARD ver.75
+============================================================
+PERUBAHAN ver.75 (request Denny, "floating tombol kirim rekap dan kotak preview, biar ga perlu
+scroll keatas kebawah"): kotak Daftar Antrian + tombol Kirim Rekap di tab Proses & QC sekarang
+jadi dock nempel permanen di bawah layar (pola sama kayak bar Write-off massal) - caption +
+tombol Kirim selalu kelihatan tanpa perlu scroll ke atas, kotak preview detail collapsed by
+default, tap caption-nya buat expand/collapse.
+Riwayat lengkap: git log.
+============================================================
 DASHBOARD ver.74
 ============================================================
 PERUBAHAN ver.74 (request Denny, "detail hpp per pekerjaan seperti di tab proses, agar tau
@@ -425,12 +434,18 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .section-label { font-size: 12px; color: var(--gray-label); font-weight: 700; letter-spacing: 0.5px; margin: 14px 0 8px; }
 
   .empty-box { border: 1px dashed var(--border); border-radius: 14px; padding: 16px; color: var(--gray-text); font-size: 13px; text-align: center; margin-bottom: 12px; }
-  .btn-kirim-rekap { background: var(--indigo); color: #fff; border: none; border-radius: 12px; padding: 12px 20px; font-weight: 700; font-size: 14px; cursor: pointer; width: 100%; margin-bottom: 12px; }
+  .btn-kirim-rekap { background: var(--indigo); color: #fff; border: none; border-radius: 10px; padding: 10px 16px; font-weight: 700; font-size: 13px; cursor: pointer; flex-shrink: 0; }
   .btn-kirim-rekap:disabled { background: #b9c0e8; cursor: default; }
   .status-bar { background: var(--navy-dark); color: #fff; border-radius: 12px; padding: 14px 16px; font-size: 13px; margin-bottom: 14px; }
 
-  .antrian-caption { font-size: 12px; color: var(--gray-text); margin-bottom: 8px; }
-  .preview-rekap-box { background: var(--navy-dark); color: #fff; border-radius: 12px; padding: 14px 16px; font-size: 13px; margin-bottom: 14px; }
+  /* v.75: DAFTAR ANTRIAN direstrukturisasi jadi dock nempel-bawah (request Denny, "floating
+     tombol kirim rekap dan kotak preview, biar ga perlu scroll"), pola sama kayak
+     .bar-pilih-massal - lihat .antrian-dock/.antrian-bar. */
+  .antrian-dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 998; display: flex; flex-direction: column; }
+  .antrian-bar { background: #1c1c1e; color: #fff; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); display: flex; align-items: center; justify-content: space-between; gap: 10px; box-shadow: 0 -2px 10px rgba(0,0,0,0.2); }
+  .antrian-caption { font-size: 13px; font-weight: 700; flex: 1; min-width: 0; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  body.antrian-aktif { padding-bottom: 90px; }
+  .preview-rekap-box { background: var(--navy-dark); color: #fff; border-radius: 14px 14px 0 0; padding: 14px 16px; font-size: 13px; max-height: 50vh; overflow-y: auto; }
   .preview-rekap-box .judul { font-weight: 700; margin-bottom: 10px; }
   .preview-rekap-box .item { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
   .preview-rekap-box .item:last-child { margin-bottom: 0; }
@@ -792,13 +807,12 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
 
   <!-- ============ TAB: PROSES & QC ============ -->
   <div id="tabQC">
-    <div id="antrianSection" style="display:none">
-      <div class="section-label">DAFTAR ANTRIAN</div>
-      <div id="antrianIsiWrap">
-        <p class="antrian-caption" id="antrianCaption"></p>
-      </div>
-      <button class="btn-kirim-rekap" id="btnKirimRekap" disabled>🚀 Kirim Rekap (0)</button>
+    <div class="antrian-dock" id="antrianSection" style="display:none">
       <div class="preview-rekap-box" id="antrianPreviewBox" style="display:none"></div>
+      <div class="antrian-bar">
+        <span class="antrian-caption" id="antrianCaption"></span>
+        <button class="btn-kirim-rekap" id="btnKirimRekap" disabled>🚀 Kirim Rekap (0)</button>
+      </div>
     </div>
 
     <input type="text" class="search-box" id="searchLaporan" placeholder="Cari laporan/warna...">
@@ -1041,6 +1055,7 @@ if (tg && tg.initData) {
 
 let daftarLaporanData = [];
 let antrianQC = []; // [{timPotongId, mode, ringkas, rincian, preview}]
+let antrianPreviewTerbuka = false; // v.75: kotak preview di dock sekarang collapsed by default, tap caption utk expand
 let filterKategori = 'semua';
 let sortLaporan = 'baru'; // v.11: default sekarang tanggal terbaru dulu, "Paling lama" jadi opsi toggle
 let searchQuery = '';
@@ -1664,19 +1679,23 @@ function renderAntrian() {
   if (antrianQC.length === 0) {
     section.style.display = 'none';
     previewBox.style.display = 'none';
+    document.body.classList.remove('antrian-aktif');
+    antrianPreviewTerbuka = false;
     btnKirim.textContent = '🚀 Kirim Rekap (0)';
     btnKirim.disabled = true;
     return;
   }
 
-  section.style.display = 'block';
-  caption.textContent = antrianQC.length + ' laporan menunggu dikirim';
+  section.style.display = 'flex';
+  document.body.classList.add('antrian-aktif');
+  caption.textContent = antrianQC.length + ' laporan menunggu dikirim' + (antrianPreviewTerbuka ? ' ▾' : ' ▸');
 
   btnKirim.textContent = '🚀 Kirim Rekap (' + antrianQC.length + ')';
   btnKirim.disabled = false;
 
-  // v.11: gak ada lagi kartu putih terpisah di atas - hapus item sekarang langsung dari box
-  // preview gelap ini, tiap baris dikasih tombol ✕ sendiri.
+  // v.75: preview cuma dirender/ditampilkan kalau lagi di-expand (tap caption) - dock-nya sendiri
+  // (bar caption + tombol kirim) tetap selalu kelihatan nempel di bawah layar.
+  if (!antrianPreviewTerbuka) { previewBox.style.display = 'none'; return; }
   previewBox.style.display = 'block';
   previewBox.innerHTML = '<div class="judul">📋 REKAP UPDATE QC (' + antrianQC.length + ' laporan)</div>' +
     antrianQC.map(function (a, i) {
@@ -1695,6 +1714,11 @@ function renderAntrian() {
     el.addEventListener('click', function () { hapusDariAntrian(parseInt(el.dataset.hapusantrian, 10)); });
   });
 }
+
+document.getElementById('antrianCaption').addEventListener('click', function () {
+  antrianPreviewTerbuka = !antrianPreviewTerbuka;
+  renderAntrian();
+});
 
 document.getElementById('btnKirimRekap').addEventListener('click', function () {
   if (!tg || !tg.initData) { tampilkanToast('Harus dibuka lewat Telegram.'); return; }
