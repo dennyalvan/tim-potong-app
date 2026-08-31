@@ -1,214 +1,11 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.67
+// CODE WORKER PRODUKSI ver.68
 // ============================================================
-// PERUBAHAN ver.67 (fix bug, request Denny - screenshot Riwayat Pemakaian roll 1842 nampilin
-// label "NAVY" doang, seharusnya "LT NAVY CREAM"): kurangiStokKain_ sekarang punya parameter
-// terpisah namaTampilan buat item_produksi (label di Riwayat Pemakaian) - beda dari itemName
-// yang tetap warna tunggal buat matching stok (fix ver.66 gak berubah). Berlaku buat badan &
-// tangan Kombinasi. Data lama tim_potong id=1049 (log_pemakaian_kain id=555) dikoreksi manual
-// dari "NAVY" ke "LT NAVY CREAM".
-// ============================================================
-// CODE WORKER PRODUKSI ver.66
-// ============================================================
-// PERUBAHAN ver.66 (fix bug, request Denny - laporan "LT NAVY CREAM roll 1842 gak ketemu PERSIS
-// di stok_kain"): badan item Kombinasi sekarang dipotong pakai warna PERTAMA-nya doang ("NAVY"),
-// bukan nama gabungan badan+tangan ("NAVY CREAM") yang cuma buat tampilan/nama item. Bug ini
-// bikin potong stok badan kombinasi SELALU gagal ketemu roll kecuali warna badan & tangan
-// pertama kebetulan sama. Data tim_potong id=1049 yang kena bug ini kg badannya (4.57kg,
-// roll 1842) BELUM terpotong dari stok - nunggu arahan Denny mau dikoreksi manual atau enggak.
-// ============================================================
-// CODE WORKER PRODUKSI ver.65
-// ============================================================
-// PERUBAHAN ver.65 (request Denny, ketemu dari screenshot nota FOCUS yang kesimpen sebagai
-// supplier "NOTA FOCUS"): fix bug caption foto nota - kata pemicu "nota" sekarang dibuang dulu
-// dari caption sebelum dipakai sebagai override nama supplier, jadi caption "nota focus"
-// hasilnya bersih "FOCUS" bukan "NOTA FOCUS". Data lama (4 baris stok_kain id 1050-1053) yang
-// kena bug ini dikoreksi manual ke Supabase.
-// ============================================================
-// CODE WORKER PRODUKSI ver.64
-// ============================================================
-// PERUBAHAN ver.64 (request Denny): batalkan ver.63 - caption foto balik cuma nerima kata
-// "nota" lagi, kata "focus" dicabut sebagai pemicu.
-// ============================================================
-// CODE WORKER PRODUKSI ver.63
-// ============================================================
-// PERUBAHAN ver.63 (request Denny): caption foto yang memicu fitur baca nota otomatis sekarang
-// nerima kata "focus" juga, gak cuma "nota" - jadi foto nota dari supplier FOCUS bisa dikirim
-// dengan caption "focus" langsung tanpa perlu kata "nota".
-// ============================================================
-// CODE WORKER PRODUKSI ver.62
-// ============================================================
-// PERUBAHAN ver.62 (request Denny, "detail per pekerjaan seperti di tab proses"): /data/hpp
-// sekarang ikut balikin pemakaianKg per laporan - dipakai buat kartu detail per pekerjaan (expand
-// per varian) di tab HPP > Biaya. Kode roll sengaja gak ditambahin (request Denny).
-// ============================================================
-// CODE WORKER PRODUKSI ver.61
-// ============================================================
-// PERUBAHAN ver.61 (request Denny, "tampilkan detail perbandingan...biar saya paham kenapa itu
-// bisa terjadi"): /data/akurasi-estimasi sekarang ikut balikin rincianUkuran (breakdown qty x
-// standar = subtotal per ukuran, bukan cuma total kg estimasi) + kodeRoll - dipakai buat detail
-// expand di tab Akurasi Estimasi. Fix sekalian: kode_roll kelupaan gak ke-select (jadi selalu
-// null sebelum fix ini).
-// ============================================================
-// CODE WORKER PRODUKSI ver.60
-// ============================================================
-// PERUBAHAN ver.60 (2 request Denny):
-// 1. Preview nota (foto struk kain, sebelum tap Konfirmasi) sekarang ikut nampilin harga per kg
-//    (+diskon kalau ada) yang udah dibaca AI - sebelumnya cuma warna/kg/kode roll yang kelihatan,
-//    harga gak bisa dicek/dikoreksi sebelum kesimpan.
-// 2. Endpoint baru /data/akurasi-estimasi (admin-only) - bandingkan kg AKTUAL (laporan "Pakai
-//    Habis") vs kg ESTIMASI (rumus standar_pemakaian), termasuk item Kombinasi (badan+tangan
-//    dihitung terpisah, masing2 status Pakai Habis-nya sendiri). Tujuannya nambah akurasi
-//    standar_pemakaian dari waktu ke waktu pakai data produksi nyata.
-// ============================================================
-// CODE WORKER PRODUKSI ver.59
-// ============================================================
-// PERUBAHAN ver.59 (request Denny): placeholder kode roll "0" / "-" / kosong di alur "Masuk ..."
-// (teks, foto nota, endpoint internal) sekarang KONSISTEN disimpan NULL beneran ke stok_kain
-// (sebelumnya "-" tersimpan sebagai teks literal - ketemu 2 baris lama kena ini, sudah dibersihkan
-// manual). Ditambah: baris "Masuk" yang CUMA angka kg doang tanpa "/" (mis. "12.0") sekarang bener
-// dikenali sebagai kg TANPA kode roll - sebelumnya salah kena tangkep sebagai pergantian nama
-// warna baru. Cara ketik tim gak berubah sama sekali, ini murni perbaikan di sisi parsing/insert.
-// ============================================================
-// CODE WORKER PRODUKSI ver.58
-// ============================================================
-// PERUBAHAN ver.58 (request Denny, "arsip selesai tampilkan detail juga seperti stok kain
-// habis"): /data/arsip-selesai sekarang ikut balikin breakdown per ukuran (qty/selesai/reject),
-// pemakaianKainKg, varian - sebelumnya cuma jenisWarnaBaju/jumlah/kodeRoll/tanggal. Reuse PERSIS
-// logic yang sama kayak handleDaftarLaporanQC_ (cariKategoriQC_, kolomKeUkuran_,
-// parseRejectNotasi_), diterapkan ke baris arsip_selesai.
-// ============================================================
-// CODE WORKER PRODUKSI ver.57
-// ============================================================
-// PERUBAHAN ver.57 (3 request Denny):
-// 1. /data/laporan-qc sekarang ikut balikin field "varian" per laporan (sebelumnya cuma
-//    kategoriBadge Anak/Dewasa) - datanya udah dihitung dari cariKategoriQC_, cuma belum ikut
-//    di-passing. Dipakai buat sort "Varian A-Z" di dashboard tab Proses & QC.
-// 2. /data/stok-habis sekarang cuma balikin roll yang PUNYA history pemakaian produksi (hide
-//    yang tanpa history), udah ke-sort dari yang PALING BARU habis, plus "terakhir"
-//    {tanggal, status} per roll. /data/riwayat-pemakaian-kain ikut nambah field "status" per
-//    entri (dipakai bareng di panel riwayat roll aktif juga).
-// 3. Endpoint baru /data/hpp (admin-only) - biaya kain + jahit per laporan, basis SEMUA pcs yang
-//    DIPOTONG (bukan cuma yang selesai QC). Data belum lengkap (harga roll/tarif jahit kosong)
-//    ditandai kainLengkap/jahitLengkap false, bukan disembunyikan/digenapin ke 0.
-// ============================================================
-// CODE WORKER PRODUKSI ver.55
-// ============================================================
-// PERUBAHAN ver.55 (fix bug, request Denny): "RINGER" (kode item Ringer ANAK, beda dari Dewasa
-// yang "RING") ditambahkan ke KODE_GAYA_BUKAN_WARNA_ - sebelumnya cuma "RING" yang ada, jadi
-// item Ringer Anak (sekarang dientry lewat alur item tunggal biasa di index.html ver.40, mis.
-// "RINGER BIRU MUDA") bakal gagal cocok stok persis kayak bug "IJO BOTOL" ver.52 (kata "RINGER"
-// ikut kebawa jadi bagian pencarian warna, bukan cuma "BIRU MUDA").
-// ============================================================
-// CODE WORKER PRODUKSI ver.54
-// ============================================================
-// PERUBAHAN ver.54 (request Denny): RINGER DEWASA (kodeItem "RING") - warna KE-2 di namanya
-// (mis. "NAVY" di "MUSTARD NAVY") BUKAN kain, cuma nama aksesoris rib - gak diambil dari stok
-// kain sama sekali. Namanya TETAP 2 kata (buat identifikasi), tapi refStok (potong stok
-// terpisah) di-skip buat slot itu. RINGER ANAK (kodeItem "RINGER") BELUM dikecualikan - beda
-// kode item, request Denny khusus Dewasa doang.
-// ============================================================
-// CODE WORKER PRODUKSI ver.53
-// ============================================================
-// PERUBAHAN ver.53 (2 request Denny, buntut investigasi kejadian roll IJO BOTOL/DUSTY/HITAM
-// ONYX kepakai 2x - anti-duplikat gagal deteksi gara-gara beda format kecil yang gak disengaja):
-// 1. kg SELALU dinormalisasi ke 2 desimal SEBELUM fingerprint anti-duplikat dihitung - "25.3" &
-//    "25.30" (nilai sama, teks beda) sekarang dianggap identik, gak akan pernah lolos anti-
-//    duplikat lagi gara-gara beda format doang.
-// 2. Kalau kgSumber kosong (checkbox "Pakai Habis" kelupaan gak dicentang) TAPI kg-nya PERSIS
-//    sama kayak kg_sisa roll yang kodenya cocok, kgSumber otomatis di-set "Pakai Habis" - baik
-//    buat fingerprint maupun kolom sumber_kg yang kesimpen (konsisten, bukan trik doang).
-// Fungsi baru: normalisasiKgDanPakaiHabis_(), dipanggil di awal handleSubmitProduksi_ SEBELUM
-// fingerprint dihitung. CATATAN JUJUR: utk kasus roll yang STOKNYA UDAH KEPALANG HABIS duluan
-// (submission kedua yang genuinely duplikat), poin 2 gak bisa retroaktif nebak "ini harusnya
-// Pakai Habis" karena roll itu udah gak match kg_sisa>0 lagi di query - pertahanan utama buat
-// skenario itu tetap di index.html ver.35 (blokir submit kalau kg > kg_sisa yang KETAHUAN saat
-// itu). Poin 1 (normalisasi kg) tetap berlaku penuh terlepas dari kondisi stok.
-// ============================================================
-// CODE WORKER PRODUKSI ver.52
-// ============================================================
-// PERUBAHAN ver.52 (2 request Denny):
-// 1. Fix bug: kurangiStokKain_ SEBELUMNYA cuma ambil kata PERTAMA dari nama item yang tersisa
-//    setelah kode gaya (ANAK/PJ/RFL dst) dibuang - patah buat warna 2 kata+ (mis. "ANAK IJO
-//    BOTOL" -> tersisa "IJO BOTOL", tapi cuma "IJO" yang dipakai). "IJO" doang gak ketemu di
-//    kamus_sinonim_warna (yang ada "IJO BOTOL"), jadi gak ke-expand ke sinonim "HIJAU BOTOL"
-//    (nilai ASLI yang tersimpan di stok_kain) - exact match gagal walau rollnya beneran ada &
-//    user udah pilih dari daftar saran. Sekarang gabungkan SEMUA kata warna yang tersisa jadi 1
-//    frasa (ekstrakKataWarna_ udah nyaring kode gaya, sisanya emang warna).
-// 2. Icon gunting (✂️) di baris ukuran notifikasi Telegram dihapus.
-// ============================================================
-// CODE WORKER PRODUKSI ver.51
-// ============================================================
-// PERUBAHAN ver.51 (fix bug, request Denny): totalKg per-warna di /data/stok-utuh SEBELUMNYA
-// dibulatkan ke 1 desimal (Math.round(x*10)/10) di server, padahal kg per-roll di dalam array
-// `rolls`-nya TETAP presisi penuh (gak dibulatkan) - kalau 1 warna cuma punya 1 roll, angka di
-// card (dibulatkan, mis. "25,1 kg") jadi beda kelihatan sama detail roll pas dibuka (presisi
-// asli, mis. "25,06 kg"). Pembulatan manual di server dihapus - formatAngka() di frontend udah
-// otomatis ngasih maks 2 desimal, jadi gak perlu dibulatkan lagi sebelumnya. totalKg GRAND TOTAL
-// (semua warna) SENGAJA TETAP dibulatkan 1 desimal (beda kasus - itu angka ringkasan besar, gak
-// ada "detail" 1:1 yang perlu dicocokkan kayak per-warna).
-// ============================================================
-// CODE WORKER PRODUKSI ver.50
-// ============================================================
-// PERUBAHAN ver.50 (request Denny): Rekap QC - varian (mis. "RUFFLE") pindah dari baris sendiri
-// ke baris yang sama dengan nama/kode roll, dipisah " - ". Contoh:
-//   RFL MERAH (0132) - RUFFLE
-//   S 18 | M 36 | L 43 | XL 36 | XXL 36
-//   Total: 169
-// Underline (& bold) varian TETAP dipertahankan, cuma posisinya pindah.
-// ============================================================
-// CODE WORKER PRODUKSI ver.49
-// ============================================================
-// PERUBAHAN ver.49 (request Denny, ubah format notifikasi Telegram): (1) Hasil Cutting - emoji
-// baris ukuran 📎->✂️, format ukuran "S18, M36 = 169" -> "S 18 | M 36" (spasi, pemisah " | "),
-// Total dipisah jadi baris sendiri. (2) Rekap QC - baris ukuran yang tadinya 1 baris per ukuran
-// (vertikal) sekarang 1 baris horizontal dipisah " | ", sama pola kayak Hasil Cutting. Header
-// status kedua notifikasi (✅ Hasil Cutting / ✅ LENGKAP 👍 / 🔴 BELUM LENGKAP) TIDAK berubah.
-// ============================================================
-// CODE WORKER PRODUKSI ver.48
-// ============================================================
-// PERUBAHAN ver.48 (request Denny): fitur Write-off Manual (per-roll) di modal Edit Stok Kain
-// diganti jadi Stock Opname - handleEditStokKain_ sekarang terima kgSisaBaru opsional (hasil
-// hitung fisik langsung, bukan "kg yang mau dikurangi"), backend yang ngitung delta & sesuaikan
-// kg_terpakai (boleh naik/turun). Dicatat ke log_writeoff_kain (dipakai ulang sebagai riwayat
-// penyesuaian, kg sekarang boleh negatif = opname ketemu lebih banyak dari sistem). Endpoint
-// /data/writeoff-kain & /data/batal-writeoff (dipakai fitur Write-off Massal, TIDAK disentuh)
-// tetap ada, tidak berubah. Sengaja gak nyentuh tim_potong/log_pemakaian_kain sama sekali -
-// opname murni koreksi stok fisik, bukan event produksi.
-// ============================================================
-// CODE WORKER PRODUKSI ver.47
-// ============================================================
-// PERUBAHAN ver.47 (fix bug, request Denny): root cause "Varian kosong di Rekap QC" buat item
-// warna polos tanpa prefix (mis. "MERAH") - fallback tanpa-prefix di cariKategoriQC_/
-// ambilDaftarPrefixQC_ SEBELUMNYA cuma nyimpen string kategori_qc doang, BUKAN baris lengkapnya,
-// jadi hasil fallback kehilangan field varian sama sekali (kategori ketemu "ANAK PENDEK", tapi
-// varian-nya hilang - akhirnya log_qc.varian tersimpan null). Sekarang nyimpen baris lengkap
-// (kategoriQc + varian), DIKECUALIKAN baris yang varian-nya mengandung "KOMBINASI" (butuh
-// cocokin ke tabel kombinasi_warna terpisah yang gak dicek fungsi ini) - biar warna polos biasa
-// kayak MERAH gak ketebak salah jadi kategori kombinasi. Hasilnya: MERAH & sejenisnya sekarang
-// resolve ke varian "ANAK POLOS" (kategori ANAK PENDEK). CUMA berlaku ke submit QC BARU - data
-// historis yang sudah kepalang null gak otomatis ke-backfill (didiskusikan terpisah sama Denny).
-// ============================================================
-// CODE WORKER PRODUKSI ver.46
-// ============================================================
-// PERUBAHAN ver.46 (request Denny): handleSubmitProduksi_ sekarang nyimpen sumber kg (manual/
-// "Pakai Habis"/"Pakai Estimasi") ke kolom baru tim_potong.sumber_kg - dikirim dari Mini App
-// lewat payload.kgSumber (item tunggal), payload.kombinasi.kgSumber[] (kombinasi, per slot -
-// slot 1/2 disimpan di dalam ref_stok.sumberKg), atau payload.kgSumber1/kgSumber2 (custom).
-// Ini GANTI dari sebelumnya nampilin "[Pakai Habis]"/"[Estimasi]" di teks Telegram - sekarang
-// keterangan itu cuma di antrian Mini App & kolom database ini, gak lagi masuk pesan Telegram.
-// ============================================================
-// CODE WORKER PRODUKSI ver.45
-// ============================================================
-// PERUBAHAN ver.45: fix bug FUNDAMENTAL di fitur "Riwayat Pemakaian" (dashboard) - dibuktikan
-// langsung ke Supabase (Denny lapor screenshot: STEEL BLUE roll 1608 & MUSTARD roll 1863
-// nampilin "kg awal estimasi" >40kg padahal kg_terpakai KEDUANYA = 0.00 di database, riwayat yang
-// tampil sebenarnya milik roll LAIN). Root cause: kode_roll TERNYATA gak unik sama sekali - query
-// pembuktian nemu kode "7046" dipakai 10 roll MERAH BERBEDA sekaligus, "0002" dipakai HITAM &
-// COKLAT bareng, dst. Endpoint lama /data/export-tim-potong (filter teks kode_roll, ver.48
-// sempat ditambah cek warna) gak akan PERNAH 100% benar selama itu masih text-matching. Endpoint
-// baru GET /data/riwayat-pemakaian-kain - sumbernya log_pemakaian_kain (stok_kain_id = FK asli
-// ke stok_kain.id, gak mungkin salah karena itu row database, bukan ketikan bebas).
+// PERUBAHAN ver.68 (request Denny): Dashboard QC (Proses & QC, Rekap QC, Arsip Selesai, HPP
+// Akurasi Estimasi) sekarang nampilin nama warna kanonik (mis. "STEEL BLUE" bukan "ST BLUE"),
+// via fungsi baru formatNamaKanonikTampilan_ - data asli di tim_potong/log_qc TIDAK diubah, cuma
+// tampilannya. Item KOMBINASI (dicek lewat ref_stok/varian) SENGAJA dilewatin apa adanya - nama
+// kombinasi (mis. "STEEL NAVY") tetap ditampilkan persis, gak dipecah jadi "STEEL BLUE NAVY".
 //
 // Riwayat versi lengkap: git log.
 //
@@ -1028,19 +825,23 @@ async function handleRekapQC_(env, hari) {
     const path = '/rest/v1/log_qc?select=id,waktu,tim_potong_id,varian,warna,' +
       Object.values(KOLOM_UKURAN_MAP).join(',') + ',reject,total,status' +
       '&status=eq.aktif&waktu=gte.' + encodeURIComponent(batasWaktu) + '&order=waktu.desc';
-    const rows = await ambilDariSupabase_(env, path);
+    const [rows, petaKanonik] = await Promise.all([
+      ambilDariSupabase_(env, path),
+      ambilPetaWarnaKanonik_(env)
+    ]);
 
     const hasil = rows.map(function (r) {
       const ukuranObj = kolomKeUkuran_(r);
       const perUkuran = Object.keys(ukuranObj).map(function (u) { return { ukuran: u, selesai: ukuranObj[u] }; });
       const rejectObj = parseRejectNotasi_(r.reject);
       const rejectTotal = Object.values(rejectObj).reduce(function (s, v) { return s + v; }, 0);
+      const isKombinasi = String(r.varian || '').toUpperCase().indexOf('KOMBINASI') !== -1;
       return {
         id: r.id,
         waktu: r.waktu,
         timPotongId: r.tim_potong_id,
         varian: r.varian,
-        warna: r.warna,
+        warna: isKombinasi ? r.warna : formatNamaKanonikTampilan_(r.warna, petaKanonik),
         perUkuran: perUkuran,
         reject: r.reject,
         rejectTotal: rejectTotal,
@@ -1621,11 +1422,12 @@ async function handleArsipSelesai_(env, hari) {
     const batasWaktu = new Date(Date.now() - hari * 24 * 60 * 60 * 1000).toISOString();
     // PostgREST bisa "embed" data tim_potong terkait langsung dalam 1 request (lewat relasi FK
     // tim_potong_id -> tim_potong.id yang udah ada), jadi gak perlu 2x fetch terpisah.
-    const path = '/rest/v1/arsip_selesai?select=waktu,tim_potong(id,jenis_warna_baju,jumlah,kode_roll,tanggal,pemakaian_kain_kg,' + Object.values(KOLOM_UKURAN_MAP).join(',') + ')' +
+    const path = '/rest/v1/arsip_selesai?select=waktu,tim_potong(id,jenis_warna_baju,jumlah,kode_roll,tanggal,pemakaian_kain_kg,ref_stok,' + Object.values(KOLOM_UKURAN_MAP).join(',') + ')' +
       '&waktu=gte.' + encodeURIComponent(batasWaktu) + '&order=waktu.desc';
-    const [rows, daftarPrefix] = await Promise.all([
+    const [rows, daftarPrefix, petaKanonik] = await Promise.all([
       ambilDariSupabase_(env, path),
-      ambilDaftarPrefixQC_(env)
+      ambilDaftarPrefixQC_(env),
+      ambilPetaWarnaKanonik_(env)
     ]);
 
     if (rows.length === 0) return jsonResponse([]);
@@ -1649,6 +1451,7 @@ async function handleArsipSelesai_(env, hari) {
       const tp = r.tim_potong || {};
       const cocok = cariKategoriQC_(tp.jenis_warna_baju, daftarPrefix);
       const kategoriBadge = cocok ? String(cocok.kategoriQc).split(' ')[0] : '';
+      const isKombinasi = Array.isArray(tp.ref_stok) && tp.ref_stok.length > 0;
 
       const progresPerTP = agregasi[tp.id] || {};
       const ukuranAsliTP = kolomKeUkuran_(tp);
@@ -1663,7 +1466,7 @@ async function handleArsipSelesai_(env, hari) {
       return {
         waktu: r.waktu,
         timPotongId: tp.id || null,
-        jenisWarnaBaju: tp.jenis_warna_baju || null,
+        jenisWarnaBaju: tp.jenis_warna_baju ? (isKombinasi ? tp.jenis_warna_baju : formatNamaKanonikTampilan_(tp.jenis_warna_baju, petaKanonik)) : null,
         kategoriBadge: kategoriBadge,
         varian: cocok ? (cocok.varian || '') : '',
         jumlah: tp.jumlah || null,
@@ -1958,10 +1761,11 @@ async function handleAkurasiEstimasi_(body, env) {
   }
 
   try {
-    const [rowsTP, rowsPrefix, rowsStandar] = await Promise.all([
+    const [rowsTP, rowsPrefix, rowsStandar, petaKanonik] = await Promise.all([
       ambilDariSupabase_(env, '/rest/v1/tim_potong?select=id,tanggal,jenis_warna_baju,sumber_kg,pemakaian_kain_kg,kode_roll,ref_stok,' + Object.values(KOLOM_UKURAN_MAP).join(',')),
       ambilDariSupabase_(env, '/rest/v1/kategori_varian_produksi?select=kategori,label_varian,prefix_tele'),
-      ambilDariSupabase_(env, '/rest/v1/standar_pemakaian?select=*')
+      ambilDariSupabase_(env, '/rest/v1/standar_pemakaian?select=*'),
+      ambilPetaWarnaKanonik_(env)
     ]);
 
     const daftarPrefixSorted = rowsPrefix
@@ -1990,7 +1794,7 @@ async function handleAkurasiEstimasi_(body, env) {
         if (est !== null && est.kg > 0) {
           const kgAktual = parseFloat(tp.pemakaian_kain_kg) || 0;
           hasil.push({
-            timPotongId: tp.id, tanggal: tp.tanggal, jenisWarnaBaju: tp.jenis_warna_baju,
+            timPotongId: tp.id, tanggal: tp.tanggal, jenisWarnaBaju: adaKombinasi ? tp.jenis_warna_baju : formatNamaKanonikTampilan_(tp.jenis_warna_baju, petaKanonik),
             kategori: k.kategori, varian: k.varian, bagian: adaKombinasi ? 'Badan' : null,
             kodeRoll: tp.kode_roll || null,
             kgAktual: kgAktual, kgEstimasi: est.kg, rincianUkuran: est.rincian,
@@ -2008,7 +1812,7 @@ async function handleAkurasiEstimasi_(body, env) {
           if (est === null || est.kg <= 0) return;
           const kgAktual = parseFloat(rs.kg) || 0;
           hasil.push({
-            timPotongId: tp.id, tanggal: tp.tanggal, jenisWarnaBaju: tp.jenis_warna_baju,
+            timPotongId: tp.id, tanggal: tp.tanggal, jenisWarnaBaju: adaKombinasi ? tp.jenis_warna_baju : formatNamaKanonikTampilan_(tp.jenis_warna_baju, petaKanonik),
             kategori: k.kategori, varian: k.varian, bagian: 'Tangan' + (tp.ref_stok.length > 1 ? (idx === 0 ? ' Kanan' : ' Kiri') : ''),
             kodeRoll: rs.kodeRoll || null,
             kgAktual: kgAktual, kgEstimasi: est.kg, rincianUkuran: est.rincian,
@@ -2584,9 +2388,10 @@ function cariKategoriQC_(namaItem, info) {
 
 async function handleDaftarLaporanQC_(env) {
   try {
-    const [rowsTP, daftarPrefix] = await Promise.all([
+    const [rowsTP, daftarPrefix, petaKanonik] = await Promise.all([
       ambilDariSupabase_(env, '/rest/v1/tim_potong?select=*&status=neq.SELESAI&order=tanggal.asc,id.asc'),
-      ambilDaftarPrefixQC_(env)
+      ambilDaftarPrefixQC_(env),
+      ambilPetaWarnaKanonik_(env)
     ]);
 
     if (rowsTP.length === 0) return jsonResponse([]);
@@ -2611,6 +2416,7 @@ async function handleDaftarLaporanQC_(env) {
     const hasil = rowsTP.map(function (tp) {
       const cocok = cariKategoriQC_(tp.jenis_warna_baju, daftarPrefix);
       const kategoriBadge = cocok ? String(cocok.kategoriQc).split(' ')[0] : '';
+      const isKombinasi = Array.isArray(tp.ref_stok) && tp.ref_stok.length > 0;
 
       const progresPerTP = agregasi[tp.id] || {};
       const ukuranAsliTP = kolomKeUkuran_(tp);
@@ -2627,7 +2433,7 @@ async function handleDaftarLaporanQC_(env) {
         id: tp.id,
         tanggal: tp.tanggal,
         createdAt: tp.created_at,
-        jenisWarnaBaju: tp.jenis_warna_baju,
+        jenisWarnaBaju: isKombinasi ? tp.jenis_warna_baju : formatNamaKanonikTampilan_(tp.jenis_warna_baju, petaKanonik),
         kategoriBadge: kategoriBadge,
         varian: cocok ? (cocok.varian || '') : '',
         kodeRoll: tp.kode_roll,
@@ -3253,6 +3059,40 @@ async function ambilPetaWarnaKanonik_(env) {
     });
   });
   return peta;
+}
+
+// ============================================================
+// v.68 (request Denny) - samain tampilan nama warna ke kanonik di Dashboard QC (Proses & QC,
+// Rekap QC, Arsip Selesai, HPP Akurasi Estimasi), TANPA ubah data asli di tim_potong/log_qc
+// (biar deteksi kategori/KOMBINASI yang baca teks itu di tempat lain tetap jalan normal).
+// teks yang diproses gabungan kode item + warna (mis. "SET. ST BLUE"), BUKAN warna doang - jadi
+// gak bisa dicocokkan utuh kayak di stok_kain. Dicoba FRASA TERPANJANG dulu (maks 3 kata) baru
+// mundur ke lebih pendek - WAJIB urutan ini, soalnya ada sinonim kata tunggal yang beda arti dari
+// sinonim frasa (mis. "BLUE" sendirian = BENHUR, padahal "ST BLUE" 2 kata = STEEL BLUE) - kalau
+// dicoba kata-per-kata bakal salah ketuker.
+// SENGAJA gak dipanggil buat item KOMBINASI (dicek terpisah oleh pemanggil lewat ref_stok/varian)
+// - nama kombinasi (mis. "STEEL NAVY") itu identitas resmi dari tabel kombinasi_warna, bukan
+// ejaan warna tunggal yang perlu dibenerin.
+// ============================================================
+function formatNamaKanonikTampilan_(teks, petaKanonik) {
+  if (!teks) return teks;
+  const kata = String(teks).split(' ');
+  const hasil = [];
+  let i = 0;
+  while (i < kata.length) {
+    let cocok = false;
+    for (let span = Math.min(3, kata.length - i); span >= 1; span--) {
+      const kandidat = kata.slice(i, i + span).join(' ').toUpperCase();
+      if (petaKanonik[kandidat]) {
+        hasil.push(petaKanonik[kandidat]);
+        i += span;
+        cocok = true;
+        break;
+      }
+    }
+    if (!cocok) { hasil.push(kata[i]); i++; }
+  }
+  return hasil.join(' ');
 }
 
 async function handleWarnaKanonik_(env) {
