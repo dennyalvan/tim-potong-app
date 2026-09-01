@@ -1,295 +1,19 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.43
+HTML PRODUKSI (Supabase/testproduksi) - ver.44
 ============================================================
-PERUBAHAN ver.43 (request Denny, "aturan utama": tim potong cuma boleh input/pilih kain yang
-emang ada di stok):
-1. Kode roll yang gak ketemu di database sekarang BLOCKING (gak bisa ditambah ke antrian),
-   sebelumnya cuma warning kuning yang bisa di-skip. Kotak kode roll tetap bisa diketik (buat
-   filter/cari cepat di daftar saran), tapi cuma lolos kalau hasilnya persis sama salah satu
-   roll asli di database.
-2. Kode roll BOLEH dikosongkan (buat kain sisa tanpa nomor roll) - TAPI warna-nya sendiri tetap
-   wajib match ke stok yang beneran ada, gak bisa warna ngasal/typo asal kode rollnya kosong.
-Berlaku di semua mode (item biasa, Kombinasi, Ringer, Custom) - satu fungsi bersama
-cekKodeRollTakDikenal_ dipakai di semuanya. Validasi kg gak boleh lebih dari stok sudah lebih
-dulu blocking (gak ada perubahan di situ).
-Riwayat lengkap: git log.
-============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.42
-============================================================
-PERUBAHAN ver.42 (3 request Denny) -
-1. "Pakai Estimasi" sekarang JUGA butuh Kode Roll kepilih (proteksi sama kayak "Pakai Habis"
-   ver.41) - auto-isi kalau warna cuma 1 opsi roll, tolak (uncheck balik + toast) kalau 2+ opsi.
-   Diterapkan di mode item biasa DAN Kombinasi/Ringer per-slot. SEKALIAN nutup celah terkait:
-   itemBaruValid() sekarang JUGA verifikasi kodeRoll masih ada (bukan cuma flag estimasi) - jaga2
-   kalau warna diganti SETELAH checkbox dicentang (kodeRoll ikut reset tapi flag-nya nyangkut).
-2. Tombol "Salin Teks" dihapus dari layar hasil (setelah kirim) - beserta CSS .preview-actions
-   yang jadi yatim piatu.
-3. "Daftar Item (Siap Dikirim)" dipindah dari paling bawah form ke ATAS, sebelum tab ANAK/DEWASA
-   - langsung kelihatan tanpa scroll.
-Riwayat lengkap: git log.
-============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.41
-============================================================
-PERUBAHAN ver.41 (2 request Denny, root cause kejadian "RINGER BIRU MUDA" lolos ke antrian tanpa
-kg) -
-1. Fix bug validasi: itemBaruValid() SEBELUMNYA nganggep checkbox "Pakai habis" yang kecentang
-   (boolean doang) sebagai bukti kg udah keisi - padahal proses auto-isi kg-nya BISA GAGAL (mis.
-   kode roll belum dipilih & ambigu), jadi itemBaru.kg tetap kosong walau pakaiHabis=true, tapi
-   TETAP lolos validasi. Syarat "|| itemBaru.pakaiHabis" dihapus - sekarang yang menentukan valid
-   HARUS hasil akhir (kg beneran terisi), bukan status checkbox-nya doang.
-2. "Pakai Habis" sekarang bisa bekerja meski Kode Roll belum dipilih eksplisit, SELAMA warna itu
-   cuma punya 1 (SATU) opsi roll di stok (termasuk yang kode_roll-nya "-"/kosong - kain sisa
-   potongan yang gak dilacak per-nomor) - gak ada ambiguitas kalau cuma 1 opsi, "verifikasi lapis
-   2 nya di nama warna dan kg" (kata2 Denny persis). Kalau ada 2+ opsi atau 0 opsi, checkbox
-   di-uncheck balik + toast jelas kenapa (BUKAN dibiarkan kecentang-tapi-kosong). Fungsi baru:
-   cariRollTunggalUntukWarna_(). Diterapkan di mode item biasa DAN Kombinasi/Ringer slot 0
-   (perlakuan sama, sesuai instruksi Denny).
-Riwayat lengkap: git log.
-============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.40
-============================================================
-PERUBAHAN ver.40 (request Denny) -
-1. Label "(BADAN)" ditambahkan ke warna pertama, "(RIB)" ke warna kedua - di chips & judul
-   section "Kg + Kode Roll" alur Ringer Dewasa.
-2. Ringer ANAK SEMENTARA dipindah dari alur kombinasi-2-warna ke alur ITEM TUNGGAL biasa (persis
-   kayak "Anak Pendek Polos" - 1 Warna berlabel "(Badan)", 1 Kg+Kode Roll, checkbox Pakai habis/
-   Pakai Estimasi yang emang udah ada) - kombinasi warna Ringer Anak (badan+rib) belum
-   ditentukan, jadi daripada gak bisa diinput sama sekali. Dilakukan dengan bikin isVarianRinger()
-   kategori-aware (true cuma kalau kategoriAktif==='Dewasa') - fungsi ini dipakai di 4 titik
-   render/validasi/hitung-estimasi sekaligus, jadi 1 perubahan ini otomatis konsisten di semuanya.
-   Ringer Dewasa TIDAK berubah perilakunya sama sekali.
-Riwayat lengkap: git log.
-============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.39
-============================================================
-PERUBAHAN ver.39 (2 request Denny) -
-1. Checkbox "Pakai Estimasi" ditambahkan ke alur Ringer (SEBELUMNYA gak ada sama sekali, beda
-   dari Kombinasi 3 Warna yang udah punya) - cuma di slot 0 (badan), karena standar pemakaian
-   Ringer di database cuma 1 angka TOTAL (posisi NULL), beda dari Kombinasi yang kepisah
-   badan/tangan. Jalur hitungnya dipisah dari Kombinasi biasa di handler Tambah.
-2. RINGER DEWASA (kodeItem "RING") - slot warna 1+ (mis. "NAVY" di "MUSTARD NAVY") BUKAN kain,
-   cuma nama aksesoris rib - kotak Kg+Kode Roll buat slot itu dihilangkan dari tampilan, dan
-   itemBaruValid() gak lagi wajibkan kg terisi di situ (warna tetap wajib, buat penamaan).
-   RINGER ANAK (kodeItem "RINGER") BELUM dikecualikan - nunggu konfirmasi Denny.
-Riwayat lengkap: git log.
-============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.38
-============================================================
-PERUBAHAN ver.38 (request Denny): kombinasi warna Ringer ANAK dipisah dari Ringer DEWASA -
-SEBELUMNYA renderWarnaRingerSection() makai RING_WARNA_LIST (8 kombinasi tetap) yang sama buat
-SEMUA kategori, jadi Ringer Anak ikut numpang daftar kombinasi Dewasa padahal belum ditentukan
-sama sekali. Konstanta baru RING_WARNA_LIST_ANAK sengaja dikosongkan dulu - dropdown-nya nampilin
-pesan "belum ditentukan - hubungi admin" (bukan daftar kosong polos/nyasar ke punya Dewasa).
-Tinggal isi array-nya begitu kombinasi Ringer Anak udah fix.
-Riwayat lengkap: git log.
-============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.37
-============================================================
-PERUBAHAN ver.37 (request Denny): label tombol kirim - "Kirim ke Telegram" -> "Kirim Telegram",
-icon pesawat 🛫 -> roket 🚀.
-Riwayat lengkap: git log.
-============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.36
-============================================================
-PERUBAHAN ver.36 (request Denny): "Buat Teks" + "Kirim ke Telegram" (2 langkah terpisah - tap
-Buat Teks dulu buat lihat layar review, baru tap Kirim ke Telegram di layar itu) DIGABUNG jadi 1
-tap langsung di tombol bar bawah - "tidak perlu tombol buat text". Tombol "Kembali Edit" (buat
-batal dari layar review) ikut dihapus - gak relevan lagi karena gak ada lagi layar review sebelum
-kirim. previewScreen sekarang MURNI layar HASIL (muncul SETELAH berhasil terkirim, bukan sebelum)
-- "Salin Teks" tetap ada di situ (buat nyalin catatan APA yang barusan dikirim). Tombol bar bawah
-warnanya diganti hijau (var(--green), semantik "kirim") - sebelumnya navy netral.
-Riwayat lengkap: git log.
-============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.35
-============================================================
-PERUBAHAN ver.35 (request Denny): blokir TOTAL (bukan cuma peringatan) kalau kode roll yang
-diketik/dipilih DIKENAL tapi kg sisa-nya kurang dari kg yang diminta - "Tambah ke Antrian" gak
-bisa dipencet sampai dibetulkan. Beda dari peringatan "kode roll gak dikenal" (ver.33, itu TETAP
-boleh lanjut - kasusnya beda, bisa jadi cuma belum ke-input ke sistem). Latar belakang: kejadian
-nyata - roll yang sama kepakai 2x gara-gara resubmit antrian lama yang rollnya udah keburu habis
-duluan, sistem cuma ngasih peringatan pas submit (bukan dicegah dari awal). Diterapkan di SEMUA
-3 mode input (item biasa/Kombinasi-Ringer/Custom): live tiap kg/kode-roll berubah, pas pilih dari
-saran, DAN dicek ulang fresh sebagai gerbang final di itemBaruValid() + setelah kg "Pakai Estimasi"
-selesai dihitung (kg-nya baru diketahui belakangan, gak bisa dicek di awal). Fungsi baru:
-semuaRollCukup_(). cekKodeRollTakDikenal_() sekarang return true/false (dulunya gak return apa2).
-Riwayat lengkap: git log.
-============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.34
-============================================================
-PERUBAHAN ver.34 (request Denny): styling "Kg + Kode Roll" (Kombinasi 3 Warna/Ringer/Custom)
-dibikin nyambung kayak sel tabel Excel - garis pemisah vertikal antara kolom Kg & Kode Roll
-(sebelumnya cuma gap kosong tanpa pembeda, susah dibedain kalau banyak baris warna sekaligus).
-Murni CSS (.sub-fields/.kg-mini/.roll-mini-input), warna border/background tetap konsisten sama
-yang sudah ada di app (var(--bg)/var(--border)), gak ada elemen/warna baru. 1 perubahan CSS ini
-otomatis kepakai di ketiga mode karena class-nya sama.
-Riwayat lengkap: git log.
-============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.33
-============================================================
-PERUBAHAN ver.33 (request Denny, sesi lanjutan STANDAR PEMAKAIAN KAIN): peringatan (BUKAN blokir
-- tetap boleh lanjut) kalau kode roll yang DIKETIK MANUAL gak ketemu di database kain (stokRollData)
-buat warna yang lagi kepilih. Dicek pas blur field (bukan tiap keystroke, biar gak nge-flash
-pas masih setengah ngetik), exact-match case-insensitive. Milih dari daftar saran (klik) SENGAJA
-gak kena peringatan ini sama sekali (udah pasti valid). Berlaku di semua 3 mode input roll: item
-biasa (rollWarningInfo), Kombinasi 3 Warna & Ringer (rollWarning-<idx>), Custom (crollWarning-<idx>).
-Fungsi baru: cekKodeRollTakDikenal_().
-Riwayat lengkap: git log.
-============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.32
-============================================================
-PERUBAHAN ver.32 (request Denny): keterangan sumber kg ("[Pakai Habis]"/"[Estimasi]") SEKARANG
-CUMA di antrian Mini App (referensi internal), DIHAPUS dari teks yang di-generate buat kirim ke
-Telegram. Sebagai gantinya, sumber kg dikirim ke backend lewat payload (kgSumber utk item
-tunggal & custom slot 1, kgSumber array utk kombinasi tiap slot, kgSumber1/kgSumber2 utk custom)
-buat disimpan permanen di kolom baru tim_potong.sumber_kg (lihat CODE WORKER PRODUKSI ver.46).
-Riwayat lengkap: git log.
-============================================================
-============================================================
-
-HTML PRODUKSI (Supabase/testproduksi) - ver.31
-============================================================
-PERUBAHAN ver.31 (request Denny): (1) Kg Kain Terpakai sekarang WAJIB keisi lewat salah satu
-cara sebelum bisa Tambah ke antrian - manual, "Pakai habis", atau "Pakai Estimasi" (sebelumnya
-boleh kosong sama sekali, sekarang toast peringatan muncul & gak lanjut kalau belum ada
-caranya). (2) Deskripsi item di antrian & teks laporan sekarang nampilin keterangan asal kg-nya
-- "[Pakai Habis]" atau "[Estimasi]" nempel di belakang angka kg, biar kelihatan mana yang manual
-vs otomatis. Berlaku di item tunggal maupun tiap slot warna kombinasi.
-Riwayat lengkap: git log.
-============================================================
-============================================================
-
-HTML PRODUKSI (Supabase/testproduksi) - ver.30
-============================================================
-PERUBAHAN ver.30 (koreksi ver.29, request Denny): checkbox "Pakai Estimasi" di kombinasi 3 warna
-TERNYATA harus per-KOLOM warna (independen per slot), bukan 1 checkbox global di atas ketiga
-section kayak ver.29. Posisi: kolom warna PERTAMA - checkbox ditaruh PERSIS di samping "Pakai
-habis" (1 wrapper .sub-title-checks biar nempel bareng di kanan, gak kepisah sama space-between).
-Kolom warna ke-2/3 - checkbox sendirian, rata kanan (default space-between). Independen: estimasi
-warna 1 bisa dicentang tanpa ikut nyalain warna 2/3 (berguna kalau standar posisi 'badan' udah
-ada tapi 'tangan' belum, atau sebaliknya). itemBaru.kombinasi.estimasi (boolean tunggal) diganti
-estimasiSlot (array boolean per index). Mutual-exclusive sama "Pakai habis" tetap cuma di slot 0.
-Riwayat lengkap: git log.
-============================================================
--->
-<!--
-============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.29
-============================================================
-PERUBAHAN ver.29 (request Denny, 3 hal):
-1. FIX: qty per ukuran (kotak XS-6XL) sebelumnya gak ke-reset pas ganti Varian - itemBaru.ukuran
-   sebenarnya udah kereset kosong di data, tapi renderQtyGrid() gak ikut kepanggil di handler
-   klik varian (beda region DOM dari #cardDetail yang di-refresh renderDetailCard), jadi angka
-   yang udah keketik (mis. "12") keliatan masih nempel walau datanya udah kosong. Ditemukan Denny
-   lewat testing.
-2. Checkbox "Pakai Estimasi" sekarang JUGA ada di kombinasi 3 warna (Trico dkk) - request Denny,
-   1x checkbox berlaku buat SEMUA slot warna sekaligus (beda dari "Pakai habis" yang cuma slot
-   pertama). Perhitungan per-posisi: warna[0] = "badan", warna[1]/[2] = "tangan" (kanan & kiri,
-   angka SAMA - simetris, sesuai penjelasan Denny). Butuh kolom baru `posisi` di tabel
-   standar_pemakaian (migrasi Supabase langsung, NULL = standar item tunggal yang sudah ada,
-   'badan'/'tangan' = standar kombinasi baru) - datanya belum diisi Denny (masih proses
-   dikumpulkan), sampai keisi checkbox ini akan nolak via toast "belum ada datanya" kalau
-   dicentang (sama pola kayak item tunggal). Ringer (kombinasi 2 warna) SENGAJA gak disentuh -
-   posisi badan/tangan gak jelas mapping-nya buat 2 warna.
-3. Label checkbox "Pakai hitungan estimasi" dipersingkat jadi "Pakai Estimasi" (item tunggal
-   maupun kombinasi).
-Riwayat lengkap: git log.
-============================================================
--->
-<!--
-============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.28
-============================================================
-PERUBAHAN ver.28: checkbox "Pakai hitungan estimasi" sekarang beneran jalan (sebelumnya cuma
-toggle kosong, gak ngapa-ngapain). Dicentang -> field Kg Kain Terpakai jadi readonly & KOSONG
-(sengaja gak nampilin angka di form, sesuai request Denny) - kg-nya baru dihitung otomatis pas
-tombol "Tambah" dipencet (titik itu qty per ukuran udah lengkap), dari qty x standar kg/pcs
-(tabel standar_pemakaian, lookup by kategori+varian, sudah difetch dari awal ke
-standarPemakaianData). Kalau standarnya belum ada buat varian/ukuran itu, ditolak via toast,
-item GAK jadi masuk antrian (operator harus isi manual). Mutual-exclusive sama "Pakai habis" -
-centang salah satu otomatis uncentang yang lain (dua-duanya sama-sama cara nentuin kg, gak
-masuk akal nyala bareng). Worker/backend TIDAK diubah - kg yang sudah dihitung dikirim persis
-seperti kg manual, gak ada bedanya buat submit-produksi.
-Riwayat lengkap: git log.
-============================================================
-============================================================
-
-HTML PRODUKSI (Supabase/testproduksi) - ver.27
-============================================================
-PERUBAHAN ver.27 (koreksi fitur Pakai Habis dari ver.26): uncentang checkbox "Pakai habis"
-(mode tunggal maupun slot warna pertama di Kombinasi/Ringer) sekarang ikut MENGOSONGKAN angka
-kg-nya, bukan cuma balikin field jadi bisa-diedit sambil angka otomatis lama masih nempel.
-Riwayat lengkap: git log.
-============================================================
-============================================================
-
-HTML PRODUKSI (Supabase/testproduksi) - ver.07
-============================================================
-PERUBAHAN ver.07 (revert sebagian ver.05/06): sumber saran Warna dibalikin murni ke
-stokRollData (warna yang beneran ada stok kg_sisa > 0) - TIDAK lagi digabung sama semua nama
-kanonik di Kamus Sinonim Warna. Gabungan itu (ver.05) ternyata salah diagnosis dan bikin bug
-baru: entri kanonik generik tanpa stok nyata (misal "VIOLET") ikut nongol bersaingan sama entri
-stok asli yang lebih spesifik ("VIOLET 30S" - jenis kain beda, bukan sinonim), dan yang kepilih
-malah yang salah. Fitur "- / kg" buat kode roll kosong (ver.06) TETAP dipertahankan, itu masih
-valid & masih perlu.
-============================================================
-
-============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.06
-============================================================
-PERUBAHAN ver.06 (koreksi ver.05): "- / kg" yang dimaksud bukan pesan generik "belum ada roll
-tercatat" - itu buat baris stok yang KODE ROLL-nya kosong di database (kode_roll: null, kg-nya
-tetap ada/valid). Sebelumnya ini kebablasan tampil "Roll null / Xkg" (nilai null mentah ikut
-ke-render). Sekarang kode roll kosong ditampilkan "-" (bukan "null"), kg tetap ditampilkan apa
-adanya, dan tetap bisa dipilih (kodeRoll disimpan null, bukan string "null"). Diterapkan di
-semua mode (biasa, kombinasi, ringer, custom warna 1/2). Pesan "belum ada roll tercatat" tetap
-dipertahankan buat kasus yang beda: warna dipilih tapi memang NOL baris stok sama sekali.
-============================================================
-
-============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.05
-============================================================
-PERUBAHAN ver.05: autosuggest Warna sekarang muncul buat SEMUA warna yang dikenal sistem
-(gabungan stokRollData + semua nama kanonik di KAMUS SINONIM WARNA), bukan cuma warna yang
-KEBETULAN masih ada rollnya. Sebelumnya kalau warna lagi kosong stok / belum pernah dibeli
-dengan ejaan itu, gak muncul saran sama sekali - sekarang tetap muncul, dan begitu dipilih tapi
-gak ada roll yang cocok, kotak Kode Roll kasih tau jelas "- / kg (belum ada roll tercatat)"
-alih-alih diam kosong. Diterapkan di semua mode (biasa, kombinasi, ringer, custom warna 1/2).
-============================================================
-
-============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.04
-============================================================
-PERUBAHAN ver.04 (dari Claude, di atas hasil Claude Design): fitur cache referensi data
-ditambahkan ke muatDataReferensi() - 4 data yang jarang berubah (kategori varian, kombinasi
-warna, kamus warna, standar pemakaian) dicache di localStorage 30 menit, app langsung kepake
-instan dari cache tanpa nunggu network (Supabase-nya di region Mumbai, jauh dari Indonesia -
-tiap round-trip kerasa). stok-roll SENGAJA TETAP selalu fresh tiap buka. TIDAK ADA perubahan
-visual/styling apapun di layer ini - basis file & tampilannya tetap PERSIS punya Claude Design
-di bawah (auto-scroll, peringatan kg>99, restyle kartu/dropdown semua tetap seperti apa adanya).
-============================================================
-
-============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.03
-============================================================
-PERUBAHAN ver.03: styling disamakan persis ke referensi Apps Script (index.html /
-HTML PRODUKSI ver.02.html, versi live GitHub Pages) - nilai CSS diambil LANGSUNG dari file
-referensi (bukan tebak dari screenshot), badge versi "ver.02" DI DALAM app SENGAJA TIDAK
-diubah (skema penomoran internal terpisah, sama seperti catatan di HTML PRODUKSI ver.02.html).
-  1. Kategori (tab Anak/Dewasa): gap 10px->8px, padding tombol 14px 10px->10px 8px, radius
-     14px->16px - samain ke .tab-row/.tab-card.
-  2. Kartu "Detail Item Baru" & "Qty per Size": radius 16px->18px, field-row (baris
-     Varian/Warna/dst) padding 14px 16px->9px 14px - samain ke .card/.row.
-  3. QTY PER SIZE: gap antar kolom 12px->6px, padding grid 16px->9px 14px, kotak input
-     dikecilkan (10px->6px 4px padding) + dikasih background abu muda (nyala putih pas fokus),
-     label ukuran dikecilkan & warna abu - samain ke .qty-grid/.qty-cell.
-  4. Dropdown Varian & saran autocomplete Warna/Kode Roll ("tampilan tabel"): sebelumnya cuma
-     zebra genap/ganjil + hover biru - sekarang siklus 6 warna biru pastel per baris (persis
-     SOFT_BLUE_COLORS/ROLL_OPT_COLORS di kode Apps Script), dibungkus panel roundbox
-     (radius 14px, border tipis) kayak .combo-dropdown, tiap baris dikasih garis pemisah tipis
-     0.5px kayak .combo-opt/.roll-opt.
-  5. Detail kecil ikutan disamakan: badge "wajib isi", ikon chevron, section-label, total-qty.
+PERUBAHAN ver.44 (request Denny): kain yang sudah ditambahkan ke antrian (daftarAntrian) - walau
+belum tersubmit ke Telegram - sekarang otomatis dianggap "dipesan duluan" saat item berikutnya di
+antrian yang sama butuh roll yang sama. Fungsi baru kgTerpakaiAntrian_() menjumlah kg yang sudah
+dipakai per (warna kanonik + kode roll) dari seluruh isi antrian, dikurangkan dari kg_sisa di
+daftarRollUntukWarna() - otomatis kepakai di SEMUA titik yang baca dari situ: saran dropdown roll,
+auto-isi "Pakai habis", auto-pilih roll tunggal "Pakai Estimasi", dan validasi kecukupan kg
+(cekKodeRollTakDikenal_). Dihitung ulang live tiap dipanggil, bukan state terpisah - hapus item
+dari antrian otomatis kebaca benar tanpa kode tambahan. Worker TIDAK diubah - ini murni
+penyesuaian tampilan/validasi sisi Mini App sebelum submit, deduksi stok beneran di database
+tetap terjadi cuma sekali pas submit seperti biasa.
+Riwayat versi lengkap: git log.
 ============================================================
 -->
 
@@ -877,9 +601,37 @@ function getSinonimGrup(warna) {
   return kan;
 }
 
+// v.44 (request Denny): kain yang UDAH ditambahkan ke antrian (daftarAntrian) - walau belum
+// tersubmit ke Telegram - dianggap "dipesan duluan", biar item KEDUA/KETIGA di antrian yang
+// sama gak ditawarin/divalidasi pakai kg roll UTUH, padahal sebagian udah "dipegang" item
+// sebelumnya. Dihitung ULANG live tiap dipanggil (bukan state terpisah yang di-update manual
+// pas tambah/hapus antrian) - hapus item dari antrian otomatis kebaca benar tanpa kode tambahan.
+// Cakupan sengaja generik per (warna kanonik + kodeRoll) - kena ke SEMUA cara ngisi kg (manual,
+// Pakai Habis, Pakai Estimasi) sekaligus, karena ketiganya baca dari sumber data yang sama.
+function kgTerpakaiAntrian_(kanonikWarna, kodeRoll) {
+  const kodeKey = String(kodeRoll || '');
+  let total = 0;
+  daftarAntrian.forEach(function (it) {
+    if (it.kombinasi) {
+      it.kombinasi.warna.forEach(function (w, i) {
+        if (getSinonimGrup(w) === kanonikWarna && String(it.kombinasi.kodeRoll[i] || '') === kodeKey) {
+          total += parseFloat(it.kombinasi.kg[i]) || 0;
+        }
+      });
+    } else if (it.warna && getSinonimGrup(it.warna) === kanonikWarna && String(it.kodeRoll || '') === kodeKey) {
+      total += parseFloat(it.kg) || 0;
+    }
+  });
+  return total;
+}
+
 function daftarRollUntukWarna(warna) {
   const kanonik = getSinonimGrup(warna);
-  return stokRollData[kanonik] || [];
+  const semua = stokRollData[kanonik] || [];
+  return semua.map(function (r) {
+    const terpakai = kgTerpakaiAntrian_(kanonik, r.kodeRoll);
+    return terpakai > 0 ? Object.assign({}, r, { kg: Math.max(0, r.kg - terpakai) }) : r;
+  });
 }
 
 // v.06: daftar warna buat autosuggest HARUS tetap muncul walau stoknya lagi kosong (kg_sisa=0
