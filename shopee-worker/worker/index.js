@@ -363,6 +363,30 @@ export default {
       }
     }
 
+    // GET /debug/sign -> endpoint sementara buat diagnosa error "wrong sign", HAPUS
+    // setelah masalahnya ketemu (nunjukin metadata secret, bukan full key).
+    if (url.pathname === '/debug/sign') {
+      const path = '/api/v2/shop/auth_partner';
+      const ts = nowTs();
+      const pid = String(env.SHOPEE_PARTNER_ID || '');
+      const pkey = String(env.SHOPEE_PARTNER_KEY || '');
+      const baseString = `${pid}${path}${ts}`;
+      const sign = await hmacSha256Hex(pkey, baseString);
+      return json({
+        partner_id: pid,
+        partner_id_length: pid.length,
+        partner_key_length: pkey.length,
+        partner_key_first6: pkey.slice(0, 6),
+        partner_key_last6: pkey.slice(-6),
+        redirect_url: env.SHOPEE_REDIRECT_URL,
+        host: HOST,
+        path,
+        timestamp: ts,
+        base_string: baseString,
+        sign,
+      });
+    }
+
     return json({ error: 'Route tidak ditemukan' }, 404);
   },
 
