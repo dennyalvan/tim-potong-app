@@ -34,7 +34,7 @@ wrangler kv namespace create SHOPEE_KV
 wrangler secret put SHOPEE_PARTNER_ID
 wrangler secret put SHOPEE_PARTNER_KEY
 wrangler secret put SHOPEE_REDIRECT_URL
-# contoh redirect URL: https://shopee-order-sync.<subdomain-kamu>.workers.dev/auth/callback
+# contoh redirect URL: https://shopee-worker.<subdomain-kamu>.workers.dev/auth/callback
 
 # Deploy
 wrangler deploy
@@ -44,7 +44,7 @@ wrangler deploy
 
 Buka di browser (sambil login sebagai admin toko Shopee):
 ```
-https://shopee-order-sync.<subdomain-kamu>.workers.dev/auth/authorize
+https://shopee-worker.<subdomain-kamu>.workers.dev/auth/authorize
 ```
 Approve akses → Shopee redirect balik ke `/auth/callback` → token otomatis
 tersimpan di KV. Kamu akan lihat response JSON konfirmasi berisi `shop_id`.
@@ -79,7 +79,7 @@ resi baru ada setelah label dicetak, butuh endpoint logistics terpisah).
 
 Di `rekap-order/index.html` sudah ada tombol **"🔄 Sync dari Shopee"** di
 sebelah upload zone, plus tombol ⚙️ buat isi URL worker (hasil deploy kamu,
-mis. `https://shopee-order-sync.<subdomain>.workers.dev`) dan Shop ID —
+mis. `https://shopee-worker.<subdomain>.workers.dev`) dan Shop ID —
 disimpan di `localStorage` browser, sekali isi aja. Setelah itu klik Sync
 langsung narik data lewat `/api/orders-full` dan masuk ke tab Varian/
 Karakter/Resi kayak habis upload file.

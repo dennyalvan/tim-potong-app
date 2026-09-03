@@ -36,7 +36,11 @@
  * beneran ternyata namanya beda, tinggal disesuaikan di getOrderDetail().
  */
 
-const HOST = 'https://partner.shopeemobile.com'; // ganti ke partner.test-stable.shopeemobile.com kalau masih di sandbox
+// App masih status "Developing" di Shopee Open Platform (Test Partner_Id / Test API
+// Partner Key) -> WAJIB pakai host sandbox ini. Baru ganti ke
+// 'https://partner.shopeemobile.com' + update secrets pakai Live Partner_Id/Key
+// begitu app-nya lolos verifikasi bisnis dan naik status jadi "Live".
+const HOST = 'https://partner.test-stable.shopeemobile.com';
 
 // ── HELPER: HMAC-SHA256 pakai Web Crypto (tersedia native di Cloudflare Workers) ──
 async function hmacSha256Hex(key, message) {
@@ -267,7 +271,7 @@ export default {
 
     // GET /  -> status check sederhana
     if (url.pathname === '/') {
-      return json({ status: 'ok', service: 'shopee-order-sync' });
+      return json({ status: 'ok', service: 'shopee-worker' });
     }
 
     // GET /auth/authorize -> redirect ke halaman approve Shopee

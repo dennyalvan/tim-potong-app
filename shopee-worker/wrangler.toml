@@ -1,4 +1,4 @@
-name = "shopee-order-sync"
+name = "shopee-worker"
 main = "worker/index.js"
 compatibility_date = "2024-09-23"
 
