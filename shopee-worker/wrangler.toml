@@ -7,7 +7,7 @@ compatibility_date = "2024-09-23"
 # lalu tempel "id" hasilnya di bawah ini (ganti PLACEHOLDER).
 [[kv_namespaces]]
 binding = "SHOPEE_KV"
-id = "PLACEHOLDER_GANTI_SETELAH_BUAT_NAMESPACE"
+id = "e23e8dbf4b334d0aa81a552aeb415986"
 
 # Secrets (JANGAN ditulis di sini — set lewat CLI atau dashboard Cloudflare):
 #   wrangler secret put SHOPEE_PARTNER_ID
