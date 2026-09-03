@@ -10,12 +10,30 @@
  *      Worker tukar code jadi access_token + refresh_token, simpan di KV.
  *   3. Endpoint  /api/orders          -> narik order "Perlu Dikirim" (READY_TO_SHIP)
  *      langsung dari Shopee, auto-refresh token kalau sudah mau expired.
+ *   4. Endpoint  /api/orders-full     -> versi lengkap /api/orders: narik SEMUA
+ *      order_sn (auto-paginate), lalu tarik detail tiap order (SKU/qty per item)
+ *      lewat get_order_detail, dan udah diratain jadi baris siap pakai (format
+ *      yang sama kayak hasil parse Excel di app rekap-order).
+ *   5. Endpoint  /api/order-detail    -> passthrough get_order_detail mentah,
+ *      buat debugging / kebutuhan lain di luar /api/orders-full.
+ *   6. Cron Trigger (lihat wrangler.toml)  -> jalan berkala, nyegerin cache
+ *      /api/orders-full buat tiap toko yang udah ke-authorize (disimpen di KV
+ *      key "shops:index"), sekalian jaga refresh_token gak nganggur kelamaan.
  *
  * WAJIB diisi sebelum dipakai (lihat README.md):
  *   - Secrets (wrangler secret put ...): SHOPEE_PARTNER_ID, SHOPEE_PARTNER_KEY, SHOPEE_REDIRECT_URL
- *   - wrangler.toml: KV namespace binding SHOPEE_KV (buat nyimpen access/refresh token)
+ *   - wrangler.toml: KV namespace binding SHOPEE_KV (buat nyimpen access/refresh token + cache)
  *
  * Referensi resmi: https://open.shopee.com/developer-guide (bagian Authorization & Signature)
+ *
+ * CATATAN PENTING soal bentuk response Shopee: hampir semua endpoint v2 ngebungkus
+ * data asli di dalam field "response", contoh:
+ *   { request_id, error, message, response: { access_token, ... } }
+ * callShopApi() di bawah nanganin ini otomatis (unwrap + lempar error kalau
+ * data.error keisi), jadi semua kode yang manggil callShopApi() bisa akses
+ * field-nya langsung tanpa perlu ".response". Field response_optional_fields
+ * (mis. "ship_by_date") mengikuti dokumentasi resmi Shopee — kalau pas testing
+ * beneran ternyata namanya beda, tinggal disesuaikan di getOrderDetail().
  */
 
 const HOST = 'https://partner.shopeemobile.com'; // ganti ke partner.test-stable.shopeemobile.com kalau masih di sandbox
@@ -58,6 +76,22 @@ async function getToken(env, shopId) {
   return raw ? JSON.parse(raw) : null;
 }
 
+// ── Daftar shop_id yang udah pernah authorize — dipakai Cron Trigger buat tau
+// toko mana aja yang perlu di-sync otomatis. ──
+async function addShopToIndex(env, shopId) {
+  const raw = await env.SHOPEE_KV.get('shops:index');
+  const list = raw ? JSON.parse(raw) : [];
+  const id = String(shopId);
+  if (!list.includes(id)) {
+    list.push(id);
+    await env.SHOPEE_KV.put('shops:index', JSON.stringify(list));
+  }
+}
+async function getShopIndex(env) {
+  const raw = await env.SHOPEE_KV.get('shops:index');
+  return raw ? JSON.parse(raw) : [];
+}
+
 // ── Tukar authorization code jadi access_token pertama kali ──
 async function exchangeCodeForToken(env, code, shopId) {
   const path = '/api/v2/auth/token/get';
@@ -77,7 +111,7 @@ async function exchangeCodeForToken(env, code, shopId) {
   });
   const data = await res.json();
   if (data.error) throw new Error(`Shopee auth error: ${data.error} - ${data.message || ''}`);
-  return data; // { access_token, refresh_token, expire_in, ... }
+  return data.response || data; // { access_token, refresh_token, expire_in, ... }
 }
 
 // ── Refresh access_token pakai refresh_token yang tersimpan ──
@@ -99,7 +133,7 @@ async function refreshAccessToken(env, shopId, refreshToken) {
   });
   const data = await res.json();
   if (data.error) throw new Error(`Shopee refresh error: ${data.error} - ${data.message || ''}`);
-  return data;
+  return data.response || data;
 }
 
 // ── Pastikan ada access_token yang masih valid, refresh otomatis kalau perlu ──
@@ -123,7 +157,8 @@ async function ensureValidToken(env, shopId) {
   return newData.access_token;
 }
 
-// ── Panggil endpoint shop-level Shopee (butuh access_token + shop_id di signature) ──
+// ── Panggil endpoint shop-level Shopee (butuh access_token + shop_id di signature).
+// Otomatis unwrap ".response" dan lempar error kalau Shopee balikin error. ──
 async function callShopApi(env, shopId, path, params = {}) {
   const accessToken = await ensureValidToken(env, shopId);
   const ts = nowTs();
@@ -139,7 +174,86 @@ async function callShopApi(env, shopId, path, params = {}) {
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
 
   const res = await fetch(url.toString());
-  return res.json();
+  const data = await res.json();
+  if (data.error) throw new Error(`Shopee API error (${path}): ${data.error} - ${data.message || ''}`);
+  return data.response !== undefined ? data.response : data;
+}
+
+// ── Tarik SEMUA order_sn untuk status tertentu, auto-paginate pakai cursor
+// sampai habis. Dibatasi 50 halaman (~5000 order) buat jaga-jaga kalau ada
+// bug bikin loop gak berhenti. ──
+async function listAllOrderSns(env, shopId, status, days) {
+  const orderSns = [];
+  let cursor = '';
+  for (let page = 0; page < 50; page++) {
+    const data = await callShopApi(env, shopId, '/api/v2/order/get_order_list', {
+      order_status: status,
+      time_range_field: 'create_time',
+      time_from: nowTs() - days * 24 * 3600,
+      time_to: nowTs(),
+      page_size: 100,
+      cursor,
+    });
+    (data.order_list || []).forEach(o => orderSns.push(o.order_sn));
+    if (!data.more || !data.next_cursor) break;
+    cursor = data.next_cursor;
+  }
+  return orderSns;
+}
+
+// ── Detail order (SKU/qty per item) — max 50 order_sn per panggilan (batas Shopee). ──
+async function getOrderDetail(env, shopId, orderSnList, optionalFields = 'item_list,order_status,pay_time,ship_by_date') {
+  if (orderSnList.length > 50) throw new Error('getOrderDetail: maksimal 50 order_sn per panggilan (batas Shopee)');
+  return callShopApi(env, shopId, '/api/v2/order/get_order_detail', {
+    order_sn_list: orderSnList.join(','),
+    response_optional_fields: optionalFields,
+  });
+}
+
+// ── Gabungan get_order_list + get_order_detail, diratain jadi baris siap pakai
+// dengan bentuk PERSIS sama kayak hasil parse Excel di app rekap-order (lihat
+// extractFileData() di rekap-order/index.html), jadi tinggal disambung ke
+// buildRekap() tanpa perlu mapping tambahan di frontend. ──
+async function fetchOrdersFull(env, shopId, { status = 'READY_TO_SHIP', days = 30 } = {}) {
+  const orderSns = await listAllOrderSns(env, shopId, status, days);
+  const rows = [];
+
+  const chunkSize = 50;
+  for (let i = 0; i < orderSns.length; i += chunkSize) {
+    const chunk = orderSns.slice(i, i + chunkSize);
+    const detail = await getOrderDetail(env, shopId, chunk);
+    (detail.order_list || []).forEach(order => {
+      const payTime = order.pay_time ? new Date(order.pay_time * 1000).toISOString() : null;
+      const shipByDate = order.ship_by_date ? new Date(order.ship_by_date * 1000).toISOString() : null;
+      const isBatal = order.order_status === 'CANCELLED';
+
+      (order.item_list || []).forEach(item => {
+        // Item tanpa variasi tetep punya 1 entri di model_list (default Shopee) —
+        // fallback ini cuma jaga-jaga kalau suatu saat itemnya kosong.
+        const models = (item.model_list && item.model_list.length)
+          ? item.model_list
+          : [{ model_sku: item.item_sku, model_name: '', model_quantity_purchased: item.item_quantity_purchased || 0 }];
+
+        models.forEach(model => {
+          const qty = model.model_quantity_purchased || 0;
+          if (!qty) return;
+          rows.push({
+            sku: model.model_sku || item.item_sku || '',
+            variasi: model.model_name || '',
+            produk: item.item_name || '',
+            qty,
+            pesanan: order.order_sn,
+            resi: '', // no. resi baru ada setelah label dicetak (bukan dari endpoint ini)
+            isBatal,
+            waktuKirim: shipByDate,
+            waktuBayar: payTime,
+          });
+        });
+      });
+    });
+  }
+
+  return { shop_id: String(shopId), order_count: orderSns.length, rows, synced_at: new Date().toISOString() };
 }
 
 // ── ROUTES ──
@@ -180,6 +294,7 @@ export default {
           expire_in: tokenRes.expire_in,
           obtained_at: nowTs(),
         });
+        await addShopToIndex(env, shopId);
         return json({
           status: 'authorized',
           shop_id: shopId,
@@ -190,7 +305,7 @@ export default {
       }
     }
 
-    // GET /api/orders?shop_id=...&status=READY_TO_SHIP -> narik daftar order
+    // GET /api/orders?shop_id=...&status=READY_TO_SHIP -> narik daftar order (ringkasan, 1 halaman)
     if (url.pathname === '/api/orders') {
       const shopId = url.searchParams.get('shop_id');
       const status = url.searchParams.get('status') || 'READY_TO_SHIP';
@@ -210,6 +325,58 @@ export default {
       }
     }
 
+    // GET /api/order-detail?shop_id=...&order_sn_list=SN1,SN2,... -> detail mentah (max 50 order_sn)
+    if (url.pathname === '/api/order-detail') {
+      const shopId = url.searchParams.get('shop_id');
+      const orderSnParam = url.searchParams.get('order_sn_list');
+      if (!shopId || !orderSnParam) return json({ error: 'shop_id dan order_sn_list wajib diisi' }, 400);
+      const orderSnList = orderSnParam.split(',').map(s => s.trim()).filter(Boolean);
+
+      try {
+        const data = await getOrderDetail(env, shopId, orderSnList);
+        return json(data);
+      } catch (e) {
+        return json({ error: e.message }, 500);
+      }
+    }
+
+    // GET /api/orders-full?shop_id=...&status=READY_TO_SHIP&days=30
+    // -> auto-paginate SEMUA order + tarik detail SKU/qty per item, diratain jadi
+    // baris siap pakai buat app rekap-order (tombol "Sync dari Shopee"). Juga
+    // nyimpen hasilnya ke KV sebagai cache buat Cron Trigger.
+    if (url.pathname === '/api/orders-full') {
+      const shopId = url.searchParams.get('shop_id');
+      const status = url.searchParams.get('status') || 'READY_TO_SHIP';
+      const days = Number(url.searchParams.get('days')) || 30;
+      if (!shopId) return json({ error: 'shop_id wajib diisi' }, 400);
+
+      try {
+        const result = await fetchOrdersFull(env, shopId, { status, days });
+        await env.SHOPEE_KV.put(`cache:orders:${shopId}`, JSON.stringify(result));
+        return json(result);
+      } catch (e) {
+        return json({ error: e.message }, 500);
+      }
+    }
+
     return json({ error: 'Route tidak ditemukan' }, 404);
+  },
+
+  // ── Cron Trigger (jadwal di wrangler.toml) — nyegerin cache /api/orders-full
+  // buat tiap toko yang udah authorize (tersimpan di KV "shops:index"). Selain
+  // biar data selalu update tanpa perlu buka app, ini juga jaga supaya
+  // refresh_token gak nganggur kelamaan (Shopee bisa minta re-authorize kalau
+  // gak pernah dipakai dalam waktu lama). ──
+  async scheduled(event, env, ctx) {
+    const shopIds = await getShopIndex(env);
+    for (const shopId of shopIds) {
+      try {
+        const result = await fetchOrdersFull(env, shopId, { status: 'READY_TO_SHIP', days: 30 });
+        await env.SHOPEE_KV.put(`cache:orders:${shopId}`, JSON.stringify(result));
+      } catch (e) {
+        // 1 toko error jangan sampe ngehentiin sync toko lain di cron ini.
+        console.error(`[cron] sync gagal buat shop_id ${shopId}: ${e.message}`);
+      }
+    }
   },
 };

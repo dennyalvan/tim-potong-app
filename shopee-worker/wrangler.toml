@@ -14,3 +14,9 @@ id = "PLACEHOLDER_GANTI_SETELAH_BUAT_NAMESPACE"
 #   wrangler secret put SHOPEE_PARTNER_KEY
 #   wrangler secret put SHOPEE_REDIRECT_URL
 # Nilainya didapat setelah didaftarkan & approved di open.shopee.com
+
+# Cron Trigger: jalanin scheduled() di worker/index.js tiap 30 menit buat
+# nyegerin cache order semua toko yang udah authorize. Ganti jadwalnya kalau
+# mau lebih sering/jarang (format standar cron, lihat docs.cloudflare.com/workers/configuration/cron-triggers).
+[triggers]
+crons = ["*/30 * * * *"]

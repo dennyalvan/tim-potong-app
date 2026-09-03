@@ -152,6 +152,24 @@ body {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ── SYNC DARI SHOPEE ── */
+.sync-row { display: flex; gap: 8px; margin-bottom: 16px; }
+.sync-btn {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 11px 14px; border: none; border-radius: var(--radius-sm);
+  background: var(--ios-surface); color: var(--ios-label);
+  font-family: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer; box-shadow: var(--shadow); transition: opacity .12s, transform .12s;
+}
+.sync-btn:active { transform: scale(0.98); opacity: .8; }
+.sync-btn.syncing { pointer-events: none; opacity: .65; }
+.sync-spinner {
+  display: none; width: 13px; height: 13px; flex-shrink: 0;
+  border: 2px solid var(--ios-border); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin .7s linear infinite;
+}
+.sync-btn.syncing .sync-spinner { display: inline-block; }
+
 /* ── MODAL ── */
 .modal-overlay {
   display: none; position: fixed; inset: 0;
@@ -182,6 +200,15 @@ body {
 .modal-btn:active { opacity: 0.75; }
 .modal-btn.cancel { background: var(--ios-surface2); color: var(--blue); }
 .modal-btn.danger { background: var(--red); color: #fff; }
+.modal-btn.primary { background: var(--accent); color: #fff; }
+.modal-field { margin-bottom: 14px; text-align: left; }
+.modal-field label { display: block; font-size: 12px; font-weight: 600; color: var(--ios-label2); margin-bottom: 5px; }
+.modal-field input {
+  width: 100%; padding: 11px 12px; border-radius: 10px; box-sizing: border-box;
+  border: 1px solid var(--ios-border); background: var(--ios-surface2);
+  color: var(--ios-label); font-family: inherit; font-size: 13px; outline: none;
+}
+.modal-field input:focus { border-color: var(--accent); }
 
 /* ── FILTER WAKTU ── */
 .time-filter-wrap {
@@ -609,6 +636,36 @@ body {
   <div class="upload-hint" id="uploadHint">Format .xlsx · Bisa pilih beberapa file sekaligus, otomatis digabung</div>
 </div>
 <input type="file" id="fileInput" accept=".xlsx,.csv" multiple onchange="handleFiles(this.files)">
+
+<!-- SYNC DARI SHOPEE -->
+<div class="sync-row">
+  <button class="sync-btn" id="syncBtn" onclick="syncFromShopee()">
+    <span class="sync-spinner" id="syncSpinner"></span>
+    <span id="syncBtnLabel">🔄 Sync dari Shopee</span>
+  </button>
+  <button class="icon-btn" title="Pengaturan koneksi Shopee" onclick="openShopeeSettings()">⚙️</button>
+</div>
+
+<!-- SHOPEE SETTINGS MODAL -->
+<div class="modal-overlay" id="shopeeModalOverlay" onclick="if(event.target===this)closeShopeeSettings()">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h2>Pengaturan Shopee Worker</h2>
+    <p>URL Worker Cloudflare (shopee-worker) dan Shop ID toko yang sudah di-authorize. Tersimpan di browser ini saja.</p>
+    <div class="modal-field">
+      <label for="shopeeWorkerUrlInput">URL Worker</label>
+      <input type="text" id="shopeeWorkerUrlInput" placeholder="https://shopee-order-sync.namamu.workers.dev">
+    </div>
+    <div class="modal-field">
+      <label for="shopeeShopIdInput">Shop ID</label>
+      <input type="text" id="shopeeShopIdInput" placeholder="contoh: 123456789">
+    </div>
+    <div class="modal-btns">
+      <button class="modal-btn primary" onclick="saveShopeeSettings()">Simpan</button>
+      <button class="modal-btn cancel" onclick="closeShopeeSettings()">Batal</button>
+    </div>
+  </div>
+</div>
 
 <!-- MODAL -->
 <div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)closeModal()">
@@ -1241,6 +1298,88 @@ function setUploadProcessing(on, count) {
   zone.classList.toggle('processing-state', on);
   document.getElementById('uploadLabel').textContent = on ? `Memproses ${count > 1 ? count + ' file' : 'file'}...` : 'Klik atau seret file Excel';
   document.getElementById('uploadHint').textContent = on ? 'Mohon tunggu sebentar' : 'Format .xlsx · Bisa pilih beberapa file sekaligus, otomatis digabung';
+}
+
+// ── SYNC DARI SHOPEE (via shopee-worker Cloudflare, ganti upload Excel manual) ──
+function getShopeeConfig() {
+  return {
+    workerUrl: (localStorage.getItem('shopeeWorkerUrl') || '').replace(/\/+$/, ''),
+    shopId: localStorage.getItem('shopeeShopId') || '',
+  };
+}
+function openShopeeSettings() {
+  const cfg = getShopeeConfig();
+  document.getElementById('shopeeWorkerUrlInput').value = cfg.workerUrl;
+  document.getElementById('shopeeShopIdInput').value = cfg.shopId;
+  document.getElementById('shopeeModalOverlay').classList.add('visible');
+}
+function closeShopeeSettings() { document.getElementById('shopeeModalOverlay').classList.remove('visible'); }
+function saveShopeeSettings() {
+  const workerUrl = document.getElementById('shopeeWorkerUrlInput').value.trim().replace(/\/+$/, '');
+  const shopId = document.getElementById('shopeeShopIdInput').value.trim();
+  if (!workerUrl || !shopId) { showError('URL Worker dan Shop ID wajib diisi'); return; }
+  localStorage.setItem('shopeeWorkerUrl', workerUrl);
+  localStorage.setItem('shopeeShopId', shopId);
+  closeShopeeSettings();
+  hideError();
+}
+function setSyncProcessing(on) {
+  document.getElementById('syncBtn').classList.toggle('syncing', on);
+  document.getElementById('syncBtnLabel').textContent = on ? 'Menarik data dari Shopee...' : '🔄 Sync dari Shopee';
+}
+
+// Ambil order "Perlu Dikirim" langsung dari Shopee (lewat shopee-worker), gantiin
+// upload Excel manual. Hasilnya disambung ke buildRekap() yang sama persis dengan
+// jalur upload file, jadi semua tab (Varian/Karakter/Resi) otomatis ke-update.
+function syncFromShopee() {
+  const { workerUrl, shopId } = getShopeeConfig();
+  if (!workerUrl || !shopId) { openShopeeSettings(); return; }
+
+  hideError();
+  setSyncProcessing(true);
+
+  fetch(`${workerUrl}/api/orders-full?shop_id=${encodeURIComponent(shopId)}&status=READY_TO_SHIP`)
+    .then(res => res.json().then(data => {
+      if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
+      return data;
+    }))
+    .then(data => {
+      const rows = (data.rows || []).map(r => ({
+        sku: r.sku || '',
+        variasi: r.variasi || '',
+        produk: r.produk || '',
+        qty: r.qty || 0,
+        pesanan: r.pesanan || '',
+        resi: r.resi || '',
+        isBatal: !!r.isBatal,
+        waktuKirim: r.waktuKirim ? new Date(r.waktuKirim) : null,
+        waktuBayar: r.waktuBayar ? new Date(r.waktuBayar) : null,
+      }));
+
+      activeTimeFilter = null;
+      activeDateRange = null;
+      calState = { field: null, viewYear: null, viewMonth: null, rangeStart: null, rangeEnd: null, hoverDate: null, datesWithData: null };
+      const calPopup = document.getElementById('calPopup');
+      if (calPopup) calPopup.style.display = 'none';
+      updateTimeFilterUI();
+      searchQuery = '';
+      const si = document.getElementById('searchInput');
+      if (si) si.value = '';
+      const scb = document.getElementById('searchClearBtn');
+      if (scb) scb.style.display = 'none';
+
+      const syncTime = new Date(data.synced_at || Date.now());
+      buildRekap([{ filename: `Shopee Sync — ${data.order_count || 0} order (${syncTime.toLocaleString('id-ID')})`, rows }]);
+
+      if (!rows.length) {
+        showError('Tidak ada order "Perlu Dikirim" di Shopee saat ini — semua sudah dikirim atau belum ada order baru.');
+      } else {
+        document.getElementById('subtitle').textContent =
+          `Shopee · Perlu Dikirim · Sync ${syncTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`;
+      }
+    })
+    .catch(err => showError('Gagal sync dari Shopee: ' + err.message))
+    .finally(() => setSyncProcessing(false));
 }
 
 // ── Parse nilai tanggal dari cell Excel — bisa berupa Date object (kalau cellDates:true
