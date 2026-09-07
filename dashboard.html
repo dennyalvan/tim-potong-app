@@ -1,13 +1,17 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.78
+DASHBOARD ver.79
 ============================================================
-PERUBAHAN ver.78 (request Denny): 2 hal di tabel Rekap QC.
-1. Semua teks di tabel (Waktu/Warna/Varian/angka ukuran/Selesai/Reject) dibold.
-2. Koreksi full-bleed ver.77 - "kelihatan flat" karena nempel 100vw persis di layar lebar. Sekarang
-   sisa margin 16px (~4mm) kiri-kanan + border-radius dibalikin, jadi masih kelihatan sebagai
-   rounded card dengan background kontras, gak nempel edge-to-edge lagi.
+PERUBAHAN ver.79 (request Denny): 4 hal di tabel Rekap QC.
+1. Header Warna/Varian/tiap kolom ukuran dihitamin (kelas baru rekap-head-black) - Waktu/Selesai/
+   Reject tetap abu kayak sebelumnya.
+2. Dash "-" pengganti size kosong dibikin lebih terang (kelas baru rekap-kosong, dipisah dari
+   rekap-muted biar teks Waktu/Varian gak ikut ke-lighten).
+3. Kolom Waktu sekarang cuma tampilin tanggal (DD/MM), jam disembunyiin - formatWaktuRekap gak
+   nambahin toLocaleTimeString lagi.
+4. .rekap-wrap border-radius 14px -> 0 (kartu kotak, bukan rounded lagi) - margin 16px dari
+   ver.78 tetap ada, cuma sudutnya yang diubah.
 Riwayat lengkap: git log.
 ============================================================
 
@@ -344,7 +348,7 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
      dipasang SAMA PERSIS di setiap baris (header & data) lewat inline style, jadi kolom
      dijamin selalu selebar itu & align sempurna antar baris. */
   .rekap-summary { font-size: 12px; color: var(--gray-text); margin-bottom: 8px; }
-  .rekap-wrap { background: #fff; border-radius: 14px; overflow-y: auto; overflow-x: hidden; max-height: 62vh; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+  .rekap-wrap { background: #fff; border-radius: 0; overflow-y: auto; overflow-x: hidden; max-height: 62vh; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
   .rekap-row { display: grid; align-items: center; }
   .rekap-row > div { padding: 8px 4px; font-size: 12px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* v.29: kolom Varian & angka ukuran suka kepotong (request Denny) - Varian sekarang wrap ke
@@ -352,6 +356,9 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .rekap-row > div.rekap-varian { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.25; }
   .rekap-head { border-bottom: 1.4px solid var(--border); position: sticky; top: 0; z-index: 2; background: #fff; }
   .rekap-head > div { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--gray-label); }
+  /* v.79 (request Denny): header Warna/Varian/tiap kolom ukuran dihitamin (beda dari Waktu/
+     Selesai/Reject yang tetap abu) - kelas ini ditempel manual per header di renderRekapQC(). */
+  .rekap-head > div.rekap-head-black { color: #1c1c1e; }
   .rekap-row:not(.rekap-head) { border-bottom: 1px solid var(--border); cursor: pointer; }
   /* v.29: baris bisa diklik buat di-highlight (request Denny) - biar gak kehilangan fokus baris
      pas scroll horizontal ngelewatin banyak kolom ukuran. */
@@ -359,6 +366,10 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .rekap-row:last-child { border-bottom: none; }
   .rekap-num { text-align: right; font-variant-numeric: tabular-nums; }
   .rekap-muted { color: var(--gray-text); }
+  /* v.79 (request Denny, "value strip/kosong dibikin lebih terang"): khusus dash "-" pengganti
+     size yang kosong - dipisah dari .rekap-muted (yang masih dipakai Waktu/Varian) biar teks
+     Waktu/Varian gak ikut ke-lighten. */
+  .rekap-kosong { color: var(--border); }
   .rekap-selesai { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; color: var(--green); }
   .rekap-reject { color: var(--danger); font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
   .rekap-foot { display: flex; justify-content: flex-end; gap: 18px; padding: 9px 12px; font-size: 12px; border-top: 1px solid var(--border); background: #f7f9fd; }
@@ -2362,7 +2373,7 @@ function muatRekapQC(percobaan, manual) {
 function formatWaktuRekap(waktuIso) {
   if (!waktuIso) return '-';
   const d = new Date(waktuIso);
-  return d.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit' });
 }
 
 // Kolom ukuran cuma yang BENERAN dipakai di data yang lagi ditampilkan (biar gak banyak kolom
@@ -2594,8 +2605,8 @@ function renderRekapQC() {
 
   const summary = document.getElementById('rekapSummary');
   const headHtml = '<div class="rekap-row rekap-head" style="grid-template-columns:' + templateKolom + '">' +
-    '<div>Waktu</div><div>Warna</div><div>Varian</div>' +
-    ukuranDipakai.map(function (u) { return '<div class="rekap-num">' + u + '</div>'; }).join('') +
+    '<div>Waktu</div><div class="rekap-head-black">Warna</div><div class="rekap-head-black">Varian</div>' +
+    ukuranDipakai.map(function (u) { return '<div class="rekap-num rekap-head-black">' + u + '</div>'; }).join('') +
     '<div class="rekap-num">Selesai</div><div class="rekap-num">Reject</div>' +
     (isAdmin ? '<div></div>' : '') + '</div>';
 
@@ -2620,7 +2631,7 @@ function renderRekapQC() {
       '<div class="rekap-muted">' + formatWaktuRekap(it.waktu) + '</div>' +
       '<div>' + escapeHtml(it.warna || '-') + '</div>' +
       '<div class="rekap-muted rekap-varian">' + escapeHtml(it.varian || '-') + '</div>' +
-      ukuranDipakai.map(function (u) { return '<div class="rekap-num">' + (petaUkuran[u] ? petaUkuran[u] : '<span class="rekap-muted">–</span>') + '</div>'; }).join('') +
+      ukuranDipakai.map(function (u) { return '<div class="rekap-num">' + (petaUkuran[u] ? petaUkuran[u] : '<span class="rekap-kosong">–</span>') + '</div>'; }).join('') +
       '<div class="rekap-selesai">' + it.total + '</div>' +
       '<div class="' + (it.rejectTotal > 0 ? 'rekap-reject' : 'rekap-num rekap-muted') + '">' + it.rejectTotal + '</div>' +
       (isAdmin ? '<div style="display:flex;gap:2px"><button class="rekap-hapus-btn" data-editlogqc="' + it.id + '" data-total="' + it.total + '" data-reject="' + it.rejectTotal + '" title="Edit submit ini">✏️</button><button class="rekap-hapus-btn" data-hapuslogqc="' + it.id + '" title="Hapus submit ini">🗑️</button></div>' : '') +
