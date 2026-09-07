@@ -1,18 +1,13 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.77
+DASHBOARD ver.78
 ============================================================
-PERUBAHAN ver.77 (request Denny, screenshot HP nunjukin header/angka Rekap QC kepotong "...", +
-minta tabel full-bleed di layar lebar): koreksi arah dari ver.76.
-1. Layar sempit (HP, <600px): font & padding tabel Rekap QC dikecilin (bukan kolom yang dipaksa
-   nyempit sampe teks/angka ilang) - white-space dibuka jadi wrap, jadi kalau masih kepanjangan
-   turun baris, BUKAN kepotong "...". Solusi kalau kerasa kekecilan buat dibaca: zoom manual -
-   meta viewport diubah biar pinch-zoom kepakai lagi (sebelumnya user-scalable=no).
-2. Layar lebar (PC/laptop/fold terbuka, >=600px): .rekap-wrap sekarang "full-bleed" - nembus
-   keluar dari max-width:520px #app biar makan semua lebar browser, gak ada space kosong
-   kiri-kanan. Sengaja cuma bagian tabel ini yang full-bleed, bagian lain (search/filter/tab)
-   tetap di lebar #app biasa.
+PERUBAHAN ver.78 (request Denny): 2 hal di tabel Rekap QC.
+1. Semua teks di tabel (Waktu/Warna/Varian/angka ukuran/Selesai/Reject) dibold.
+2. Koreksi full-bleed ver.77 - "kelihatan flat" karena nempel 100vw persis di layar lebar. Sekarang
+   sisa margin 16px (~4mm) kiri-kanan + border-radius dibalikin, jadi masih kelihatan sebagai
+   rounded card dengan background kontras, gak nempel edge-to-edge lagi.
 Riwayat lengkap: git log.
 ============================================================
 
@@ -351,7 +346,7 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .rekap-summary { font-size: 12px; color: var(--gray-text); margin-bottom: 8px; }
   .rekap-wrap { background: #fff; border-radius: 14px; overflow-y: auto; overflow-x: hidden; max-height: 62vh; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
   .rekap-row { display: grid; align-items: center; }
-  .rekap-row > div { padding: 8px 4px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rekap-row > div { padding: 8px 4px; font-size: 12px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* v.29: kolom Varian & angka ukuran suka kepotong (request Denny) - Varian sekarang wrap ke
      baris baru (bukan dipotong "..."), lebar kolom ukuran & varian juga dilebarin dikit. */
   .rekap-row > div.rekap-varian { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.25; }
@@ -381,9 +376,12 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   /* v.77 (request Denny): di layar lebar (PC/laptop/fold terbuka), tabel Rekap QC "full-bleed" -
      nembus keluar dari max-width:520px #app biar makan semua lebar browser, gak ada space kosong
      kiri-kanan. SENGAJA cuma bagian tabel ini yang full-bleed - bagian lain (search/filter/tab)
-     tetap di lebar #app biasa, sesuai request Denny. */
+     tetap di lebar #app biasa, sesuai request Denny.
+     v.78 (koreksi, request Denny, "jangan flat, sisain margin biar round card & background
+     kelihatan"): bukan 100vw penuh lagi - sisa margin 16px (~4mm) kiri-kanan, border-radius
+     dibalikin (ikut default .rekap-wrap 14px, gak di-override ke 0 lagi). */
   @media (min-width: 600px) {
-    .rekap-wrap { width: 100vw; margin-left: calc(50% - 50vw); margin-right: calc(50% - 50vw); border-radius: 0; }
+    .rekap-wrap { width: calc(100vw - 32px); margin-left: calc(50% - 50vw + 16px); margin-right: calc(50% - 50vw + 16px); }
   }
 
   .toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); background: #1c1c1e; color: #fff; padding: 10px 18px; border-radius: 10px; font-size: 13px; z-index: 999; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
