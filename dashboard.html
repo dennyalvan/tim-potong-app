@@ -1,360 +1,15 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.75
+DASHBOARD ver.76
 ============================================================
-PERUBAHAN ver.75 (request Denny, "floating tombol kirim rekap dan kotak preview, biar ga perlu
-scroll keatas kebawah"): kotak Daftar Antrian + tombol Kirim Rekap di tab Proses & QC sekarang
-jadi dock nempel permanen di bawah layar (pola sama kayak bar Write-off massal) - caption +
-tombol Kirim selalu kelihatan tanpa perlu scroll ke atas, kotak preview detail collapsed by
-default, tap caption-nya buat expand/collapse.
-Riwayat lengkap: git log.
-============================================================
-DASHBOARD ver.74
-============================================================
-PERUBAHAN ver.74 (request Denny, "detail hpp per pekerjaan seperti di tab proses, agar tau
-detail per tasknya"): sub-tab HPP > Biaya sekarang expandable - tap nama varian di "Rincian per
-Varian" buat lihat kartu per pekerjaan (laporan) di baliknya: tanggal, jumlah, kg pemakaian,
-biaya kain, biaya jahit, HPP/pcs laporan itu sendiri. Kode roll sengaja gak ditampilkan (request
-Denny). Data dari Worker ver.62.
-Riwayat lengkap: git log.
-============================================================
-DASHBOARD ver.73
-============================================================
-PERUBAHAN ver.73 (request Denny, "tampilkan detail perbandingan...biar saya paham kenapa itu
-bisa terjadi"): sub-tab Akurasi Estimasi sekarang expandable 2 level - tap nama varian buat
-lihat SEMUA data poin di baliknya (bukan cuma rata-ratanya), tap 1 data poin (di situ ATAU di
-list Temuan) buat lihat rincian breakdown per ukuran (qty x standar = subtotal) yang menyusun
-angka estimasinya. Data dari Worker ver.61.
-Riwayat lengkap: git log.
-============================================================
-DASHBOARD ver.72
-============================================================
-PERUBAHAN ver.72 (request Denny): tab HPP sekarang punya sub-tab "📐 Akurasi Estimasi" -
-bandingkan kg aktual (laporan "Pakai Habis") vs kg estimasi (rumus standar_pemakaian), rata-rata
-selisih per varian + daftar temuan selisih ekstrem (>=30%) buat ditinjau manual. Data dari
-Worker ver.60 (endpoint baru /data/akurasi-estimasi).
-Riwayat lengkap: git log.
-============================================================
-DASHBOARD ver.71
-============================================================
-PERUBAHAN ver.71 (request Denny, "arsip selesai tampilkan detail juga seperti stok kain habis"):
-Arsip Selesai sekarang bisa di-tap buat expand, sama pola kayak Stok Habis - nampilin breakdown
-qty per ukuran (reuse .ukuran-badges yang sama kayak front card laporan aktif), roll, kg kain,
-varian, dan jumlah reject kalau ada. Data dari Worker ver.58.
-Riwayat lengkap: git log.
-============================================================
-DASHBOARD ver.70
-============================================================
-PERUBAHAN ver.70 (4 request Denny) -
-1. Tab Proses & QC: chip sort baru "Varian A-Z" di samping "Paling lama" - keduanya sekarang
-   grup exclusive (aktifin satu otomatis matiin yang lain). Field "varian" per laporan dikirim
-   Worker ver.57 (sebelumnya cuma kategoriBadge Anak/Dewasa yang di-passing, padahal cocok.varian
-   udah lama dihitung di server).
-2. Tab Proses & QC: detail qty per ukuran (badge M12/L8/dst) dipindah ke FRONT card (di bawah
-   baris tanggal/roll/kg/"X hari lalu"), sebelumnya cuma kelihatan pas card di-expand (tap).
-   Dihapus dari bagian expand biar gak dobel tampil.
-3. Tab Stok Kain - Stok Habis: tiap roll sekarang nampilin baris "🕓 Habis [tanggal] ·
-   Pakai Habis/Estimasi" langsung tanpa perlu expand (dari Worker ver.57). List sekarang cuma
-   isi roll yang PUNYA history pemakaian produksi (roll yang habis lewat write-off manual gak
-   ikut muncul di sini lagi - histori write-off-nya tetap ada di modal Edit Stok Kain), urut dari
-   yang PALING BARU habis. Panel riwayat per-entri (pas expand) sekarang juga nampilin tag
-   Estimasi/Habis per baris (CSS estimasi-tag yang lama - sebelumnya kebuat tapi gak pernah
-   kepake - sekarang jalan, plus habis-tag baru pasangannya).
-4. Tab baru "💰 HPP" (admin-only, tombolnya cuma muncul abis status admin kekonfirmasi) - kartu
-   ringkasan biaya kain/jahit/total/rata-rata per pcs + rincian per varian, basis SEMUA pcs yang
-   DIPOTONG (bukan cuma yang udah selesai QC). Filter Varian + Bulan. Baris yang datanya belum
-   lengkap (harga roll kain atau tarif jahit varian itu belum diisi) TETAP ditampilkan dengan
-   tanda "perlu dilengkapi" - bukan disembunyikan atau digenapin ke 0 diam-diam. Endpoint baru
-   Worker ver.57: POST /data/hpp.
-Riwayat lengkap: git log.
-============================================================
-DASHBOARD ver.69
-============================================================
-PERUBAHAN ver.69 (2 request Denny) -
-1. Judul "DASHBOARD QC" diperbesar setinggi tombol Sync (font-size 20px->26px, line-height 36px
-   - dihitung dari tinggi total kotak tombol Sync: padding 8+8 + border 1.5+1.5 + tinggi teks
-   ~15.6px ≈ 34.6px, dibulatkan 36px).
-2. Panel "Stok Habis" - tap card warna sekarang bisa buka riwayat pemakaian per-roll (reuse
-   renderRiwayatPanel_ yang udah ada di grid Stok Kain utama, kgSisa selalu 0 buat roll yang
-   udah habis). Daftar dibatasi 10 baris/roll teratas dulu, sisanya auto-collapse - tombol
-   "Tampilkan N lainnya" buat expand. ASUMSI: "10 warna teratas" ditafsirkan sebagai 10 baris
-   (panel ini per-roll, bukan dikelompokkan per warna kayak grid utama) - kalau ternyata maksud
-   Denny beda, bisa direvisi. Fungsi baru: renderStokHabisList_(). Data sekarang disimpan di
-   state (stokHabisData) biar toggle gak perlu fetch ulang ke server.
-Riwayat lengkap: git log.
-============================================================
-DASHBOARD ver.68
-============================================================
-PERUBAHAN ver.68 (fix bug, request Denny): root cause "data jadi 0 dari 0 laporan" pas dashboard
-dibiarkan idle lama - 7 fungsi fetch DATA UTAMA (muatDaftarLaporan, muatStokUtuh, muatRekapQC,
-muatArsip, muatStokHabis, muatStokTerpakaiSebagianGrid_, muatRiwayatPemakaian_) SEBELUMNYA gak
-pernah ngecek apakah response server BENERAN berhasil (HTTP status) & strukturnya SESUAI SEBELUM
-nerima sebagai data baru - pola umum: "Array.isArray(data) ? data : []". Kalau server sempat
-gagal/timeout sesaat (paling sering pas koneksi baru pulih abis HP idle lama), response gagal
-LANGSUNG NIMPA data bagus yang udah tampil jadi array KOSONG - persis gejala "0 dari 0 laporan".
-Sekarang response divalidasi DULU (status + struktur) - kalau gak valid, di-THROW (data LAMA
-dibiarkan apa adanya, dicoba lagi otomatis di siklus berikutnya). SENGAJA gak ada tradeoff baterai
-- ini murni validasi respons di klien, TIDAK menyentuh cara kerja Realtime/koneksi sama sekali.
-Refresh SILENT (background) yang gagal sekarang diam aja (gak toast) - biar konsisten sama
-filosofi "realtime tanpa notif" yang udah ada, cuma refresh MANUAL yang tetap kasih toast kalau gagal.
-Riwayat lengkap: git log.
-============================================================
-DASHBOARD ver.67
-============================================================
-PERUBAHAN ver.67 (request Denny): modal Edit Stok Kain - fitur Write-off Manual diganti Stock
-Opname. Field "Kg Sisa" sekarang bisa diketik langsung (bukan lagi abu-abu/readonly) - isi angka
-hasil hitung fisik, backend yang ngitung selisihnya sendiri. Checkbox "Terpakai habis" pindah ke
-sini (centang -> Kg Sisa otomatis 0). Section "Write-off Manual" + tombolnya dihapus, jadi satu
-tombol "Simpan Perubahan" buat semuanya. "Riwayat Write-off" diganti nama "Riwayat Penyesuaian" -
-sekarang bisa nampilin angka + (opname ketemu lebih banyak dari sistem) selain - (berkurang).
-Fitur Write-off Massal (tombol "☑️ Pilih") TIDAK disentuh, tetap sama.
-Riwayat lengkap: git log.
-============================================================
-============================================================
-
-DASHBOARD ver.66
-============================================================
-PERUBAHAN ver.66 (request Denny): label default trigger dropdown Rekap QC diganti - "Semua Varian"
--> "Pilih Varian", "Semua Bulan" -> "Pilih Periode". Cuma trigger-nya (teks yang kelihatan pas
-belum/gak ada filter aktif) - opsi "Semua Varian"/"Semua Bulan" DI DALAM daftar dropdown (buat
-reset balik ke nampilin semuanya) SENGAJA dibiarkan gak berubah, karena maknanya beda (itu pilihan
-eksplisit "tampilin semua", bukan placeholder "belum milih apa-apa").
-Riwayat lengkap: git log.
-============================================================
-DASHBOARD ver.65
-============================================================
-PERUBAHAN ver.65 (koreksi ver.61+64, request Denny): area filter Rekap QC direstrukturisasi jadi
-grid 2 kolom x 2 baris SUNGGUHAN (CSS Grid), bukan lagi 2 flex row terpisah yang proporsinya
-bisa beda sendiri-sendiri. Kolom kiri: search box (atas) + slider tanggal (bawah). Kolom kanan:
-dropdown Varian (atas) + dropdown Periode (bawah, sebelumnya nempel di baris label tanggal, kini
-pindah sejajar di bawah Varian). Daftar dropdown (varian-filter-list) ditarik keluar dari grid,
-tetap render sebagai block biasa di bawah biar gak bikin grid ribet pas salah satu dibuka. Slider
-sekarang pakai visibility (bukan display) buat state loading-nya, biar cell grid dropdown Periode
-di sebelahnya gak ikut geser sesaat sebelum data termuat.
-Riwayat lengkap: git log.
-============================================================
-DASHBOARD ver.64
-============================================================
-PERUBAHAN ver.64 (request Denny): 2 penyempurnaan dropdown Periode (ver.63) -
-1. Label fallback pas rentang gak pas 1 bulan penuh/semua diganti "Periode" (sebelumnya
-   "Rentang custom").
-2. Dropdown trigger digabung 1 baris sama label tanggal ("30/07 s/d 30/07") yang sebelumnya
-   sendirian gak ngapa2in di baris itu - hemat 1 baris penuh drpd sebelumnya (dropdown dulu
-   baris terpisah di bawah track). Trigger dibikin lebih compact khusus di konteks baris ini.
-Riwayat lengkap: git log.
-============================================================
-DASHBOARD ver.63
-============================================================
-PERUBAHAN ver.63 (koreksi ver.62, request Denny): baris chip pilih bulan (ver.62) diganti dropdown
-- Denny nge-flag risiko nyata: chip horizontal bakal makin panjang & perlu geser2 ke samping terus
-kalau bulan/tahun udah banyak (sistem ini kepake bertahun-tahun). Dropdown scroll VERTIKAL gak
-punya batasan itu. Diganti PERSIS pola dropdown Varian (trigger + list custom, "kunci" dataset,
-highlight item aktif) - reuse class .varian-filter-trigger/-list/-item yang udah ada, gak ada
-style baru sama sekali. Logic penentuan rentang tanggal per bulan (1 s/d 30, dipotong Februari)
-TIDAK berubah dari ver.62 - cuma cara milihnya yang ganti dari klik chip jadi klik item dropdown.
-Riwayat lengkap: git log.
-============================================================
-DASHBOARD ver.62
-============================================================
-PERUBAHAN ver.62 (request Denny): pelengkap slider tanggal Rekap QC (ver.61) - baris chip pilih
-cepat per bulan ("Semua" + 1 chip per bulan yang ada datanya, mis. "Jul 2026", "Agu 2026"). Klik
-chip bulan langsung geser slider ke tanggal 1 s/d 30 bulan itu (PERSIS "1/30" per instruksi
-Denny), dipotong ke tanggal terakhir asli kalau bulannya lebih pendek (Februari 28/29). Reuse
-class .filter-chips/.chip yang udah ada (Stok Kain) - gak ada style baru. Chip yang lagi aktif
-(cocok persis sama rentang slider sekarang) dikasih highlight, ke-update juga kalau slider digeser
-manual sampai pas mentok di rentang 1 bulan penuh.
-Riwayat lengkap: git log.
-============================================================
-DASHBOARD ver.61
-============================================================
-PERUBAHAN ver.61 (request Denny): tab Rekap QC 2 perubahan besar -
-1. Sekarang narik SEMUA history (bukan cuma 14 hari terakhir) - endpoint Worker gak perlu diubah
-   (udah dukung parameter ?hari=N), cuma nilai default fetch di frontend dinaikin jadi 3650.
-2. Slider rentang tanggal (2 handle, geser dari tanggal awal ke tanggal akhir) buat narrow-in
-   tampilan - murni filter client-side (gak fetch ulang ke server tiap geser). Defaultnya full
-   range (semua history kelihatan), user bisa geser sendiri buat mempersempit. Posisinya COMPACT:
-   search box + dropdown varian digabung 1 baris (dipersempit masing2), baris yang kebebas dari
-   situ dipakai slider - total tinggi area filter TETAP SAMA, gak nambah space baru sama sekali.
-Riwayat lengkap: git log.
-============================================================
-DASHBOARD ver.60
-============================================================
-PERUBAHAN ver.60 (request Denny): dropdown filter varian di tab Rekap QC di-restyle - dari native
-<select> jadi dropdown custom (trigger row + list div) yang tampilannya kayak dropdown "Varian" di
-Input Produksi: kartu rounded, baris bergantian warna pucat siklus 6 warna (CSS nth-child), teks
-tebal. Warna dituning ke palet indigo dashboard sendiri (var(--indigo)/var(--border)), bukan
-nyontek biru dari index.html mentah-mentah - biar nyambung ke tema dashboard yang ungu. Baris yang
-lagi aktif dikasih highlight solid var(--indigo). Logic filter (filterVarianRekapAktif, dampak ke
-renderRekapQC) TIDAK berubah - murni ganti tampilan & cara pilihnya, bukan cara kerja filternya.
-Riwayat lengkap: git log.
-============================================================
-DASHBOARD ver.59
-============================================================
-PERUBAHAN ver.59 (request Denny: "terapkan juga untuk semua elemen di miniapp dan Supabase") -
-audit menyeluruh pola cache-once-gak-pernah-disegarkan yang sama kayak ver.57/58, ditemukan 2
-elemen lagi yang masih kena:
-1. Riwayat Pemakaian per roll (tab Stok Kain) - SEBELUMNYA gak bisa realtime sama sekali karena
-   DUA alasan sekaligus: (a) tabel sumbernya log_pemakaian_kain belum ada di publication Realtime
-   Supabase & belum ada policy baca publik (baru ditambahin sesi ini, migrasi
-   realtime_log_pemakaian_kain), (b) riwayatPemakaianData di JS juga cache-once. Fungsi baru
-   segarkanRiwayatPemakaian_(), dipanggil dari siklus Realtime + tab-switch.
-2. Arsip Selesai (tab Proses & QC) - pola sama kayak Stok Habis ver.57 (fetch sekali pas toggle
-   pertama dibuka, gak pernah disegarkan lagi). Sekarang ikut dipanggil dari muatTabAktif_ +
-   tab-switch, gated tab QC lagi keliatan.
-Riwayat lengkap: git log.
-============================================================
-DASHBOARD ver.58
-============================================================
-PERUBAHAN ver.58 (request Denny): root cause KEDUA "Terpakai Sebagian gak realtime" - beda dari
-ver.57. Handler tab-switch SEBELUMNYA cuma fetch data Stok Kain kalau tab itu BELUM PERNAH dibuka
-sama sekali (`!stokUtuhData`) - begitu udah pernah dibuka sekali, pindah-tab-balik-lagi gak
-pernah narik data baru, padahal perubahan bisa kejadian pas lagi di tab LAIN (mis. hapus laporan
-di Proses & QC) dan Realtime ver.57 cuma nge-refresh kalau tab Stok Kain-nya lagi KELIATAN saat
-kejadian. Sekarang disamain kayak pola tab Rekap QC (yang emang udah SELALU fetch ulang tiap
-di-switch ke, gak pernah dilaporin basi) - tab Stok Kain sekarang juga SELALU fetch ulang +
-invalidate cache Terpakai Sebagian & Stok Habis tiap kali di-switch ke, gak cuma kunjungan pertama.
-Riwayat lengkap: git log.
-============================================================
-DASHBOARD ver.57
-============================================================
-PERUBAHAN ver.57 (3 request Denny, sesi lanjutan STANDAR PEMAKAIAN KAIN):
-1. Fix "Stok Kain gak realtime" - root cause: chip "Terpakai Sebagian" & panel "Stok Habis" pakai
-   cache terpisah yang cuma ke-invalidate abis aksi lokal, gak pernah kepicu event Realtime dari
-   sesi/klien lain. Sekarang siklus Realtime juga manggil ulang cache itu (muatTabAktif_).
-2. Dropdown filter varian di tab Rekap QC (select#filterVarianRekap) - opsi otomatis dari data
-   yang lagi ke-load, client-side murni, hemat tempat dibanding baris chip.
-3. Tombol "☑️ Pilih" (write-off massal) dipindah dari dalam tab Stok Kain ke header (sebelah
-   Sync) - visibilitasnya sekarang gabungan isAdmin + tab Stok Kain aktif (perbaruiVisibilitasBtnPilihMassal_),
-   karena header dipakai bareng di semua tab.
-Riwayat lengkap: git log.
-============================================================
-PERUBAHAN ver.56: chip filter baru "🏷️ Tanpa Kode Roll" di tab Stok Kain (request Denny) - roll
-yang kode_roll-nya kosong/null, dikelompokkan ulang per warna (kg & jumlah roll dihitung ulang
-dari yang kosong doang). Murni client-side, gak perlu endpoint baru - sama pola kayak POLO.
-SENGAJA gak ngaruh ke COMBED (beda dari POLO yang memang diminta dikeluarin dari COMBED) - roll
-tanpa kode tetap muncul normal di COMBED/POLO, ini cuma lensa tambahan buat gampang nemuinnya.
-Riwayat lengkap: git log.
-============================================================
-PERUBAHAN ver.55: write-off massal (request Denny) - tombol "☑️ Pilih" admin-only di tab Stok
-Kain (dekat kotak pencarian). Aktif: checkbox muncul di tiap baris roll (lintas warna/filter,
-gak ke-reset pas ganti chip/buka-tutup kartu), tap badan baris = toggle centang (expand & edit
-satuan nonaktif sementara). Muncul bar fixed di bawah: "N roll dipilih" + tombol Write-off. Tap
-sekali -> semua roll yang dicentang ditandai HABIS (kg = kg_sisa masing-masing, reuse endpoint
-/data/writeoff-kain yang sudah ada, dipanggil paralel via Promise.all) - SENGAJA gak ada input kg
-per roll (scope disepakati: "cukup tandai HABIS semua, paling simpel"). Kalau ada yang salah
-pilih, tetap bisa dibatalkan satu-satu lewat riwayat write-off di form edit per-roll.
-Riwayat lengkap: git log.
-============================================================
-PERUBAHAN ver.54: FIX LANJUTAN dari ver.53 (screenshot Denny nunjukin masih kebungkus) - akar
-masalah sebenarnya BUKAN cuma soal CSS, tapi renderBarisRoll_ (JS) taruh "Roll ..." sebagai bare
-<span> TANPA class roll-kiri di 2 dari 3 varian baris (roll kode kosong & roll yang belum pernah
-kepakai) - jadi 2 varian itu gak ikut kena proteksi white-space:nowrap yang ditambahin ver.53.
-Sekarang ketiga varian konsisten pakai class roll-kiri. Sekalian manfaatin whitespace kiri-kanan
-biar lebih lega (request Denny): padding kiri roll-row 16px->10px, padding tombol edit 5px->3px,
-gap roll-kiri 6px->4px, gap roll-kanan 4px->3px. flex-shrink:0 juga ditambahin di roll-kiri
-(sebelumnya cuma roll-kanan) buat jaga-jaga ekstra.
-Riwayat lengkap: git log.
-============================================================
-PERUBAHAN ver.53: fix baris roll di grid Stok Kain kebungkus jadi 2-3 baris ("Roll" kepisah dari
-kodenya, "kg" kepisah dari angkanya) di layar/setting font yang lebih sempit dari biasa
-(screenshot Denny). Penyebab: flex item defaultnya boleh nyusut sampai lebih kecil dari lebar
-teksnya sendiri, bikin teksnya ikut wrapping. Fix: white-space:nowrap di .roll-kiri/.roll-kanan
-(list Stok Habis/Terpakai Sebagian udah aman dari awal, sudah punya nowrap).
-Riwayat lengkap: git log.
-============================================================
-PERUBAHAN ver.52 (request Denny): urutan chip filter Stok Kain diubah jadi COMBED, POLO,
-Terpakai Sebagian, Nama A-Z, Roll Terbanyak. Icon 👔 di chip POLO dihapus. Murni perubahan
-tampilan (urutan HTML + label) - data-chip & logic filter di baliknya gak berubah.
-Riwayat lengkap: git log.
-============================================================
-PERUBAHAN ver.51 (request Denny, tab Stok Kain):
-1. Chip "Kg terbanyak" berganti nama jadi "COMBED" - dan sekarang (bareng "Nama A-Z"/"Roll
-   terbanyak" juga) SENGAJA GAK nampilin warna POLO lagi, karena POLO udah punya kategori/chip
-   sendiri. Ini soal kategori fabric (COMBED vs POLO), bukan cuma urutan tampil.
-2. Chip "Kain Polo" disingkat jadi "POLO".
-Riwayat lengkap: git log.
-============================================================
-PERUBAHAN ver.50 (request Denny, tab Stok Kain, 2 hal):
-1. FIX: chip filter (Kg terbanyak/Nama A-Z/Roll terbanyak/Terpakai Sebagian) sebelumnya bisa
-   AKTIF BARENGAN (sort chip + "Terpakai Sebagian" independen) - screenshot Denny nunjukin 2
-   chip nyala bareng. Sekarang SEMUA chip disatukan 1 state (chipStokAktif), single-select
-   murni kayak radio button - klik salah satu otomatis matiin yang lain, gak mungkin dobel lagi.
-2. Chip baru "👔 Kain Polo" - filter warna yang namanya diawali "POLO " (mis. POLO MAROON, POLO
-   ST. BLUE, dst - 19 warna per 19 Agustus 2026), murni client-side, gak perlu endpoint baru.
-Riwayat lengkap: git log.
-============================================================
-PERUBAHAN ver.49: fix bug FUNDAMENTAL di "Riwayat Pemakaian" - dibuktikan langsung ke Supabase
-(Denny lapor screenshot: STEEL BLUE roll 1608 & MUSTARD roll 1863 nampilin "kg awal estimasi"
->40kg padahal kg_terpakai KEDUANYA 0.00 di database - jadi riwayat yang tampil BUKAN milik roll
-itu, dan keduanya SEHARUSNYA gak muncul di "Terpakai Sebagian" karena memang belum pernah
-kesentuh). Root cause: kode_roll TERNYATA gak unik sama sekali (dibuktikan query: kode "7046"
-dipakai 10 roll MERAH BERBEDA sekaligus, dst) - fix ver.48 (cocokkan kode_roll+warna) gak cukup
-buat kasus 2 roll warna SAMA yang kebetulan kode-nya sama juga. Sumber data diganti total dari
-/data/export-tim-potong (filter teks) ke /data/riwayat-pemakaian-kain (Worker ver.45,
-log_pemakaian_kain - FK stok_kain_id asli, exact match, gak mungkin ketuker lagi). Variabel &
-fungsi terkait di-rename (riwayatTimPotongData -> riwayatPemakaianData, dst) biar nyambung sama
-sumber datanya yang baru.
-Riwayat lengkap: git log.
-============================================================
-PERUBAHAN ver.48 (request Denny, 2 hal):
-1. Filter "Terpakai Sebagian" DIPINDAH dari section terpisah (ver.47) jadi chip di baris filter
-   atas, sejajar "Kg terbanyak"/"Nama A-Z"/"Roll terbanyak". Data flat per-roll dari endpoint
-   dikelompokkan ulang jadi struktur per-warna yang sama persis kayak stokUtuhData.perWarna, jadi
-   renderWarnaGrid() yang sama bisa dipakai ulang (search/sort/card/edit/riwayat semua otomatis
-   ikut jalan, gak ada logic render terpisah).
-2. FIX BUG NYATA (screenshot: kartu COKLAT Roll 0002 nampilin riwayat "TS HITAM"/"SET. HITAM") -
-   riwayat pemakaian roll sebelumnya cuma dicocokkan lewat kode_roll, padahal kode_roll BISA
-   sama persis di 2 warna berbeda. Sekarang WAJIB dicocokkan juga nama warnanya (fungsi baru
-   cocokRiwayatRoll_), dipakai di jumlah pemakaian (badge "NX") dan panel riwayatnya sekaligus.
-Riwayat lengkap: git log.
-============================================================
-Riwayat lengkap: git log.
-============================================================
-PERUBAHAN ver.46: fix kartu warna yang TERTUTUP ikut melar kosong kalau kartu tetangganya (1
-baris grid yang sama, layout 2 kolom) lagi TERBUKA (request Denny, screenshot: kartu COKLAT
-ikut tinggi kosong pas NAVY di sebelahnya dibuka). Penyebab: .warna-grid CSS grid tanpa
-align-items eksplisit, default-nya "stretch" - semua kartu di baris yang sama disamain tinggi
-ke yang paling tinggi. Fix: align-items:start.
-Riwayat lengkap: git log.
-============================================================
-PERUBAHAN ver.45 (4 poin, request Denny, tab Stok Kain):
-1. Kartu warna & tombol edit sebelumnya pasang ulang event listener tiap render
-   (querySelectorAll+forEach di dalam renderWarnaGrid, dipanggil ulang tiap toggle/refresh) -
-   diduga penyebab kartu kadang butuh 2x klik & tombol edit di Stok Habis ke-attach berkali-kali
-   kalau render numpuk (misal Realtime + klik hampir bersamaan). Diganti event delegation (1x
-   pasang di #warnaGrid & #stokHabisList, gak pernah dipasang ulang) - listener-nya cuma ada 1
-   selamanya, gak mungkin dobel lagi.
-2. Pemisah "/" antara kode roll & kg di tiap baris roll.
-3. Accordion - buka 1 kartu warna otomatis nutup yang lain (dulu bisa beberapa kebuka
-   bebarengan). warnaTerbuka (object) diganti warnaTerbukaSatu (1 nilai).
-4. Baris roll lebih compact - padding 8px->6px, garis putus-putus di akhir baris dibuang.
-Riwayat lengkap: git log.
-============================================================
-PERUBAHAN ver.44: modal Edit Stok Kain sekarang OTOMATIS TERTUTUP (balik ke tampilan dashboard
-Stok Kain) setelah "Simpan Perubahan" atau "Catat Write-off" berhasil - sebelumnya modal reload
-ulang nampilin detail yang sama (request Denny). Grid utama tetap auto-refresh sendiri lewat
-Realtime yang sudah ada. Batal Write-off TIDAK ikut diubah (modal tetap kebuka biar riwayatnya
-kelihatan) - cuma 2 aksi yang diminta. Riwayat lengkap: git log.
-============================================================
-DASHBOARD ver.43
-============================================================
-PERUBAHAN ver.43: checkbox "Terpakai habis" di modal Write-off tab Stok Kain (request Denny) -
-dicentang, kolom "Kg" write-off otomatis keisi kg sisa penuh & dikunci (gak bisa diketik
-manual); uncentang, dikosongin lagi buat isi manual. Gaya & pola sama kayak checkbox "Pakai
-habis" yang udah ada di index.html, biar konsisten. Riwayat lengkap: git log.
-============================================================
-PERUBAHAN ver.42 (fitur Edit/Write-off, atas permintaan Denny, 4 fase):
-- Tab Stok Kain: tombol ✏️ admin-only per roll (termasuk di "Stok Habis") buka modal Edit
-  (tgl_beli/supplier/warna/kg/kode_roll/harga/diskon, harga & subtotal SENGAJA cuma kebuka lewat
-  endpoint admin) + Write-off Manual (kg partial + catatan, tercatat sebagai histori, bisa
-  dibatalkan). Grid utama auto-refresh lewat Realtime yang sudah ada, gak perlu fetch manual.
-- Tab Rekap QC: tombol ✏️ admin-only per baris - koreksi Selesai/Reject 1x submit (di baliknya:
-  batalkan baris lama + submit ulang, jejak audit tetap ada). Mode Ringkas doang di v1 - lihat
-  catatan di bukaModalEditLogQC_.
-- Tab Proses & QC: tombol "✏️ Edit Data Produksi" admin-only per laporan - nama item/kode
-  roll/kg pemakaian/jumlah. Kode roll/kg yang berubah otomatis potong-ulang stok. Jumlah dikunci
-  kalau laporan udah ada progres QC. Ukuran per-size belum ada form-nya di v1.
+PERUBAHAN ver.76 (request Denny, "kolomnya fit to width semua device, jangan ada scroll bar
+horizontal"): tabel Rekap QC - lebar kolom Waktu/Warna/Varian/tiap ukuran/Selesai/Reject diganti
+dari px tetap ke unit fr (CSS Grid bagi rata sisa lebar secara proporsional), jadi total kolom
+selalu pas selebar device apapun. Kolom Hapus (admin-only, isi tombol) tetap px biar tombolnya gak
+collapse. Trade-off yang disadari & disetujui Denny: di HP sempit atau pas banyak kolom ukuran
+sekaligus, nama Warna & angka bisa lebih padat/kepotong "..." - scroll horizontal hilang, teksnya
+lebih rapat. .rekap-wrap overflow-x dimatikan (cuma overflow-y buat scroll vertikal list).
 Riwayat lengkap: git log.
 ============================================================
 
@@ -691,7 +346,7 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
      dipasang SAMA PERSIS di setiap baris (header & data) lewat inline style, jadi kolom
      dijamin selalu selebar itu & align sempurna antar baris. */
   .rekap-summary { font-size: 12px; color: var(--gray-text); margin-bottom: 8px; }
-  .rekap-wrap { background: #fff; border-radius: 14px; overflow: auto; max-height: 62vh; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+  .rekap-wrap { background: #fff; border-radius: 14px; overflow-y: auto; overflow-x: hidden; max-height: 62vh; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
   .rekap-row { display: grid; align-items: center; }
   .rekap-row > div { padding: 8px 4px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* v.29: kolom Varian & angka ukuran suka kepotong (request Denny) - Varian sekarang wrap ke
@@ -2907,14 +2562,17 @@ function renderRekapQC() {
   // v.34: kolom tambahan buat tombol Hapus, CUMA muncul buat admin (lihat isAdmin) - biar user
   // biasa gak ada ruang kosong yang gak kepakai di tabelnya.
   // v.42: kolom ini sekarang muat 2 tombol (✏️ Edit + 🗑️ Hapus) - dilebarin dari 36 ke 62px.
+  // v.76 (request Denny, "kolomnya fit to width, jangan ada scroll bar horizontal"): kolom lain
+  // sekarang pakai unit fr, bukan px tetap - rasio LEBAR_* di bawah tetap sama kayak sebelumnya,
+  // cuma sekarang jadi bobot proporsional (CSS Grid otomatis bagi rata sisa lebar), jadi total
+  // kolom selalu pas selebar rekapWrap di device manapun. Kolom Hapus tetap px biar tombolnya gak
+  // ikut collapse.
   const LEBAR_WAKTU = 92, LEBAR_WARNA = 110, LEBAR_VARIAN = 118, LEBAR_UKURAN = 40, LEBAR_ANGKA = 60, LEBAR_HAPUS = 62;
-  const templateKolom = LEBAR_WAKTU + 'px ' + LEBAR_WARNA + 'px ' + LEBAR_VARIAN + 'px ' +
-    ukuranDipakai.map(function () { return LEBAR_UKURAN + 'px'; }).join(' ') +
-    ' ' + LEBAR_ANGKA + 'px ' + LEBAR_ANGKA + 'px' + (isAdmin ? ' ' + LEBAR_HAPUS + 'px' : '');
-  const lebarTotal = LEBAR_WAKTU + LEBAR_WARNA + LEBAR_VARIAN + (ukuranDipakai.length * LEBAR_UKURAN) + (LEBAR_ANGKA * 2) + (isAdmin ? LEBAR_HAPUS : 0);
+  const templateKolom = LEBAR_WAKTU + 'fr ' + LEBAR_WARNA + 'fr ' + LEBAR_VARIAN + 'fr ' +
+    ukuranDipakai.map(function () { return LEBAR_UKURAN + 'fr'; }).join(' ') +
+    ' ' + LEBAR_ANGKA + 'fr ' + LEBAR_ANGKA + 'fr' + (isAdmin ? ' ' + LEBAR_HAPUS + 'px' : '');
 
   const list = document.getElementById('rekapList');
-  list.style.minWidth = lebarTotal + 'px';
 
   const summary = document.getElementById('rekapSummary');
   const headHtml = '<div class="rekap-row rekap-head" style="grid-template-columns:' + templateKolom + '">' +
