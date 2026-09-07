@@ -1,15 +1,18 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.76
+DASHBOARD ver.77
 ============================================================
-PERUBAHAN ver.76 (request Denny, "kolomnya fit to width semua device, jangan ada scroll bar
-horizontal"): tabel Rekap QC - lebar kolom Waktu/Warna/Varian/tiap ukuran/Selesai/Reject diganti
-dari px tetap ke unit fr (CSS Grid bagi rata sisa lebar secara proporsional), jadi total kolom
-selalu pas selebar device apapun. Kolom Hapus (admin-only, isi tombol) tetap px biar tombolnya gak
-collapse. Trade-off yang disadari & disetujui Denny: di HP sempit atau pas banyak kolom ukuran
-sekaligus, nama Warna & angka bisa lebih padat/kepotong "..." - scroll horizontal hilang, teksnya
-lebih rapat. .rekap-wrap overflow-x dimatikan (cuma overflow-y buat scroll vertikal list).
+PERUBAHAN ver.77 (request Denny, screenshot HP nunjukin header/angka Rekap QC kepotong "...", +
+minta tabel full-bleed di layar lebar): koreksi arah dari ver.76.
+1. Layar sempit (HP, <600px): font & padding tabel Rekap QC dikecilin (bukan kolom yang dipaksa
+   nyempit sampe teks/angka ilang) - white-space dibuka jadi wrap, jadi kalau masih kepanjangan
+   turun baris, BUKAN kepotong "...". Solusi kalau kerasa kekecilan buat dibaca: zoom manual -
+   meta viewport diubah biar pinch-zoom kepakai lagi (sebelumnya user-scalable=no).
+2. Layar lebar (PC/laptop/fold terbuka, >=600px): .rekap-wrap sekarang "full-bleed" - nembus
+   keluar dari max-width:520px #app biar makan semua lebar browser, gak ada space kosong
+   kiri-kanan. Sengaja cuma bagian tabel ini yang full-bleed, bagian lain (search/filter/tab)
+   tetap di lebar #app biasa.
 Riwayat lengkap: git log.
 ============================================================
 
@@ -24,7 +27,7 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DASHBOARD QC</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -61,7 +64,7 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
      Stok Kain/Rekap QC), bukan seluruh isi tab "Proses & QC". Revert dari #tabQC, pindah ke
      .tab-btn. */
   .tab-btn { text-transform: uppercase; }
-  body { margin: 0; font-family: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: #292B31; padding-bottom: 20px; }
+  body { margin: 0; font-family: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: #292B31; padding-bottom: 20px; overflow-x: hidden; }
   #app { max-width: 520px; margin: 0 auto; padding: 16px; }
 
   .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
@@ -365,6 +368,23 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .rekap-reject { color: var(--danger); font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
   .rekap-foot { display: flex; justify-content: flex-end; gap: 18px; padding: 9px 12px; font-size: 12px; border-top: 1px solid var(--border); background: #f7f9fd; }
   .rekap-foot b { color: #1c1c1e; }
+  /* v.77 (request Denny, screenshot HP: header & angka kepotong "..." di layar kecil gara-gara
+     kolom fr ver.76 kepaksa sempit banget kalau kolom ukurannya banyak) - di bawah 600px, font &
+     padding tabel yang dikecilin (BUKAN kolom yang dipaksa nyempit sampe teksnya ilang), dan
+     white-space dibuka jadi wrap biar kalau masih kepanjangan turun baris, bukan "...". Kalau
+     kerasa kekecilan buat dibaca, solusinya zoom manual (meta viewport sekarang udah izinin
+     pinch-zoom lagi - lihat <head>). */
+  @media (max-width: 599px) {
+    .rekap-row > div { font-size: 9.5px; padding: 5px 2px; white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.2; }
+    .rekap-head > div { font-size: 8px; }
+  }
+  /* v.77 (request Denny): di layar lebar (PC/laptop/fold terbuka), tabel Rekap QC "full-bleed" -
+     nembus keluar dari max-width:520px #app biar makan semua lebar browser, gak ada space kosong
+     kiri-kanan. SENGAJA cuma bagian tabel ini yang full-bleed - bagian lain (search/filter/tab)
+     tetap di lebar #app biasa, sesuai request Denny. */
+  @media (min-width: 600px) {
+    .rekap-wrap { width: 100vw; margin-left: calc(50% - 50vw); margin-right: calc(50% - 50vw); border-radius: 0; }
+  }
 
   .toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); background: #1c1c1e; color: #fff; padding: 10px 18px; border-radius: 10px; font-size: 13px; z-index: 999; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
   .toast.show { opacity: 1; }
