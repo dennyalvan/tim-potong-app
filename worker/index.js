@@ -1,11 +1,11 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.68
+// CODE WORKER PRODUKSI ver.69
 // ============================================================
-// PERUBAHAN ver.68 (request Denny): Dashboard QC (Proses & QC, Rekap QC, Arsip Selesai, HPP
-// Akurasi Estimasi) sekarang nampilin nama warna kanonik (mis. "STEEL BLUE" bukan "ST BLUE"),
-// via fungsi baru formatNamaKanonikTampilan_ - data asli di tim_potong/log_qc TIDAK diubah, cuma
-// tampilannya. Item KOMBINASI (dicek lewat ref_stok/varian) SENGAJA dilewatin apa adanya - nama
-// kombinasi (mis. "STEEL NAVY") tetap ditampilkan persis, gak dipecah jadi "STEEL BLUE NAVY".
+// PERUBAHAN ver.69 (request Denny): konfirmasi sukses simpan stok kain sekarang detail (nama
+// supplier, daftar warna+kg+kode roll per baris, total rol) di DUA alur - foto nota (pesan preview
+// diganti jadi ringkasan, bukan cuma jumlah baris) & teks "Masuk ..." (sebelumnya SENYAP total
+// kalau sukses, sekarang ada balasan juga). Fungsi baru: bangunDaftarRollTeks_ (list roll bersama,
+// dipakai 2 alur) & bangunTeksSuksesMasukKain_ (khusus alur teks, plain text tanpa parse_mode HTML).
 //
 // Riwayat versi lengkap: git log.
 //
@@ -1312,6 +1312,18 @@ async function kirimPesanTelegram_(env, chatId, teks) {
 // Apps Script (doPost -> tambahStokKainMasuk -> tambahStokKainMasukKeSupabase_ via HTTP ke
 // Worker) - sekarang parsing DAN tulis ke Supabase dua-duanya di Worker, gak ada lagi
 // round-trip HTTP internal ke Apps Script buat fitur ini.
+// v.69 (request Denny): teks konfirmasi sukses buat alur "Masuk ..." - dikirim via
+// kirimPesanTelegram_ (PLAIN TEXT, TIDAK ada parse_mode HTML), makanya TIDAK boleh ada tag/escape
+// di sini. Asumsi: 1 pesan Telegram = 1 supplier (pola nyata di lapangan) - kalau dalam 1 pesan ada
+// >1 blok "Masuk" dengan supplier beda, cuma supplier pertama yang tampil di header.
+function bangunTeksSuksesMasukKain_(items) {
+  const supplierUtama = items.find(function (it) { return it.supplier; });
+  let teks = '✅ Tersimpan ke Stok Kain';
+  if (supplierUtama) teks += ' - ' + supplierUtama.supplier;
+  teks += '\n\n' + bangunDaftarRollTeks_(items) + '\nTOTAL ' + items.length + ' ROL';
+  return teks;
+}
+
 async function tanganiPesanMasuk_(env, message) {
   const chatId = message.chat.id;
   const teks = message.text;
@@ -1344,6 +1356,7 @@ async function tanganiPesanMasuk_(env, message) {
   }
 
   let jumlahBerhasil = 0;
+  const berhasilItems = [];
   const galat = [];
   for (const blok of kelompok.blokMasuk) {
     const daftarMasuk = parseBarisMasuk_(blok);
@@ -1355,6 +1368,7 @@ async function tanganiPesanMasuk_(env, message) {
       try {
         await tambahStokKainMasukSupabase_(env, { warna: pm.warna, kg: pm.kg, kodeRoll: pm.kodeRoll, supplier: pm.supplier });
         jumlahBerhasil++;
+        berhasilItems.push(pm);
       } catch (e) {
         galat.push(pm.warna + ' (' + pm.kg + 'kg): ' + e.message);
       }
@@ -1363,6 +1377,11 @@ async function tanganiPesanMasuk_(env, message) {
 
   console.log('Kain masuk diproses via Worker:', jumlahBerhasil, 'berhasil,', galat.length, 'gagal. Chat:', chatId);
 
+  // v.69 (request Denny): sebelumnya senyap total kalau sukses - sekarang balas ringkasan
+  // (supplier, daftar warna/kg/kode roll, total) biar tim langsung tahu datanya kebaca benar.
+  if (berhasilItems.length > 0) {
+    await kirimPesanTelegram_(env, chatId, bangunTeksSuksesMasukKain_(berhasilItems));
+  }
   if (galat.length > 0) {
     await kirimPesanTelegram_(env, chatId, '⚠️ ' + jumlahBerhasil + ' baris berhasil disimpan, tapi ada ' + galat.length + ' yang gagal:\n' + galat.join('\n'));
   }
@@ -3380,6 +3399,21 @@ function formatRupiah_(n) {
   return Number(n).toLocaleString('id-ID');
 }
 
+// v.69 (request Denny): daftar roll bernomor (tanpa header/total) - dipakai bareng alur teks
+// "Masuk ..." & alur foto nota buat pesan konfirmasi SUKSES (beda dari bangunTeksPreviewNota_ di
+// bawah yang buat PREVIEW sebelum tap "Simpan", masih nampilin harga/diskon). escapeFn: htmlEscape_
+// buat foto nota (parse_mode HTML wajib escape), default identitas buat teks Masuk (plain text,
+// TIDAK boleh di-escape - ubahTeksPesanTelegram_ vs kirimPesanTelegram_ beda parse_mode-nya).
+function bangunDaftarRollTeks_(items, escapeFn) {
+  const esc = escapeFn || function (s) { return s; };
+  let teks = '';
+  items.forEach(function (r, i) {
+    const kodeTampil = r.kodeRoll ? r.kodeRoll : '-';
+    teks += (i + 1) + '. ' + esc(r.warna) + ' (' + r.kg + ' / ' + kodeTampil + ')\n';
+  });
+  return teks;
+}
+
 function bangunTeksPreviewNota_(hasil) {
   const jumlah = hasil.rows.length;
   let teks = htmlEscape_(hasil.tglBeli) + '\n';
@@ -3550,7 +3584,11 @@ async function handleCallbackQueryNota_(env, callbackQuery) {
       });
     }
     await env.TIM_POTONG_KV.delete(kvKey);
-    await ubahTeksPesanTelegram_(env, chatId, messageId, '✅ <b>Tersimpan</b> - ' + hasil.rows.length + ' baris ditambahkan ke STOK KAIN (' + htmlEscape_(hasil.supplier) + ', ' + htmlEscape_(hasil.tglBeli) + ').');
+    // v.69 (request Denny): sebelumnya cuma jumlah baris - sekarang detail per roll (warna, kg,
+    // kode roll) senada sama preview sebelum tap "Simpan", tapi tanpa harga/diskon.
+    const teksSukses = '✅ <b>Tersimpan</b> - ' + htmlEscape_(hasil.supplier) + ' (' + htmlEscape_(hasil.tglBeli) + ')\n\n'
+      + bangunDaftarRollTeks_(hasil.rows, htmlEscape_) + '\nTOTAL ' + hasil.rows.length + ' ROL';
+    await ubahTeksPesanTelegram_(env, chatId, messageId, teksSukses);
     console.log('Nota disimpan ke Stok Kain via Worker:', hasil.rows.length, 'baris, supplier', hasil.supplier);
     return jsonResponse({ ok: true, jumlahBaris: hasil.rows.length });
   } catch (err) {
