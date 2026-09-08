@@ -1,17 +1,11 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.79
+DASHBOARD ver.80
 ============================================================
-PERUBAHAN ver.79 (request Denny): 4 hal di tabel Rekap QC.
-1. Header Warna/Varian/tiap kolom ukuran dihitamin (kelas baru rekap-head-black) - Waktu/Selesai/
-   Reject tetap abu kayak sebelumnya.
-2. Dash "-" pengganti size kosong dibikin lebih terang (kelas baru rekap-kosong, dipisah dari
-   rekap-muted biar teks Waktu/Varian gak ikut ke-lighten).
-3. Kolom Waktu sekarang cuma tampilin tanggal (DD/MM), jam disembunyiin - formatWaktuRekap gak
-   nambahin toLocaleTimeString lagi.
-4. .rekap-wrap border-radius 14px -> 0 (kartu kotak, bukan rounded lagi) - margin 16px dari
-   ver.78 tetap ada, cuma sudutnya yang diubah.
+PERUBAHAN ver.80 (request Denny): tab Proses & QC - nambah chip filter "Qty terbanyak" (urut
+r.jumlah descending) di samping "Paling lama"/"Varian A-Z" yang udah ada. Pakai mekanisme toggle
+exclusive yang sama, gak ada listener baru.
 Riwayat lengkap: git log.
 ============================================================
 
@@ -507,6 +501,7 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
       <div class="chip" data-filter="dewasa">Dewasa</div>
       <div class="chip" data-sort="lama">Paling lama</div>
       <div class="chip" data-sort="varian">Varian A-Z</div>
+      <div class="chip" data-sort="qty">Qty terbanyak</div>
     </div>
 
     <div class="laporan-wrap"><div id="daftarLaporan"></div></div>
@@ -1011,6 +1006,7 @@ function renderDaftarLaporan() {
       return cmp !== 0 ? cmp : new Date(a.tanggal) - new Date(b.tanggal);
     }
     if (sortLaporan === 'lama') return new Date(a.tanggal) - new Date(b.tanggal);
+    if (sortLaporan === 'qty') return b.jumlah - a.jumlah;
     return new Date(b.tanggal) - new Date(a.tanggal);
   });
 
@@ -1468,6 +1464,9 @@ document.querySelectorAll('.chip[data-sort]').forEach(function (el) {
     // sort itu, tap lagi buat balik ke default (tanggal terbaru).
     // v.70: sekarang ada 2 chip sort ("Paling lama", "Varian A-Z") - exclusive, aktifin satu
     // otomatis matiin yang lain (gak bisa 2 sort barengan).
+    // v.80 (request Denny): nambah chip sort ke-3 ("Qty terbanyak") - mekanisme toggle-nya sama,
+    // gak perlu listener baru karena querySelectorAll('.chip[data-sort]') otomatis nangkep chip
+    // baru ini juga.
     const aktifSebelumnya = el.classList.contains('active');
     document.querySelectorAll('.chip[data-sort]').forEach(function (c) { c.classList.remove('active'); });
     if (!aktifSebelumnya) el.classList.add('active');
