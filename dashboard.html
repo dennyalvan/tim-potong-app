@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.80
+DASHBOARD ver.81
 ============================================================
-PERUBAHAN ver.80 (request Denny): tab Proses & QC - nambah chip filter "Qty terbanyak" (urut
-r.jumlah descending) di samping "Paling lama"/"Varian A-Z" yang udah ada. Pakai mekanisme toggle
-exclusive yang sama, gak ada listener baru.
+PERUBAHAN ver.81 (koreksi Denny dari ver.80): chip "Qty terbanyak" di tab Proses & QC ternyata
+maksudnya sortir dari SISA pcs aktif terbanyak (jumlah - selesaiTampil, sama kayak angka fraksi
+"X/jumlah" di card), bukan total target r.jumlah kayak yang kepasang sebelumnya.
 Riwayat lengkap: git log.
 ============================================================
 
@@ -1006,7 +1006,14 @@ function renderDaftarLaporan() {
       return cmp !== 0 ? cmp : new Date(a.tanggal) - new Date(b.tanggal);
     }
     if (sortLaporan === 'lama') return new Date(a.tanggal) - new Date(b.tanggal);
-    if (sortLaporan === 'qty') return b.jumlah - a.jumlah;
+    if (sortLaporan === 'qty') {
+      // v.81 (koreksi Denny): "qty terbanyak" maksudnya SISA pcs aktif (jumlah - selesaiTampil),
+      // bukan total target r.jumlah - hitungannya disamain persis kayak yang ditampilin di
+      // fraksi card ("X/jumlah"), lihat renderLaporanCard.
+      const sisaA = a.jumlah - a.totalSelesai - hitungPendingUntukLaporan_(a.id).pendingSelesai;
+      const sisaB = b.jumlah - b.totalSelesai - hitungPendingUntukLaporan_(b.id).pendingSelesai;
+      return sisaB - sisaA;
+    }
     return new Date(b.tanggal) - new Date(a.tanggal);
   });
 
