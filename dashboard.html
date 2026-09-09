@@ -1,11 +1,10 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.81
+DASHBOARD ver.82
 ============================================================
-PERUBAHAN ver.81 (koreksi Denny dari ver.80): chip "Qty terbanyak" di tab Proses & QC ternyata
-maksudnya sortir dari SISA pcs aktif terbanyak (jumlah - selesaiTampil, sama kayak angka fraksi
-"X/jumlah" di card), bukan total target r.jumlah kayak yang kepasang sebelumnya.
+PERUBAHAN ver.82 (request Denny): tombol baru "Isi Upah" (admin-only, muncul pas tab Rekap QC
+aktif) - isi ulang otomatis upah QC lama yang kosong lewat endpoint /data/isi-ulang-upah-qc.
 Riwayat lengkap: git log.
 ============================================================
 
@@ -471,6 +470,10 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
            soalnya header ini kepakai bareng di semua tab (beda dari sebelumnya, otomatis
            ke-sembunyiin sendiri karena nempel di dalam div tabStok). -->
       <button class="btn-pilih-massal" id="btnPilihMassal" style="display:none">☑️ Pilih</button>
+      <!-- v.82: tombol Isi Upah (isi ulang otomatis harga_jait/total_bayar log_qc lama yang
+           kosong, admin-only) - dipola sama kayak btnPilihMassal, muncul cuma pas tab Rekap QC
+           aktif (lihat perbaruiVisibilitasBtnIsiUlangUpah_). -->
+      <button class="btn-pilih-massal" id="btnIsiUlangUpah" style="display:none" title="Isi ulang otomatis upah QC lama yang kosong">🧮 Isi Upah</button>
       <button class="btn-refresh" id="btnRefresh">🔄</button>
       <p class="loading-popup" id="loadingIndicator">⏳ Memuat...</p>
     </div>
@@ -726,6 +729,7 @@ if (tg && tg.initData) {
       if (isAdmin) {
         renderDaftarLaporan(); renderRekapQC(); if (stokUtuhData) renderWarnaGrid();
         perbaruiVisibilitasBtnPilihMassal_();
+        perbaruiVisibilitasBtnIsiUlangUpah_();
         document.getElementById('btnTabHpp').style.display = 'flex';
       }
     })
@@ -785,6 +789,12 @@ function perbaruiVisibilitasBtnPilihMassal_() {
   document.getElementById('btnPilihMassal').style.display = (isAdmin && tabStokAktif) ? 'inline-block' : 'none';
 }
 
+// v.82: sama pola kayak perbaruiVisibilitasBtnPilihMassal_ di atas, tapi buat tab Rekap QC.
+function perbaruiVisibilitasBtnIsiUlangUpah_() {
+  const tabRekapAktif = document.getElementById('tabRekap').style.display !== 'none';
+  document.getElementById('btnIsiUlangUpah').style.display = (isAdmin && tabRekapAktif) ? 'inline-block' : 'none';
+}
+
 document.querySelectorAll('.tab-btn').forEach(function (btn) {
   btn.addEventListener('click', function () {
     document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
@@ -817,7 +827,29 @@ document.querySelectorAll('.tab-btn').forEach(function (btn) {
     if (tab === 'hpp') muatHpp_();
     perbaruiBarPilihMassal_(); // v.55: bar write-off massal cuma boleh kelihatan pas tab Stok Kain aktif
     perbaruiVisibilitasBtnPilihMassal_();
+    perbaruiVisibilitasBtnIsiUlangUpah_();
   });
+});
+
+// v.82: klik tombol Isi Upah - konfirmasi native dulu (aksi nulis data, sama pola kayak Hapus
+// Laporan), lalu panggil endpoint & refresh Rekap QC biar angka yang baru keisi langsung kelihatan.
+document.getElementById('btnIsiUlangUpah').addEventListener('click', function () {
+  if (!confirm('Isi ulang otomatis upah QC yang masih kosong, pakai tarif jahit yang berlaku SEKARANG (bukan tarif waktu itu)?\n\nBaris yang variannya belum ada tarifnya akan dilewati, tetap kosong.')) return;
+  if (!tg || !tg.initData) { tampilkanToast('Harus dibuka lewat Telegram.'); return; }
+  tampilkanToast('Memproses...');
+  fetch(WORKER_URL + '/data/isi-ulang-upah-qc', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ initData: tg.initData })
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (data.ok) {
+        tampilkanToast('✓ ' + data.terisi + ' baris terisi' + (data.dilewatiTanpaTarif ? ', ' + data.dilewatiTanpaTarif + ' dilewati (varian belum ada tarif)' : '') + '.');
+        muatRekapQC();
+      } else {
+        tampilkanToast('Gagal: ' + data.error);
+      }
+    })
+    .catch(function (e) { tampilkanToast('Gagal: ' + e.message); });
 });
 
 document.getElementById('btnRefresh').addEventListener('click', function () {

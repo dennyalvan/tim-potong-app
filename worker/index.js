@@ -1,11 +1,9 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.69
+// CODE WORKER PRODUKSI ver.70
 // ============================================================
-// PERUBAHAN ver.69 (request Denny): konfirmasi sukses simpan stok kain sekarang detail (nama
-// supplier, daftar warna+kg+kode roll per baris, total rol) di DUA alur - foto nota (pesan preview
-// diganti jadi ringkasan, bukan cuma jumlah baris) & teks "Masuk ..." (sebelumnya SENYAP total
-// kalau sukses, sekarang ada balasan juga). Fungsi baru: bangunDaftarRollTeks_ (list roll bersama,
-// dipakai 2 alur) & bangunTeksSuksesMasukKain_ (khusus alur teks, plain text tanpa parse_mode HTML).
+// PERUBAHAN ver.70 (request Denny): endpoint baru /data/isi-ulang-upah-qc (admin-only) - isi
+// ulang otomatis harga_jait/total_bayar buat log_qc lama yang kosong, pakai tarif jahit yang
+// berlaku sekarang. Fungsi baru: handleIsiUlangUpahQC_.
 //
 // Riwayat versi lengkap: git log.
 //
@@ -191,6 +189,14 @@ export default {
       let body;
       try { body = await request.json(); } catch (e) { return jsonResponse({ ok: false, error: 'Body harus JSON.' }, 400); }
       return await handleEditLogQC_(body, env);
+    }
+
+    // v.70 - isi ulang otomatis harga_jait/total_bayar buat log_qc lama yang masih kosong,
+    // admin-only.
+    if (url.pathname === '/data/isi-ulang-upah-qc' && request.method === 'POST') {
+      let body;
+      try { body = await request.json(); } catch (e) { return jsonResponse({ ok: false, error: 'Body harus JSON.' }, 400); }
+      return await handleIsiUlangUpahQC_(body, env);
     }
 
     // v.42 - edit data dasar laporan produksi (tim_potong): nama item/jumlah/ukuran, TERMASUK
@@ -551,6 +557,50 @@ async function handleEditLogQC_(body, env) {
 
   const bodySubmitBaru = Object.assign({ initData: body.initData, timPotongId: dataBatal.timPotongId }, body.dataBaru || {});
   return await handleSubmitQC_(bodySubmitBaru, env);
+}
+
+// v.70 - isi ulang otomatis harga_jait & total_bayar buat baris log_qc AKTIF yang masih kosong
+// (biasanya submit lama sebelum tarif_jahit variannya diisi). Pakai tarif jahit yang berlaku
+// SEKARANG, bukan tarif historis - sistem ini gak nyimpen riwayat tarif (keputusan sadar Denny,
+// angka historis bisa gak akurat kalau tarif udah berubah sejak saat itu). Baris yang statusnya
+// dibatalkan dilewati (filter status=eq.aktif). Baris yang variannya masih gak ketemu di
+// tarif_jahit tetap dilewati, gak dianggap gagal - sama filosofi kayak submit-qc normal.
+async function handleIsiUlangUpahQC_(body, env) {
+  const validasi = await validasiInitData_(body.initData, env);
+  if (!validasi.ok) return jsonResponse(validasi, 401);
+  if (!cekAdmin_(validasi.userId, env)) {
+    return jsonResponse({ ok: false, error: 'Kamu tidak punya izin menjalankan isi ulang upah QC.' }, 403);
+  }
+
+  try {
+    const tarifMap = await ambilTarifJahitMap_(env);
+    const rows = await ambilDariSupabase_(env, '/rest/v1/log_qc?select=id,varian,total&status=eq.aktif&harga_jait=is.null');
+
+    let terisi = 0;
+    let dilewatiTanpaTarif = 0;
+    const variantKosong = new Set();
+
+    for (const r of rows) {
+      const tarif = tarifMap[String(r.varian || '').toUpperCase()];
+      if (!tarif) {
+        dilewatiTanpaTarif++;
+        if (r.varian) variantKosong.add(r.varian);
+        continue;
+      }
+      const totalBayarBaru = (parseFloat(r.total) || 0) * tarif;
+      const res = await fetch(env.SUPABASE_URL + '/rest/v1/log_qc?id=eq.' + r.id, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', apikey: env.SUPABASE_SECRET_KEY, Authorization: 'Bearer ' + env.SUPABASE_SECRET_KEY, Prefer: 'return=minimal' },
+        body: JSON.stringify({ harga_jait: tarif, total_bayar: totalBayarBaru })
+      });
+      if (res.status < 300) terisi++;
+      else dilewatiTanpaTarif++;
+    }
+
+    return jsonResponse({ ok: true, totalDicek: rows.length, terisi: terisi, dilewatiTanpaTarif: dilewatiTanpaTarif, variantKosong: Array.from(variantKosong) });
+  } catch (e) {
+    return jsonResponse({ ok: false, error: e.message }, 500);
+  }
 }
 
 // v.42 - edit data dasar laporan produksi (tim_potong), termasuk kode roll/kg buat stok opname
