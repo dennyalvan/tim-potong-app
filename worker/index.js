@@ -1,14 +1,11 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.74
+// CODE WORKER PRODUKSI ver.75
 // ============================================================
-// PERUBAHAN ver.74 (fix bug, request Denny - temuan kasus BENHUR 09/09/26): kurangiStokKain_
-// SEBELUMNYA gak pernah ngecek apakah kg yang diminta melebihi kg_sisa roll yang kepilih - PATCH
-// ke stok_kain jalan tanpa batas (kejadian nyata: 50kg dipotong dari roll yang cuma sisa
-// 25.47kg, kg_terpakai kesimpen lebih besar dari kg asli). Sekarang kalau kainKg > kg_sisa roll
-// yang matched, DITOLAK (matched:false + keterangan jelas) - stok TIDAK dikurangi, item
-// tim_potong tetap masuk tapi ditandai peringatan (pola sama kayak kasus "gak ketemu" yang udah
-// ada, lihat peringatanStok di handler pemanggilnya). Ini benteng terakhir sisi server - benteng
-// pertama sisi Mini App ada di v.45 HTML PRODUKSI (validasi kg vs stok pas Kode Roll dikosongkan).
+// PERUBAHAN ver.75 (request Denny): tab Proses, QC, Rekap QC, Arsip Selesai & HPP Akurasi
+// Estimasi sekarang nampilin nama warna standar "WARNA 1" (Inggris, sesuai sheet SKU Shopee
+// terbaru) lewat kolom baru kamus_sinonim_warna.tampilan - gantiin nama kanonik lama di 4
+// tempat itu. Data mentah tim_potong/log_qc TETAP gak disentuh (sama seperti mekanisme v.68
+// sebelumnya), begitu juga stok kain & endpoint lain - tetap pakai kanonik campur ID/EN.
 //
 // Riwayat versi lengkap: git log.
 //
@@ -885,9 +882,9 @@ async function handleRekapQC_(env, hari) {
     const path = '/rest/v1/log_qc?select=id,waktu,tim_potong_id,varian,warna,' +
       Object.values(KOLOM_UKURAN_MAP).join(',') + ',reject,total,status' +
       '&status=eq.aktif&waktu=gte.' + encodeURIComponent(batasWaktu) + '&order=waktu.desc';
-    const [rows, petaKanonik] = await Promise.all([
+    const [rows, petaTampilan] = await Promise.all([
       ambilDariSupabase_(env, path),
-      ambilPetaWarnaKanonik_(env)
+      ambilPetaWarnaTampilan_(env)
     ]);
 
     const hasil = rows.map(function (r) {
@@ -901,7 +898,7 @@ async function handleRekapQC_(env, hari) {
         waktu: r.waktu,
         timPotongId: r.tim_potong_id,
         varian: r.varian,
-        warna: isKombinasi ? r.warna : formatNamaKanonikTampilan_(r.warna, petaKanonik),
+        warna: isKombinasi ? r.warna : formatNamaKanonikTampilan_(r.warna, petaTampilan),
         perUkuran: perUkuran,
         reject: r.reject,
         rejectTotal: rejectTotal,
@@ -1503,10 +1500,10 @@ async function handleArsipSelesai_(env, hari) {
     // tim_potong_id -> tim_potong.id yang udah ada), jadi gak perlu 2x fetch terpisah.
     const path = '/rest/v1/arsip_selesai?select=waktu,tim_potong(id,jenis_warna_baju,jumlah,kode_roll,tanggal,pemakaian_kain_kg,ref_stok,' + Object.values(KOLOM_UKURAN_MAP).join(',') + ')' +
       '&waktu=gte.' + encodeURIComponent(batasWaktu) + '&order=waktu.desc';
-    const [rows, daftarPrefix, petaKanonik] = await Promise.all([
+    const [rows, daftarPrefix, petaTampilan] = await Promise.all([
       ambilDariSupabase_(env, path),
       ambilDaftarPrefixQC_(env),
-      ambilPetaWarnaKanonik_(env)
+      ambilPetaWarnaTampilan_(env)
     ]);
 
     if (rows.length === 0) return jsonResponse([]);
@@ -1545,7 +1542,7 @@ async function handleArsipSelesai_(env, hari) {
       return {
         waktu: r.waktu,
         timPotongId: tp.id || null,
-        jenisWarnaBaju: tp.jenis_warna_baju ? (isKombinasi ? tp.jenis_warna_baju : formatNamaKanonikTampilan_(tp.jenis_warna_baju, petaKanonik)) : null,
+        jenisWarnaBaju: tp.jenis_warna_baju ? (isKombinasi ? tp.jenis_warna_baju : formatNamaKanonikTampilan_(tp.jenis_warna_baju, petaTampilan)) : null,
         kategoriBadge: kategoriBadge,
         varian: cocok ? (cocok.varian || '') : '',
         jumlah: tp.jumlah || null,
@@ -1840,11 +1837,11 @@ async function handleAkurasiEstimasi_(body, env) {
   }
 
   try {
-    const [rowsTP, rowsPrefix, rowsStandar, petaKanonik] = await Promise.all([
+    const [rowsTP, rowsPrefix, rowsStandar, petaTampilan] = await Promise.all([
       ambilDariSupabase_(env, '/rest/v1/tim_potong?select=id,tanggal,jenis_warna_baju,sumber_kg,pemakaian_kain_kg,kode_roll,ref_stok,' + Object.values(KOLOM_UKURAN_MAP).join(',')),
       ambilDariSupabase_(env, '/rest/v1/kategori_varian_produksi?select=kategori,label_varian,prefix_tele'),
       ambilDariSupabase_(env, '/rest/v1/standar_pemakaian?select=*'),
-      ambilPetaWarnaKanonik_(env)
+      ambilPetaWarnaTampilan_(env)
     ]);
 
     const daftarPrefixSorted = rowsPrefix
@@ -1873,7 +1870,7 @@ async function handleAkurasiEstimasi_(body, env) {
         if (est !== null && est.kg > 0) {
           const kgAktual = parseFloat(tp.pemakaian_kain_kg) || 0;
           hasil.push({
-            timPotongId: tp.id, tanggal: tp.tanggal, jenisWarnaBaju: adaKombinasi ? tp.jenis_warna_baju : formatNamaKanonikTampilan_(tp.jenis_warna_baju, petaKanonik),
+            timPotongId: tp.id, tanggal: tp.tanggal, jenisWarnaBaju: adaKombinasi ? tp.jenis_warna_baju : formatNamaKanonikTampilan_(tp.jenis_warna_baju, petaTampilan),
             kategori: k.kategori, varian: k.varian, bagian: adaKombinasi ? 'Badan' : null,
             kodeRoll: tp.kode_roll || null,
             kgAktual: kgAktual, kgEstimasi: est.kg, rincianUkuran: est.rincian,
@@ -1891,7 +1888,7 @@ async function handleAkurasiEstimasi_(body, env) {
           if (est === null || est.kg <= 0) return;
           const kgAktual = parseFloat(rs.kg) || 0;
           hasil.push({
-            timPotongId: tp.id, tanggal: tp.tanggal, jenisWarnaBaju: adaKombinasi ? tp.jenis_warna_baju : formatNamaKanonikTampilan_(tp.jenis_warna_baju, petaKanonik),
+            timPotongId: tp.id, tanggal: tp.tanggal, jenisWarnaBaju: adaKombinasi ? tp.jenis_warna_baju : formatNamaKanonikTampilan_(tp.jenis_warna_baju, petaTampilan),
             kategori: k.kategori, varian: k.varian, bagian: 'Tangan' + (tp.ref_stok.length > 1 ? (idx === 0 ? ' Kanan' : ' Kiri') : ''),
             kodeRoll: rs.kodeRoll || null,
             kgAktual: kgAktual, kgEstimasi: est.kg, rincianUkuran: est.rincian,
@@ -2467,10 +2464,10 @@ function cariKategoriQC_(namaItem, info) {
 
 async function handleDaftarLaporanQC_(env) {
   try {
-    const [rowsTP, daftarPrefix, petaKanonik] = await Promise.all([
+    const [rowsTP, daftarPrefix, petaTampilan] = await Promise.all([
       ambilDariSupabase_(env, '/rest/v1/tim_potong?select=*&status=neq.SELESAI&order=tanggal.asc,id.asc'),
       ambilDaftarPrefixQC_(env),
-      ambilPetaWarnaKanonik_(env)
+      ambilPetaWarnaTampilan_(env)
     ]);
 
     if (rowsTP.length === 0) return jsonResponse([]);
@@ -2512,7 +2509,7 @@ async function handleDaftarLaporanQC_(env) {
         id: tp.id,
         tanggal: tp.tanggal,
         createdAt: tp.created_at,
-        jenisWarnaBaju: isKombinasi ? tp.jenis_warna_baju : formatNamaKanonikTampilan_(tp.jenis_warna_baju, petaKanonik),
+        jenisWarnaBaju: isKombinasi ? tp.jenis_warna_baju : formatNamaKanonikTampilan_(tp.jenis_warna_baju, petaTampilan),
         kategoriBadge: kategoriBadge,
         varian: cocok ? (cocok.varian || '') : '',
         kodeRoll: tp.kode_roll,
@@ -3213,6 +3210,31 @@ function formatNamaKanonikTampilan_(teks, petaKanonik) {
     if (!cocok) { hasil.push(kata[i]); i++; }
   }
   return hasil.join(' ');
+}
+
+// ============================================================
+// v.75 (request Denny) - versi TAMPILAN dari ambilPetaWarnaKanonik_: hasilnya
+// {SINONIM_ATAU_KANONIK: TAMPILAN}, dengan TAMPILAN = kamus_sinonim_warna.tampilan ("WARNA 1",
+// nama Inggris sesuai SKU Shopee terbaru) kalau kolom itu terisi, fallback ke kanonik kalau
+// kosong (warna lama yang belum ada pemetaan WARNA 1-nya, mis. varian "30S"). Dipakai KHUSUS
+// buat display di tab Proses/QC/Rekap QC/Arsip Selesai/HPP - TIDAK dipakai buat stok kain
+// (stok tetap pakai ambilPetaWarnaKanonik_ apa adanya, sesuai request Denny warna stok tetap
+// campur ID/EN ala sistem PO).
+// ============================================================
+async function ambilPetaWarnaTampilan_(env) {
+  const rows = await ambilDariSupabase_(env, '/rest/v1/kamus_sinonim_warna?select=kanonik,sinonim,tampilan');
+  const peta = {};
+  rows.forEach(function (row) {
+    const kanonik = String(row.kanonik || '').toUpperCase();
+    if (!kanonik) return;
+    const tampil = String(row.tampilan || '').toUpperCase() || kanonik;
+    peta[kanonik] = tampil;
+    (row.sinonim || []).forEach(function (s) {
+      const su = String(s || '').toUpperCase();
+      if (su) peta[su] = tampil;
+    });
+  });
+  return peta;
 }
 
 async function handleWarnaKanonik_(env) {
