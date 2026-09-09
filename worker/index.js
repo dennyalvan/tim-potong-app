@@ -1,9 +1,10 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.70
+// CODE WORKER PRODUKSI ver.71
 // ============================================================
-// PERUBAHAN ver.70 (request Denny): endpoint baru /data/isi-ulang-upah-qc (admin-only) - isi
-// ulang otomatis harga_jait/total_bayar buat log_qc lama yang kosong, pakai tarif jahit yang
-// berlaku sekarang. Fungsi baru: handleIsiUlangUpahQC_.
+// PERUBAHAN ver.71 (perf, request Denny - keluhan "Kirim Telegram" kerasa freeze 2-3 detik):
+// handleSubmitProduksi_ dipercepat - notif Telegram & penempelan ID anti-duplikat sekarang jalan
+// di belakang layar (ctx.waitUntil, gak ditunggu sebelum respons ke Mini App), plus 1 fetch kamus
+// sinonim warna yang tadinya double dihapus (dipakai ulang dari yang sudah diambil di awal fungsi).
 //
 // Riwayat versi lengkap: git log.
 //
@@ -15,7 +16,7 @@
 // ============================================================
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     // v.02: CORS - tanpa ini, browser/WebView (termasuk Mini App Telegram) NOLAK baca balasan
@@ -70,7 +71,7 @@ export default {
     if (url.pathname === '/submit-produksi' && request.method === 'POST') {
       let body;
       try { body = await request.json(); } catch (e) { return jsonResponse({ ok: false, error: 'Body harus JSON.' }, 400); }
-      return await handleSubmitProduksi_(body, env);
+      return await handleSubmitProduksi_(body, env, ctx);
     }
 
     // v.09 (Dashboard Tahap 1) - daftar laporan yang belum SELESAI, buat tab "Proses & QC"
@@ -2848,7 +2849,7 @@ async function normalisasiKgDanPakaiHabis_(env, items, kamusMap) {
 //   stok akurat, bukan nebak dari namaCustom. Semua tetap opsional (item custom boleh gak ada
 //   warna/kg sama sekali, kayak sebelumnya) - kalau kg1 diisi, warna1 jadi wajib.
 // ============================================================
-async function handleSubmitProduksi_(body, env) {
+async function handleSubmitProduksi_(body, env, ctx) {
   const validasi = await validasiInitData_(body.initData, env);
   if (!validasi.ok) return jsonResponse(validasi, 401);
 
@@ -3030,12 +3031,16 @@ async function handleSubmitProduksi_(body, env) {
     // semua" kalau nanti ada kiriman identik lagi. Gak nge-block proses (dijalankan tapi gak
     // ditunggu blocking respons ke user - kalau gagal, gak fatal, cuma anti-duplikat kiriman
     // ini doang yang kurang presisi).
-    await tempelkanTimPotongIdsKeAntiDuplikat_(env, cekDuplikat.recordId, hasil.map(function (r) { return r.id; }));
+    ctx.waitUntil(tempelkanTimPotongIdsKeAntiDuplikat_(env, cekDuplikat.recordId, hasil.map(function (r) { return r.id; })));
 
     // v.05 (Tahap 4) - potong stok kain buat tiap item yang punya kg. Item TETAP masuk ke
     // tim_potong walau stoknya gak ketemu cocok - cuma dikasih peringatan di response, gak
     // diblokir (sama seperti sistem lama, baris ditandai kuning bukan ditolak).
-    const kamusMap = await ambilKamusSinonimWarnaMap_(env);
+    // v.71 (perf, request Denny): kamus dipakai ULANG dari kamusMapAwal (diambil di awal fungsi
+    // buat normalisasi) - SEBELUMNYA di-fetch ULANG di sini padahal isinya pasti sama persis
+    // (tabel kamus_sinonim_warna gak berubah di tengah 1x request). Motong 1 round-trip penuh
+    // ke Supabase yang sebelumnya nunggu di sini tanpa guna.
+    const kamusMap = kamusMapAwal;
     const peringatanStok = [];
     for (let i = 0; i < hasil.length; i++) {
       const row = hasil[i];
@@ -3060,7 +3065,11 @@ async function handleSubmitProduksi_(body, env) {
       }
     }
 
-    await kirimNotifikasiProduksi_(env, hasil, peringatanStok);
+    // v.71 (perf, request Denny - keluhan HP "freeze" 2-3 detik nunggu notif Telegram): notif
+    // dipindah jalan di belakang layar (ctx.waitUntil), gak ditunggu sebelum respons ke Mini App.
+    // Notif Telegram tetap masuk, cuma gak bikin HP nunggu lagi - konsisten sama desain aslinya
+    // yang emang udah anggap gagal kirim notif TIDAK fatal (lihat kirimNotifikasiProduksi_).
+    ctx.waitUntil(kirimNotifikasiProduksi_(env, hasil, peringatanStok));
     return jsonResponse({ ok: true, jumlahItem: hasil.length, items: hasil, peringatanStok: peringatanStok });
   } catch (e) {
     return jsonResponse({ ok: false, error: 'Gagal menyimpan ke Supabase: ' + e.message }, 500);
