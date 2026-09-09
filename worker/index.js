@@ -1,13 +1,14 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.73
+// CODE WORKER PRODUKSI ver.74
 // ============================================================
-// PERUBAHAN ver.73 (perf, request Denny - lanjutan optimasi setelah ver.72): 2 pengecekan yang
-// sebelumnya gantian sekarang jalan bareng (fetch kamus warna + stok kain lewat Promise.all), dan
-// hasil fetch stok kain itu dipakai ulang buat potongan stok PERTAMA (gak fetch ulang) - potongan
-// stok BERIKUTNYA dalam kiriman yang sama tetap WAJIB fetch fresh seperti biasa (menjaga fix v.53,
-// sudah diverifikasi lewat simulasi lokal sebelum di-push). Sengaja BELUM menyentuh urutan
-// simpan-laporan vs catat-anti-duplikat (masih berurutan) - butuh restrukturisasi lebih besar,
-// ditahan dulu biar perubahan tetap sempit.
+// PERUBAHAN ver.74 (fix bug, request Denny - temuan kasus BENHUR 09/09/26): kurangiStokKain_
+// SEBELUMNYA gak pernah ngecek apakah kg yang diminta melebihi kg_sisa roll yang kepilih - PATCH
+// ke stok_kain jalan tanpa batas (kejadian nyata: 50kg dipotong dari roll yang cuma sisa
+// 25.47kg, kg_terpakai kesimpen lebih besar dari kg asli). Sekarang kalau kainKg > kg_sisa roll
+// yang matched, DITOLAK (matched:false + keterangan jelas) - stok TIDAK dikurangi, item
+// tim_potong tetap masuk tapi ditandai peringatan (pola sama kayak kasus "gak ketemu" yang udah
+// ada, lihat peringatanStok di handler pemanggilnya). Ini benteng terakhir sisi server - benteng
+// pertama sisi Mini App ada di v.45 HTML PRODUKSI (validasi kg vs stok pas Kode Roll dikosongkan).
 //
 // Riwayat versi lengkap: git log.
 //
@@ -2716,6 +2717,20 @@ async function kurangiStokKain_(env, itemName, kainKg, kodeRoll, timPotongId, ka
       ? ('Kode Roll "' + kodeRollNorm + '" (warna "' + daftarStr + '", kg ' + kainKg + ') tidak ketemu PERSIS di stok_kain - tidak dicoba tebak dari kg terdekat')
       : ('Warna "' + daftarStr + '" (kg ' + kainKg + ') tidak ketemu stok kain yang cocok/cukup');
     return { matched: false, keterangan: keterangan };
+  }
+
+  // v.74 (fix bug, request Denny - temuan kasus BENHUR 09/09/26): sebelumnya gak ada batas sama
+  // sekali di titik ini - kainKg BERAPAPUN langsung di-PATCH ke kg_terpakai, walau jauh di atas
+  // kg_sisa roll yang matched. Sekarang ditolak kalau melebihi, konsisten sama pola "gak ketemu"
+  // di atas (item tetap masuk tim_potong, cuma dikasih peringatan - lihat peringatanStok).
+  const kgSisaTersedia = parseFloat(matched.kg_sisa) || 0;
+  if (kainKg > kgSisaTersedia) {
+    const daftarStr = daftarWarnaCari.join(' / ');
+    return {
+      matched: false,
+      keterangan: 'Kg diminta (' + kainKg + ') MELEBIHI sisa stok roll "' + (matched.kode_roll || '-') +
+        '" warna "' + daftarStr + '" (cuma sisa ' + kgSisaTersedia.toFixed(2) + 'kg) - stok TIDAK dikurangi, cek manual.'
+    };
   }
 
   const kgTerpakaiBaru = (parseFloat(matched.kg_terpakai) || 0) + kainKg;

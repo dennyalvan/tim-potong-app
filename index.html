@@ -1,18 +1,16 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.44
+HTML PRODUKSI (Supabase/testproduksi) - ver.45
 ============================================================
-PERUBAHAN ver.44 (request Denny): kain yang sudah ditambahkan ke antrian (daftarAntrian) - walau
-belum tersubmit ke Telegram - sekarang otomatis dianggap "dipesan duluan" saat item berikutnya di
-antrian yang sama butuh roll yang sama. Fungsi baru kgTerpakaiAntrian_() menjumlah kg yang sudah
-dipakai per (warna kanonik + kode roll) dari seluruh isi antrian, dikurangkan dari kg_sisa di
-daftarRollUntukWarna() - otomatis kepakai di SEMUA titik yang baca dari situ: saran dropdown roll,
-auto-isi "Pakai habis", auto-pilih roll tunggal "Pakai Estimasi", dan validasi kecukupan kg
-(cekKodeRollTakDikenal_). Dihitung ulang live tiap dipanggil, bukan state terpisah - hapus item
-dari antrian otomatis kebaca benar tanpa kode tambahan. Worker TIDAK diubah - ini murni
-penyesuaian tampilan/validasi sisi Mini App sebelum submit, deduksi stok beneran di database
-tetap terjadi cuma sekali pas submit seperti biasa.
+PERUBAHAN ver.45 (fix bug, request Denny - temuan kasus BENHUR 09/09/26): saat Kode Roll
+dikosongkan, cekKodeRollTakDikenal_ SEBELUMNYA cuma ngecek "warna ini ada stoknya atau enggak" -
+kg yang diketik gak pernah dibandingkan ke total sisa stok warna itu (kejadian nyata: 50kg
+diketik manual, lolos, padahal gabungan stok warna itu cuma 25.47kg). Sekarang dijumlah total kg
+dari daftarRollUntukWarna(warna) (otomatis sudah dikurangi antrian lewat kgTerpakaiAntrian_ v.44)
+dan dibandingkan ke kg yang diminta - kalau lebih, ditolak sama seperti kasus kode roll terisi.
+Benteng kedua ada di v.74 Worker (kurangiStokKain_ sekarang juga nolak di sisi server, jaga-jaga
+kalau jalur ini somehow kelewat).
 Riwayat versi lengkap: git log.
 ============================================================
 -->
@@ -395,10 +393,25 @@ function cekKodeRollTakDikenal_(warna, kodeInput, warnEl, kgInput) {
     // nomor roll), TAPI warna-nya SENDIRI tetap wajib match ke stok yang beneran ada. SEBELUMNYA
     // return true langsung di sini gak pernah nyentuh daftarRollUntukWarna() sama sekali - celah
     // ini bikin warna ngasal/typo lolos tanpa ketauan asal kode rollnya dikosongkan.
-    if (daftarRollUntukWarna(warna).length === 0) {
+    const rollWarnaIni = daftarRollUntukWarna(warna);
+    if (rollWarnaIni.length === 0) {
       warnEl.style.display = 'block';
       warnEl.textContent = '⛔ Warna "' + warna + '" gak ketemu stoknya sama sekali - pilih dari daftar saran warna.';
       return false;
+    }
+    // v.45 (request Denny, temuan kasus BENHUR 09/09/26): kode roll kosong SEBELUMNYA cuma dicek
+    // "warna ini ada stoknya atau enggak" - kg yang diketik gak pernah dibandingkan ke total sisa
+    // stok warna ini (gabungan semua roll, kgTerpakaiAntrian_ dari v.44 udah otomatis kepakai
+    // lewat daftarRollUntukWarna di atas). Celahnya: kg jauh di atas stok asli (mis. 50kg diketik
+    // padahal roll cuma sisa 25.47kg) lolos tanpa peringatan selama warnanya "ada" stoknya.
+    const kg = parseFloat(kgInput);
+    if (!isNaN(kg) && kg > 0) {
+      const totalKg = rollWarnaIni.reduce(function (sum, r) { return sum + (r.kg || 0); }, 0);
+      if (kg > totalKg) {
+        warnEl.style.display = 'block';
+        warnEl.textContent = '⛔ Stok warna "' + warna + '" (gabungan semua roll) cuma tersisa ' + totalKg.toFixed(2) + 'kg, gak cukup buat ' + kg.toFixed(2) + 'kg yang diminta - gak bisa ditambah ke antrian.';
+        return false;
+      }
     }
     warnEl.style.display = 'none'; warnEl.textContent = '';
     return true;
