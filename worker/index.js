@@ -1,10 +1,10 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.71
+// CODE WORKER PRODUKSI ver.72
 // ============================================================
-// PERUBAHAN ver.71 (perf, request Denny - keluhan "Kirim Telegram" kerasa freeze 2-3 detik):
-// handleSubmitProduksi_ dipercepat - notif Telegram & penempelan ID anti-duplikat sekarang jalan
-// di belakang layar (ctx.waitUntil, gak ditunggu sebelum respons ke Mini App), plus 1 fetch kamus
-// sinonim warna yang tadinya double dihapus (dipakai ulang dari yang sudah diambil di awal fungsi).
+// PERUBAHAN ver.72 (perf, request Denny - masih di atas 1 detik setelah ver.71): CORS response
+// sekarang punya Access-Control-Max-Age, biar browser/WebView Mini App nge-cache izinnya dan gak
+// kirim preflight OPTIONS ekstra sebelum tiap POST - kemungkinan besar ini 1 round-trip tersembunyi
+// yang kejadian di SETIAP submit tanpa kelihatan di kode kita.
 //
 // Riwayat versi lengkap: git log.
 //
@@ -297,7 +297,12 @@ export default {
 const CORS_HEADERS_ = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type'
+  'Access-Control-Allow-Headers': 'Content-Type',
+  // v.72 (perf, request Denny): Max-Age biar browser/WebView Mini App NGE-CACHE izin CORS ini,
+  // gak perlu kirim ulang request "izin" (preflight OPTIONS) sebelum tiap POST - sebelumnya gak
+  // ada Max-Age, jadi kemungkinan besar SETIAP kali submit ada 1 round-trip ekstra ke server yang
+  // gak kelihatan (browser ngirimnya otomatis, bukan dari kode kita) cuma buat minta izin doang.
+  'Access-Control-Max-Age': '86400'
 };
 
 function jsonResponse(obj, status) {
