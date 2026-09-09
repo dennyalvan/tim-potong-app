@@ -1,10 +1,13 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.72
+// CODE WORKER PRODUKSI ver.73
 // ============================================================
-// PERUBAHAN ver.72 (perf, request Denny - masih di atas 1 detik setelah ver.71): CORS response
-// sekarang punya Access-Control-Max-Age, biar browser/WebView Mini App nge-cache izinnya dan gak
-// kirim preflight OPTIONS ekstra sebelum tiap POST - kemungkinan besar ini 1 round-trip tersembunyi
-// yang kejadian di SETIAP submit tanpa kelihatan di kode kita.
+// PERUBAHAN ver.73 (perf, request Denny - lanjutan optimasi setelah ver.72): 2 pengecekan yang
+// sebelumnya gantian sekarang jalan bareng (fetch kamus warna + stok kain lewat Promise.all), dan
+// hasil fetch stok kain itu dipakai ulang buat potongan stok PERTAMA (gak fetch ulang) - potongan
+// stok BERIKUTNYA dalam kiriman yang sama tetap WAJIB fetch fresh seperti biasa (menjaga fix v.53,
+// sudah diverifikasi lewat simulasi lokal sebelum di-push). Sengaja BELUM menyentuh urutan
+// simpan-laporan vs catat-anti-duplikat (masih berurutan) - butuh restrukturisasi lebih besar,
+// ditahan dulu biar perubahan tetap sempit.
 //
 // Riwayat versi lengkap: git log.
 //
@@ -2661,7 +2664,14 @@ function cariInfoQCLengkap_(namaItem, info) {
 // keduanya - begitu ver.66 ganti itemName jadi warna tunggal doang buat fix matching, labelnya
 // ikut kepotong jadi cuma warna doang. namaTampilan (opsional, default ke itemName - caller lama
 // kayak handleEditProduksi_ gak perlu ubah apa-apa) motong konsep itu jadi 2 parameter terpisah.
-async function kurangiStokKain_(env, itemName, kainKg, kodeRoll, timPotongId, kamusMap, namaTampilan) {
+// v.73 (perf, request Denny): parameter ke-8 rowsStokCache OPSIONAL - kalau diisi (array), dipakai
+// langsung tanpa fetch ulang ke Supabase. Cuma aman dipakai buat kurangiStokKain_ PERTAMA yang
+// dipanggil dalam 1x /submit-produksi (lihat handleSubmitProduksi_) - SETELAH itu WAJIB fetch fresh
+// lagi tiap kali, karena panggilan kurangiStokKain_ berikutnya butuh lihat hasil PATCH kg_terpakai
+// dari panggilan sebelumnya (biar 1 roll yang sama gak kepakai 2x dalam 1 kiriman - lihat catatan
+// v.53 di banner). Caller lama (handleEditProduksi_) yang gak kirim parameter ini tetap fetch
+// sendiri seperti biasa, gak ada yang berubah buat mereka.
+async function kurangiStokKain_(env, itemName, kainKg, kodeRoll, timPotongId, kamusMap, namaTampilan, rowsStokCache) {
   const kataWarna = ekstrakKataWarna_(itemName);
   if (kataWarna.length === 0) {
     return { matched: false, keterangan: 'Tidak ada kata warna terdeteksi dari nama "' + itemName + '"' };
@@ -2677,7 +2687,7 @@ async function kurangiStokKain_(env, itemName, kainKg, kodeRoll, timPotongId, ka
   const warnaUtama = kataWarna.join(' ');
   const daftarWarnaCari = getSinonimWarna_(warnaUtama, kamusMap);
 
-  const rowsStok = await ambilDariSupabase_(env, '/rest/v1/stok_kain?select=id,warna,kode_roll,kg_terpakai,kg_sisa&kg_sisa=gt.0');
+  const rowsStok = rowsStokCache || await ambilDariSupabase_(env, '/rest/v1/stok_kain?select=id,warna,kode_roll,kg_terpakai,kg_sisa&kg_sisa=gt.0');
   const kodeRollNorm = kodeRoll ? String(kodeRoll).trim().toUpperCase() : null;
 
   function cariBaris(wajibKodeRollCocok) {
@@ -2776,9 +2786,11 @@ function bikinAwalan_(kategori, kodeItem) {
 // tangan/ref_stok = warna sendiri doang, custom = warna eksplisit doang tanpa awalan) - biar
 // deteksi "kg == kg_sisa roll ini" akurat, bukan asal cocok ke roll yang salah.
 // ============================================================
-async function normalisasiKgDanPakaiHabis_(env, items, kamusMap) {
-  const rowsStok = await ambilDariSupabase_(env, '/rest/v1/stok_kain?select=warna,kode_roll,kg_sisa&kg_sisa=gt.0');
-
+// v.73 (perf, request Denny): sebelumnya fetch stok_kain SENDIRI di sini (gantian sama fetch
+// kamus warna di handleSubmitProduksi_). Sekarang rowsStok diterima langsung dari caller (yang
+// sudah fetch bareng kamus lewat Promise.all) - fungsi ini murni proses data lokal, gak nyentuh
+// jaringan sama sekali lagi.
+function normalisasiKgDanPakaiHabis_(items, kamusMap, rowsStok) {
   function kgSisaRoll_(namaUntukWarna, kodeRoll) {
     if (!kodeRoll) return null;
     const kodeNorm = String(kodeRoll).trim().toUpperCase();
@@ -2864,11 +2876,15 @@ async function handleSubmitProduksi_(body, env, ctx) {
   // v.53 (request Denny, root cause kejadian roll IJO BOTOL/DUSTY/HITAM ONYX kepakai 2x): dua
   // normalisasi yang bikin fingerprint anti-duplikat konsisten walau ada beda format/kelupaan
   // gak disengaja antar kiriman - baca komentar di normalisasiKgDanPakaiHabis_ buat detailnya.
-  // Kamus diambil di sini (sebelum fingerprint) - nanti diambil ULANG di bagian potong stok
-  // (kode existing gak diubah), sedikit dobel fetch tapi amannya dapet daripada mepet-mepet
-  // rewiring variable across function yang panjang.
-  const kamusMapAwal = await ambilKamusSinonimWarnaMap_(env);
-  await normalisasiKgDanPakaiHabis_(env, items, kamusMapAwal);
+  // v.73 (perf, request Denny): kamus warna & stok kain di-fetch BARENGAN (Promise.all) - 2 tabel
+  // independen, gak ada alasan gantian. rowsStokAwal ini juga dipakai ulang buat kurangiStokKain_
+  // PERTAMA di bawah (lihat komentar v.73 di kurangiStokKain_) - belum ada write ke stok_kain
+  // antara sini sampai situ, jadi datanya masih pasti akurat dipakai ulang.
+  const [kamusMapAwal, rowsStokAwal] = await Promise.all([
+    ambilKamusSinonimWarnaMap_(env),
+    ambilDariSupabase_(env, '/rest/v1/stok_kain?select=id,warna,kode_roll,kg_terpakai,kg_sisa&kg_sisa=gt.0')
+  ]);
+  normalisasiKgDanPakaiHabis_(items, kamusMapAwal, rowsStokAwal);
 
   // v.07 (Tahap 5): anti-duplikat - fingerprint dihitung dari ISI item (bukan teks bebas kayak
   // sistem lama, karena Mini App sekarang kirim data terstruktur). Key pakai 'miniapp_' + userId,
@@ -3046,6 +3062,10 @@ async function handleSubmitProduksi_(body, env, ctx) {
     // (tabel kamus_sinonim_warna gak berubah di tengah 1x request). Motong 1 round-trip penuh
     // ke Supabase yang sebelumnya nunggu di sini tanpa guna.
     const kamusMap = kamusMapAwal;
+    // v.73: rowsStokAwal cuma valid dipakai SEKALI (panggilan kurangiStokKain_ pertama di bawah,
+    // apapun itu) - langsung di-null-kan abis dipakai, panggilan berikutnya balik fetch fresh
+    // seperti biasa (WAJIB, biar 1 roll yang sama gak kepakai 2x dalam 1 kiriman yang punya >1 item).
+    let rowsStokCache = rowsStokAwal;
     const peringatanStok = [];
     for (let i = 0; i < hasil.length; i++) {
       const row = hasil[i];
@@ -3053,7 +3073,8 @@ async function handleSubmitProduksi_(body, env, ctx) {
         // v.16: item custom pakai warna eksplisit (warnaUtamaPerRow) kalau ada, bukan nebak dari
         // jenis_warna_baju yang bebas format - item biasa/kombinasi tetap seperti sebelumnya.
         const namaBuatPotong = warnaUtamaPerRow[i] || row.jenis_warna_baju;
-        const hasilStok = await kurangiStokKain_(env, namaBuatPotong, parseFloat(row.pemakaian_kain_kg), row.kode_roll, row.id, kamusMap, row.jenis_warna_baju);
+        const hasilStok = await kurangiStokKain_(env, namaBuatPotong, parseFloat(row.pemakaian_kain_kg), row.kode_roll, row.id, kamusMap, row.jenis_warna_baju, rowsStokCache);
+        rowsStokCache = null;
         if (!hasilStok.matched) {
           peringatanStok.push('Item "' + row.jenis_warna_baju + '": ' + hasilStok.keterangan);
         }
@@ -3062,7 +3083,8 @@ async function handleSubmitProduksi_(body, env, ctx) {
       // masing-masing dicocokkan lewat namanya sendiri (bukan lewat nama item gabungan).
       if (Array.isArray(row.ref_stok)) {
         for (const bd of row.ref_stok) {
-          const hasilBd = await kurangiStokKain_(env, bd.warna, parseFloat(bd.kg), bd.kodeRoll, row.id, kamusMap, row.jenis_warna_baju);
+          const hasilBd = await kurangiStokKain_(env, bd.warna, parseFloat(bd.kg), bd.kodeRoll, row.id, kamusMap, row.jenis_warna_baju, rowsStokCache);
+          rowsStokCache = null;
           if (!hasilBd.matched) {
             peringatanStok.push('Item "' + row.jenis_warna_baju + '" (breakdown warna "' + bd.warna + '"): ' + hasilBd.keterangan);
           }
