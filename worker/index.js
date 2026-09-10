@@ -1,11 +1,11 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.75
+// CODE WORKER PRODUKSI ver.76
 // ============================================================
-// PERUBAHAN ver.75 (request Denny): tab Proses, QC, Rekap QC, Arsip Selesai & HPP Akurasi
-// Estimasi sekarang nampilin nama warna standar "WARNA 1" (Inggris, sesuai sheet SKU Shopee
-// terbaru) lewat kolom baru kamus_sinonim_warna.tampilan - gantiin nama kanonik lama di 4
-// tempat itu. Data mentah tim_potong/log_qc TETAP gak disentuh (sama seperti mekanisme v.68
-// sebelumnya), begitu juga stok kain & endpoint lain - tetap pakai kanonik campur ID/EN.
+// PERUBAHAN ver.76 (request Denny): migrasi prefix "ANAK" (Anak Pendek) jadi "KIDS", dan
+// "ANAK" kombinasi jadi "TR" (Anak Trico) - nambah KIDS & TR ke daftar kata-bukan-warna
+// KODE_GAYA_BUKAN_WARNA_ biar ekstraksi warna buat cari stok kain gak ikut nganggap kode
+// prefix itu sebagai warna. Data di kategori_varian_qc/produksi & histori tim_potong/log_qc
+// sudah dimigrasi ke prefix baru duluan di Supabase (terpisah dari deploy ini).
 //
 // Riwayat versi lengkap: git log.
 //
@@ -2595,7 +2595,7 @@ function bangunRejectNotasi_(rejectObj) {
 // ditambahkan - sebelumnya cuma "RING" yang ada di daftar ini, jadi item Ringer Anak (mis.
 // "RINGER BIRU MUDA") bakal gagal cocok stok persis kayak bug "IJO BOTOL" ver.52 (kata "RINGER"
 // ikut kebawa jadi bagian pencarian warna, bukan cuma "BIRU MUDA").
-const KODE_GAYA_BUKAN_WARNA_ = ['LT', 'PJ', 'CP', 'SET', 'SET.', 'ANAK', 'OSA', 'RFL', 'RUFFLE', 'TS24', 'TS30', 'LS24-', 'LS30', 'ONESET', 'PENDEK', 'OSHT', 'TST', 'SPEN', 'LS', 'LS24', 'OS', 'OSH', 'TS', 'LST', 'RING', 'RINGER', 'HL', 'PC', 'POLO'];
+const KODE_GAYA_BUKAN_WARNA_ = ['LT', 'PJ', 'CP', 'SET', 'SET.', 'ANAK', 'KIDS', 'TR', 'OSA', 'RFL', 'RUFFLE', 'TS24', 'TS30', 'LS24-', 'LS30', 'ONESET', 'PENDEK', 'OSHT', 'TST', 'SPEN', 'LS', 'LS24', 'OS', 'OSH', 'TS', 'LST', 'RING', 'RINGER', 'HL', 'PC', 'POLO'];
 
 function ekstrakKataWarna_(itemName) {
   return String(itemName || '').split(/\s+/)
