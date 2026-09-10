@@ -1,11 +1,12 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.76
+// CODE WORKER PRODUKSI ver.77
 // ============================================================
-// PERUBAHAN ver.76 (request Denny): migrasi prefix "ANAK" (Anak Pendek) jadi "KIDS", dan
-// "ANAK" kombinasi jadi "TR" (Anak Trico) - nambah KIDS & TR ke daftar kata-bukan-warna
-// KODE_GAYA_BUKAN_WARNA_ biar ekstraksi warna buat cari stok kain gak ikut nganggap kode
-// prefix itu sebagai warna. Data di kategori_varian_qc/produksi & histori tim_potong/log_qc
-// sudah dimigrasi ke prefix baru duluan di Supabase (terpisah dari deploy ini).
+// PERUBAHAN ver.77 (request Denny): Mini App Produksi (saran warna & Kode Roll pas ngetik di
+// kotak Warna) sekarang pakai WARNA 1 juga - endpoint /data/warna-kanonik & /data/stok-roll
+// dikelompokkan pakai kamus_sinonim_warna.tampilan (fallback kanonik kalau belum ada), bukan
+// kanonik lagi. Efeknya nyambung otomatis: submit baru dari Mini App jadi kepake WARNA 1,
+// notifikasi Telegram Produksi & QC (yang nampilin apa adanya dari jenis_warna_baju) ikut benar
+// tanpa perlu ubah kode notifikasinya sendiri. Stok kain & tab lain TETAP kanonik.
 //
 // Riwayat versi lengkap: git log.
 //
@@ -3239,7 +3240,7 @@ async function ambilPetaWarnaTampilan_(env) {
 
 async function handleWarnaKanonik_(env) {
   try {
-    const peta = await ambilPetaWarnaKanonik_(env);
+    const peta = await ambilPetaWarnaTampilan_(env);
     return jsonResponse(peta);
   } catch (e) {
     return jsonResponse({ ok: false, error: e.message }, 500);
@@ -3255,17 +3256,23 @@ async function handleStokRollPerWarna_(env) {
   try {
     const [rowsStok, rowsKamus] = await Promise.all([
       ambilDariSupabase_(env, '/rest/v1/stok_kain?select=warna,kode_roll,kg_sisa&kg_sisa=gt.0'),
-      ambilDariSupabase_(env, '/rest/v1/kamus_sinonim_warna?select=kanonik,sinonim')
+      ambilDariSupabase_(env, '/rest/v1/kamus_sinonim_warna?select=kanonik,sinonim,tampilan')
     ]);
 
-    const petaKanonik = {};
+    // v.76 (request Denny): kelompokkan per WARNA 1 (tampilan) - bukan kanonik lagi - biar
+    // saran warna & Kode Roll di Mini App Produksi ikut standar baru. Roll yang kg_sisa-nya
+    // disimpan dengan ejaan LAMA (kanonik/sinonim apapun) tetap kegabung benar di grup yang
+    // sama, karena peta di bawah nyambungin semua sinonim ke satu TAMPILAN yang sama. Kalau
+    // suatu kanonik belum punya tampilan (mis. varian "30S"), fallback ke kanonik apa adanya.
+    const petaTampilan = {};
     rowsKamus.forEach(function (row) {
       const kanonik = String(row.kanonik || '').toUpperCase();
       if (!kanonik) return;
-      petaKanonik[kanonik] = kanonik;
+      const tampil = String(row.tampilan || '').toUpperCase() || kanonik;
+      petaTampilan[kanonik] = tampil;
       (row.sinonim || []).forEach(function (s) {
         const su = String(s || '').toUpperCase();
-        if (su) petaKanonik[su] = kanonik;
+        if (su) petaTampilan[su] = tampil;
       });
     });
 
@@ -3279,9 +3286,9 @@ async function handleStokRollPerWarna_(env) {
       // sekali - ini akar bug "warna gak muncul di autosuggest" yang dicurigai Denny). kode_roll
       // kosong itu valid (roll belum dicatat/diketahui), BUKAN alasan buat nyembunyiin stoknya.
       if (!warnaRaw || kgSisa <= 0) return;
-      const kanonik = petaKanonik[warnaRaw.toUpperCase()] || warnaRaw.toUpperCase();
-      if (!grup[kanonik]) grup[kanonik] = [];
-      grup[kanonik].push({ kodeRoll: kodeRoll || null, kg: kgSisa });
+      const tampilan = petaTampilan[warnaRaw.toUpperCase()] || warnaRaw.toUpperCase();
+      if (!grup[tampilan]) grup[tampilan] = [];
+      grup[tampilan].push({ kodeRoll: kodeRoll || null, kg: kgSisa });
     });
     Object.keys(grup).forEach(function (k) {
       grup[k].sort(function (a, b) { return b.kg - a.kg; });
