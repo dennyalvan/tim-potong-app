@@ -1,16 +1,14 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.45
+HTML PRODUKSI (Supabase/testproduksi) - ver.46
 ============================================================
-PERUBAHAN ver.45 (fix bug, request Denny - temuan kasus BENHUR 09/09/26): saat Kode Roll
-dikosongkan, cekKodeRollTakDikenal_ SEBELUMNYA cuma ngecek "warna ini ada stoknya atau enggak" -
-kg yang diketik gak pernah dibandingkan ke total sisa stok warna itu (kejadian nyata: 50kg
-diketik manual, lolos, padahal gabungan stok warna itu cuma 25.47kg). Sekarang dijumlah total kg
-dari daftarRollUntukWarna(warna) (otomatis sudah dikurangi antrian lewat kgTerpakaiAntrian_ v.44)
-dan dibandingkan ke kg yang diminta - kalau lebih, ditolak sama seperti kasus kode roll terisi.
-Benteng kedua ada di v.74 Worker (kurangiStokKain_ sekarang juga nolak di sisi server, jaga-jaga
-kalau jalur ini somehow kelewat).
+PERUBAHAN ver.46 (fix bug, request Denny - temuan kasus "HITAM 12 roll gak muncul, ketik BLACK
+baru muncul"): saran warna & Kode Roll (renderWarnaSuggestions & renderCustomWarnaSuggestions)
+SEBELUMNYA cuma cocokkan ketikan ke nama WARNA 1 (kunci stokRollData) - efek dari v.77 Worker yang
+sekarang ngelompokkan stok per WARNA 1, bukan kanonik lagi. Ejaan lama/sinonim yang masih diketik
+manual (mis. "HITAM" utk grup "BLACK") jadi gak ketemu walau stoknya beneran ada. Sekarang ketikan
+JUGA dicek ke semua sinonim yang mengarah ke tiap grup WARNA 1 (dari warnaKanonikMap).
 Riwayat versi lengkap: git log.
 ============================================================
 -->
@@ -697,7 +695,17 @@ function renderWarnaSuggestions(query) {
   const q = String(query || '').trim().toUpperCase();
   if (!q) { box.innerHTML = ''; return; } // v.02: gak tampilin apa-apa sebelum ada huruf diketik
   const semua = daftarSemuaWarnaDikenal_();
-  const cocok = semua.filter(function (w) { return w.indexOf(q) === 0; });
+  // v.46 (fix bug, request Denny - temuan kasus "HITAM 12 roll gak muncul, ketik BLACK baru
+  // muncul"): SEBELUMNYA query cuma dicek ke nama WARNA 1 (kunci stokRollData) doang - ejaan
+  // lama/sinonim yang masih sering diketik manual (mis. "HITAM" buat grup "BLACK") jadi gak
+  // ketemu walau stoknya beneran ada. Sekarang query JUGA dicek ke semua sinonim yang mengarah
+  // ke tiap grup WARNA 1 (dari warnaKanonikMap), bukan cuma ke nama WARNA 1-nya sendiri.
+  const cocok = semua.filter(function (w) {
+    if (w.indexOf(q) === 0) return true;
+    return Object.keys(warnaKanonikMap).some(function (sin) {
+      return sin.indexOf(q) === 0 && warnaKanonikMap[sin] === w;
+    });
+  });
   box.innerHTML = cocok.slice(0, 8).map(function (w) {
     return '<div class="suggestion-item" data-pick-warna="' + escapeAttr(w) + '">' + escapeHtml(w) + '</div>';
   }).join('');
@@ -1371,7 +1379,13 @@ function renderCustomWarnaSuggestions(idx, query) {
   const q = String(query || '').trim().toUpperCase();
   if (!q) { box.innerHTML = ''; return; }
   const semua = daftarSemuaWarnaDikenal_();
-  const cocok = semua.filter(function (w) { return w.indexOf(q) === 0; });
+  // v.46: fix sama kayak renderWarnaSuggestions - query dicek juga ke sinonim, bukan cuma nama WARNA 1.
+  const cocok = semua.filter(function (w) {
+    if (w.indexOf(q) === 0) return true;
+    return Object.keys(warnaKanonikMap).some(function (sin) {
+      return sin.indexOf(q) === 0 && warnaKanonikMap[sin] === w;
+    });
+  });
   box.innerHTML = cocok.slice(0, 8).map(function (w) {
     return '<div class="suggestion-item" data-pick-cwarna="' + escapeAttr(w) + '" data-idx="' + idx + '">' + escapeHtml(w) + '</div>';
   }).join('');
