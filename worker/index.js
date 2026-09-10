@@ -1,12 +1,12 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.77
+// CODE WORKER PRODUKSI ver.78
 // ============================================================
-// PERUBAHAN ver.77 (request Denny): Mini App Produksi (saran warna & Kode Roll pas ngetik di
-// kotak Warna) sekarang pakai WARNA 1 juga - endpoint /data/warna-kanonik & /data/stok-roll
-// dikelompokkan pakai kamus_sinonim_warna.tampilan (fallback kanonik kalau belum ada), bukan
-// kanonik lagi. Efeknya nyambung otomatis: submit baru dari Mini App jadi kepake WARNA 1,
-// notifikasi Telegram Produksi & QC (yang nampilin apa adanya dari jenis_warna_baju) ikut benar
-// tanpa perlu ubah kode notifikasinya sendiri. Stok kain & tab lain TETAP kanonik.
+// PERUBAHAN ver.78 (request Denny, ketemu dari kasus tes "ANAK HITAM M16"): notifikasi Telegram
+// Produksi & QC SEBELUMNYA nampilin jenis_warna_baju mentah apa adanya - kalau tim potong ngetik
+// manual pakai ejaan lama, notif ikutan ejaan lama walau tab Proses/QC Mini App udah WARNA 1.
+// Sekarang kedua notifikasi itu JUGA dikonversi ke WARNA 1 (kombinasi tetap dikecualikan, sama
+// kayak tempat lain). Sekalian benerin handleHapusLogQC_ yang lupa select ref_stok - sebelumnya
+// item kombinasi yang dibatalkan/diedit dari situ bisa salah kedeteksi non-kombinasi.
 //
 // Riwayat versi lengkap: git log.
 //
@@ -466,7 +466,7 @@ async function handleHapusLogQC_(body, env) {
       body: JSON.stringify({ status: 'dibatalkan' })
     });
 
-    const rowsTP = await ambilDariSupabase_(env, '/rest/v1/tim_potong?select=id,jumlah,id_pesan_qc,jenis_warna_baju,kode_roll&id=eq.' + timPotongId);
+    const rowsTP = await ambilDariSupabase_(env, '/rest/v1/tim_potong?select=id,jumlah,id_pesan_qc,jenis_warna_baju,kode_roll,ref_stok&id=eq.' + timPotongId);
     if (!rowsTP || rowsTP.length === 0) {
       return jsonResponse({ ok: true, catatan: 'Data QC dibatalkan, tapi laporan induknya (id=' + timPotongId + ') sudah gak ada.' });
     }
@@ -846,13 +846,22 @@ async function kirimNotifikasiProduksi_(env, rowsTersimpan, peringatanStok) {
   const chatId = env.TELEGRAM_GROUP_CHAT_ID;
   if (!botToken || !chatId) return; // belum diset, diam saja (gak fatal, data tetap tersimpan)
 
+  // v.78 (request Denny, ketemu dari kasus tes "ANAK HITAM M16"): SEBELUMNYA notifikasi ini
+  // nampilin jenis_warna_baju APA ADANYA (mentah) - kalau tim potong ngetik manual pakai ejaan
+  // lama (mis. "HITAM"), notif Telegram tetap nampilin ejaan lama itu walau tab Proses/QC di
+  // Mini App udah kekonversi ke WARNA 1. Sekarang notifikasi ini JUGA dikonversi ke WARNA 1,
+  // sama kayak Proses/QC - item kombinasi TETAP dikecualikan (nama kombinasi itu identitas
+  // resmi, bukan ejaan warna tunggal yang perlu dibenerin).
+  const petaTampilan = await ambilPetaWarnaTampilan_(env);
   const barisTeks = rowsTersimpan.map(function (r, i) {
     const ukuranObj = kolomKeUkuran_(r);
     const totalQty = Object.keys(ukuranObj).reduce(function (sum, u) { return sum + ukuranObj[u]; }, 0);
     const ukuranTeks = Object.keys(ukuranObj).map(function (u) { return u + ' ' + ukuranObj[u]; }).join(' | ');
     const kgTeks = r.pemakaian_kain_kg ? (' ' + r.pemakaian_kain_kg + 'kg') : '';
     const rollTeks = r.kode_roll ? (' / ' + r.kode_roll) : '';
-    const judulItem = '<b>' + (i + 1) + '. ' + htmlEscape_(r.jenis_warna_baju) + kgTeks + rollTeks + '</b>';
+    const isKombinasi = Array.isArray(r.ref_stok) && r.ref_stok.length > 0;
+    const namaTampil = isKombinasi ? r.jenis_warna_baju : formatNamaKanonikTampilan_(r.jenis_warna_baju, petaTampilan);
+    const judulItem = '<b>' + (i + 1) + '. ' + htmlEscape_(namaTampil) + kgTeks + rollTeks + '</b>';
     return judulItem + '\n' + htmlEscape_(ukuranTeks) + '\nTotal: ' + totalQty;
   }).join('\n\n');
 
@@ -2385,8 +2394,14 @@ async function kirimAtauEditNotifikasiQC_(env, tp, totalSelesai, totalReject, st
     .map(function (u) { return u.ukuran + ' ' + u.selesai; })
     .join(' | ');
 
+  // v.78 (request Denny): samain kayak kirimNotifikasiProduksi_ - nama warna dikonversi ke
+  // WARNA 1 juga di notifikasi QC, kombinasi dikecualikan.
+  const petaTampilan = await ambilPetaWarnaTampilan_(env);
+  const isKombinasi = Array.isArray(tp.ref_stok) && tp.ref_stok.length > 0;
+  const namaTampil = isKombinasi ? tp.jenis_warna_baju : formatNamaKanonikTampilan_(tp.jenis_warna_baju, petaTampilan);
+
   let teks = formatTanggalIndoJakarta_(new Date()) + '\n' + headerStatus + '\n\n';
-  teks += '<b>' + htmlEscape_(tp.jenis_warna_baju) + '</b>' + (tp.kode_roll ? (' (' + htmlEscape_(tp.kode_roll) + ')') : '') + (varianQC ? (' - <b><u>' + htmlEscape_(varianQC) + '</u></b>') : '') + '\n';
+  teks += '<b>' + htmlEscape_(namaTampil) + '</b>' + (tp.kode_roll ? (' (' + htmlEscape_(tp.kode_roll) + ')') : '') + (varianQC ? (' - <b><u>' + htmlEscape_(varianQC) + '</u></b>') : '') + '\n';
   if (barisUkuran) teks += barisUkuran + '\n';
   if (totalReject > 0) teks += 'Reject: ' + totalReject + '\n';
   teks += sudahLengkap ? ('Total: ' + tp.jumlah) : ('Total: ' + totalSelesai + ' dari ' + tp.jumlah);
