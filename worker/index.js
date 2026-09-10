@@ -1,12 +1,13 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.78
+// CODE WORKER PRODUKSI ver.79
 // ============================================================
-// PERUBAHAN ver.78 (request Denny, ketemu dari kasus tes "ANAK HITAM M16"): notifikasi Telegram
-// Produksi & QC SEBELUMNYA nampilin jenis_warna_baju mentah apa adanya - kalau tim potong ngetik
-// manual pakai ejaan lama, notif ikutan ejaan lama walau tab Proses/QC Mini App udah WARNA 1.
-// Sekarang kedua notifikasi itu JUGA dikonversi ke WARNA 1 (kombinasi tetap dikecualikan, sama
-// kayak tempat lain). Sekalian benerin handleHapusLogQC_ yang lupa select ref_stok - sebelumnya
-// item kombinasi yang dibatalkan/diedit dari situ bisa salah kedeteksi non-kombinasi.
+// PERUBAHAN ver.79 (fix bug + request Denny): (1) REVERT v.76/v.77 - /data/warna-kanonik &
+// /data/stok-roll balik ke kanonik (WARNA 2), BUKAN WARNA 1 lagi. Layar pemilihan stok itu buat
+// mencocokkan ke roll fisik, harus tetap ejaan kanonik sesuai kesepakatan awal ("stok pakai
+// warna 2/3/4 dst") - kemarin salah diubah ke WARNA 1. (2) Kalau prefix item udah spesifik
+// berat kain (TS24/TS30/LS24/LS30), penanda berat di nama warna (mis. "HITAM 30S", "ARMY
+// (30S)") sekarang dibuang dari HASIL TAMPILAN Proses/QC/notifikasi Telegram - prefix-nya
+// sendiri udah cukup mewakili. stok_kain TETAP pakai penanda itu, gak disentuh.
 //
 // Riwayat versi lengkap: git log.
 //
@@ -3206,7 +3207,13 @@ async function ambilPetaWarnaKanonik_(env) {
 // SENGAJA gak dipanggil buat item KOMBINASI (dicek terpisah oleh pemanggil lewat ref_stok/varian)
 // - nama kombinasi (mis. "STEEL NAVY") itu identitas resmi dari tabel kombinasi_warna, bukan
 // ejaan warna tunggal yang perlu dibenerin.
+//
+// v.79 (request Denny): kalau prefix item ini udah SPESIFIK berat kain (TS24/TS30/LS24/LS30),
+// penanda berat di nama warna (mis. "HITAM 30S", "ARMY (30S)") jadi mubazir - prefix-nya sendiri
+// udah cukup mewakili. Sisa penanda "NNS"/"(NNS)" dibuang dari hasil tampilan (BUKAN dari
+// stok_kain - itu tetap wajib pakai penanda itu, cuma soal cara nampilinnya di sini).
 // ============================================================
+const PREFIX_SPESIFIK_BERAT_ = ['TS24', 'TS30', 'LS24', 'LS30'];
 function formatNamaKanonikTampilan_(teks, petaKanonik) {
   if (!teks) return teks;
   const kata = String(teks).split(' ');
@@ -3225,7 +3232,11 @@ function formatNamaKanonikTampilan_(teks, petaKanonik) {
     }
     if (!cocok) { hasil.push(kata[i]); i++; }
   }
-  return hasil.join(' ');
+  let gabung = hasil.join(' ');
+  if (PREFIX_SPESIFIK_BERAT_.indexOf(kata[0].toUpperCase()) !== -1) {
+    gabung = gabung.replace(/\s*\(?\d+S\)?/gi, '').replace(/\s+/g, ' ').trim();
+  }
+  return gabung;
 }
 
 // ============================================================
@@ -3255,7 +3266,7 @@ async function ambilPetaWarnaTampilan_(env) {
 
 async function handleWarnaKanonik_(env) {
   try {
-    const peta = await ambilPetaWarnaTampilan_(env);
+    const peta = await ambilPetaWarnaKanonik_(env);
     return jsonResponse(peta);
   } catch (e) {
     return jsonResponse({ ok: false, error: e.message }, 500);
@@ -3271,23 +3282,21 @@ async function handleStokRollPerWarna_(env) {
   try {
     const [rowsStok, rowsKamus] = await Promise.all([
       ambilDariSupabase_(env, '/rest/v1/stok_kain?select=warna,kode_roll,kg_sisa&kg_sisa=gt.0'),
-      ambilDariSupabase_(env, '/rest/v1/kamus_sinonim_warna?select=kanonik,sinonim,tampilan')
+      ambilDariSupabase_(env, '/rest/v1/kamus_sinonim_warna?select=kanonik,sinonim')
     ]);
 
-    // v.76 (request Denny): kelompokkan per WARNA 1 (tampilan) - bukan kanonik lagi - biar
-    // saran warna & Kode Roll di Mini App Produksi ikut standar baru. Roll yang kg_sisa-nya
-    // disimpan dengan ejaan LAMA (kanonik/sinonim apapun) tetap kegabung benar di grup yang
-    // sama, karena peta di bawah nyambungin semua sinonim ke satu TAMPILAN yang sama. Kalau
-    // suatu kanonik belum punya tampilan (mis. varian "30S"), fallback ke kanonik apa adanya.
-    const petaTampilan = {};
+    // v.79 (revert v.76/77, request Denny): BALIK ke kanonik (WARNA 2) - bukan WARNA 1/tampilan
+    // lagi. Ini layar buat MILIH STOK yang beneran mau dipotong, jadi harus tetap kanonik sesuai
+    // kesepakatan dari awal ("stok pakai warna 2/3/4 dst"). WARNA 1 cuma buat tab Proses/QC &
+    // notifikasi Telegram (v.75/v.78), BUKAN buat layar input/pemilihan stok ini.
+    const petaKanonik = {};
     rowsKamus.forEach(function (row) {
       const kanonik = String(row.kanonik || '').toUpperCase();
       if (!kanonik) return;
-      const tampil = String(row.tampilan || '').toUpperCase() || kanonik;
-      petaTampilan[kanonik] = tampil;
+      petaKanonik[kanonik] = kanonik;
       (row.sinonim || []).forEach(function (s) {
         const su = String(s || '').toUpperCase();
-        if (su) petaTampilan[su] = tampil;
+        if (su) petaKanonik[su] = kanonik;
       });
     });
 
@@ -3301,9 +3310,9 @@ async function handleStokRollPerWarna_(env) {
       // sekali - ini akar bug "warna gak muncul di autosuggest" yang dicurigai Denny). kode_roll
       // kosong itu valid (roll belum dicatat/diketahui), BUKAN alasan buat nyembunyiin stoknya.
       if (!warnaRaw || kgSisa <= 0) return;
-      const tampilan = petaTampilan[warnaRaw.toUpperCase()] || warnaRaw.toUpperCase();
-      if (!grup[tampilan]) grup[tampilan] = [];
-      grup[tampilan].push({ kodeRoll: kodeRoll || null, kg: kgSisa });
+      const kanonik = petaKanonik[warnaRaw.toUpperCase()] || warnaRaw.toUpperCase();
+      if (!grup[kanonik]) grup[kanonik] = [];
+      grup[kanonik].push({ kodeRoll: kodeRoll || null, kg: kgSisa });
     });
     Object.keys(grup).forEach(function (k) {
       grup[k].sort(function (a, b) { return b.kg - a.kg; });
