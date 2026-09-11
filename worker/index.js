@@ -1,13 +1,11 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.79
+// CODE WORKER PRODUKSI ver.80
 // ============================================================
-// PERUBAHAN ver.79 (fix bug + request Denny): (1) REVERT v.76/v.77 - /data/warna-kanonik &
-// /data/stok-roll balik ke kanonik (WARNA 2), BUKAN WARNA 1 lagi. Layar pemilihan stok itu buat
-// mencocokkan ke roll fisik, harus tetap ejaan kanonik sesuai kesepakatan awal ("stok pakai
-// warna 2/3/4 dst") - kemarin salah diubah ke WARNA 1. (2) Kalau prefix item udah spesifik
-// berat kain (TS24/TS30/LS24/LS30), penanda berat di nama warna (mis. "HITAM 30S", "ARMY
-// (30S)") sekarang dibuang dari HASIL TAMPILAN Proses/QC/notifikasi Telegram - prefix-nya
-// sendiri udah cukup mewakili. stok_kain TETAP pakai penanda itu, gak disentuh.
+// PERUBAHAN ver.80 (perf, request Denny): optimasi Submit QC - pola sama yang sudah dipakai di
+// Submit Produksi (v.71/v.73). (1) tim_potong & log_qc, lalu daftar prefix QC & tarif jahit,
+// masing-masing pasangan ditarik BARENGAN (Promise.all) bukan gantian. (2) Kirim/edit
+// notifikasi ke grup QC + update id_pesan_qc dipindah ke belakang layar (ctx.waitUntil), gak
+// ditunggu sebelum respons ke Mini App.
 //
 // Riwayat versi lengkap: git log.
 //
@@ -83,10 +81,11 @@ export default {
     }
 
     // v.10 (Dashboard Tahap 2) - submit input QC (mode Ringkas / Rincian)
+    // v.80: sekarang terima `ctx` juga - dipakai buat kirim notifikasi di belakang layar.
     if (url.pathname === '/submit-qc' && request.method === 'POST') {
       let body;
       try { body = await request.json(); } catch (e) { return jsonResponse({ ok: false, error: 'Body harus JSON.' }, 400); }
-      return await handleSubmitQC_(body, env);
+      return await handleSubmitQC_(body, env, ctx);
     }
 
     // v.32 - cek apakah user Telegram yang buka Dashboard ini termasuk admin (daftar di secret
@@ -192,7 +191,7 @@ export default {
     if (url.pathname === '/data/edit-log-qc' && request.method === 'POST') {
       let body;
       try { body = await request.json(); } catch (e) { return jsonResponse({ ok: false, error: 'Body harus JSON.' }, 400); }
-      return await handleEditLogQC_(body, env);
+      return await handleEditLogQC_(body, env, ctx);
     }
 
     // v.70 - isi ulang otomatis harga_jait/total_bayar buat log_qc lama yang masih kosong,
@@ -555,7 +554,7 @@ async function handleHapusLogQC_(body, env) {
 // sisa yang aktif) lalu submit ulang dengan angka terkoreksi lewat handleSubmitQC_ yang sama
 // dipakai submit biasa. Dari sisi admin di dashboard keliatan 1 aksi "Edit", tapi di database
 // jejaknya tetap 2 baris (lama dibatalkan + baru aktif) - audit trail total_bayar tetap utuh.
-async function handleEditLogQC_(body, env) {
+async function handleEditLogQC_(body, env, ctx) {
   const logQcId = parseInt(body.logQcId, 10);
   if (!logQcId) return jsonResponse({ ok: false, error: 'logQcId wajib diisi.' }, 400);
 
@@ -564,8 +563,10 @@ async function handleEditLogQC_(body, env) {
   if (!dataBatal.ok) return jsonResponse({ ok: false, error: 'Gagal batalkan data lama: ' + dataBatal.error }, resBatal.status);
   if (!dataBatal.timPotongId) return jsonResponse({ ok: false, error: 'Data lama dibatalkan, tapi laporan induknya sudah gak ada - gak bisa submit ulang.' }, 400);
 
+  // v.80: handleSubmitQC_ sekarang butuh ctx juga (buat kirim notifikasi di belakang layar) -
+  // diteruskan dari route /data/edit-log-qc.
   const bodySubmitBaru = Object.assign({ initData: body.initData, timPotongId: dataBatal.timPotongId }, body.dataBaru || {});
-  return await handleSubmitQC_(bodySubmitBaru, env);
+  return await handleSubmitQC_(bodySubmitBaru, env, ctx);
 }
 
 // v.70 - isi ulang otomatis harga_jait & total_bayar buat baris log_qc AKTIF yang masih kosong
@@ -2173,7 +2174,7 @@ function distribusiRingkas_(perUkuran, totalSelesaiBaru, totalRejectBaru) {
   return { deltaSelesai: deltaSelesai, deltaReject: deltaReject, sisaSelesaiTakTertampung: sisaSelesai, sisaRejectTakTertampung: sisaReject };
 }
 
-async function handleSubmitQC_(body, env) {
+async function handleSubmitQC_(body, env, ctx) {
   const validasi = await validasiInitData_(body.initData, env);
   if (!validasi.ok) return jsonResponse(validasi, 401);
 
@@ -2181,16 +2182,21 @@ async function handleSubmitQC_(body, env) {
   if (!timPotongId) return jsonResponse({ ok: false, error: 'timPotongId wajib diisi.' }, 400);
 
   try {
-    const rowsTP = await ambilDariSupabase_(env, '/rest/v1/tim_potong?select=*&id=eq.' + timPotongId);
-    if (!rowsTP || rowsTP.length === 0) return jsonResponse({ ok: false, error: 'Laporan tim_potong id=' + timPotongId + ' tidak ditemukan.' }, 404);
-    const tp = rowsTP[0];
-    if (tp.status === 'SELESAI') return jsonResponse({ ok: false, error: 'Laporan ini sudah berstatus SELESAI, tidak bisa diinput lagi.' }, 400);
-
     // v.15 - ADOPSI skema baru: log_qc sekarang "1 baris = 1x submit" dengan kolom ukuran_xs
     // dst terpisah (BUKAN 1 baris per ukuran lagi) + kolom reject TEKS notasi ringkas ("M1,
     // L2"). Buat tau progress SAAT INI, semua baris log_qc aktif buat laporan ini harus
     // dijumlahkan per ukuran (bisa banyak baris riwayat submit sebelumnya).
-    const rowsLog = await ambilDariSupabase_(env, '/rest/v1/log_qc?select=' + Object.values(KOLOM_UKURAN_MAP).join(',') + ',reject&status=eq.aktif&tim_potong_id=eq.' + timPotongId);
+    // v.80 (perf, request Denny): tim_potong & log_qc independen satu sama lain (cuma butuh
+    // timPotongId) - ditarik BARENGAN (Promise.all). Kalau tp gak ketemu/udah SELESAI, hasil
+    // rowsLog dibuang aja - rugi 1x round-trip di kasus jarang itu, sepadan sama motong 1
+    // round-trip penuh di kasus normal (jauh lebih sering).
+    const [rowsTP, rowsLog] = await Promise.all([
+      ambilDariSupabase_(env, '/rest/v1/tim_potong?select=*&id=eq.' + timPotongId),
+      ambilDariSupabase_(env, '/rest/v1/log_qc?select=' + Object.values(KOLOM_UKURAN_MAP).join(',') + ',reject&status=eq.aktif&tim_potong_id=eq.' + timPotongId)
+    ]);
+    if (!rowsTP || rowsTP.length === 0) return jsonResponse({ ok: false, error: 'Laporan tim_potong id=' + timPotongId + ' tidak ditemukan.' }, 404);
+    const tp = rowsTP[0];
+    if (tp.status === 'SELESAI') return jsonResponse({ ok: false, error: 'Laporan ini sudah berstatus SELESAI, tidak bisa diinput lagi.' }, 400);
     const agregasi = {}; // { XS: {selesai, reject}, ... }
     rowsLog.forEach(function (log) {
       const selesaiBarisIni = kolomKeUkuran_(log);
@@ -2242,7 +2248,13 @@ async function handleSubmitQC_(body, env) {
     // v.15 - Tulis SATU baris LOG QC buat submit ini (bukan 1 baris per ukuran lagi). Kolom
     // "warna" sekarang APA ADANYA (nama item lengkap dari tim_potong, TIDAK dipotong prefix-nya
     // seperti versi sebelumnya - ini koreksi eksplisit dari thread Apps Script).
-    const daftarPrefixInfo = await ambilDaftarPrefixQC_(env);
+    // v.80 (perf, request Denny): daftar prefix QC & tarif jahit itu 2 tabel independen (gak
+    // saling butuh hasil satu sama lain) - ditarik BARENGAN (Promise.all), pola sama seperti
+    // optimasi Submit Produksi v.73.
+    const [daftarPrefixInfo, tarifMap] = await Promise.all([
+      ambilDaftarPrefixQC_(env),
+      ambilTarifJahitMap_(env)
+    ]);
     const cocokKategori = cariKategoriQC_(tp.jenis_warna_baju, daftarPrefixInfo);
     let varianQC = cocokKategori ? cocokKategori.varian : '';
     if (!varianQC) {
@@ -2253,7 +2265,6 @@ async function handleSubmitQC_(body, env) {
     const totalDeltaSelesai = Object.keys(deltaSelesai).reduce(function (s, u) { return s + deltaSelesai[u]; }, 0);
     const notasiReject = bangunRejectNotasi_(deltaReject);
 
-    const tarifMap = await ambilTarifJahitMap_(env);
     const hargaJait = tarifMap[String(varianQC || '').toUpperCase()] || null;
     const totalBayar = hargaJait ? totalDeltaSelesai * hargaJait : null;
 
@@ -2316,7 +2327,25 @@ async function handleSubmitQC_(body, env) {
       });
     }
 
-    const idPesanBaru = await kirimAtauEditNotifikasiQC_(env, tp, totalSelesaiBaru, totalRejectBaru, statusBaru, varianQC, perUkuranBaru);
+    // v.80 (perf, request Denny - pola sama seperti keluhan "HP freeze" yang sudah dibenerin di
+    // Submit Produksi v.71): kirim/edit notifikasi ke grup QC + update id_pesan_qc dipindah jalan
+    // di belakang layar (ctx.waitUntil), gak ditunggu sebelum respons ke Mini App. Sama kayak
+    // notifikasi produksi, gagal kirim notif di sini TIDAK fatal - data QC yang udah tersimpan
+    // gak keganggu, cuma notifnya doang yang kurang.
+    ctx.waitUntil(kirimNotifikasiQCLatar_(env, tp, totalSelesaiBaru, totalRejectBaru, statusBaru, varianQC, perUkuranBaru, timPotongId));
+
+    return jsonResponse({ ok: true, status: statusBaru, totalSelesai: totalSelesaiBaru, totalReject: totalRejectBaru, sisa: tp.jumlah - totalSelesaiBaru - totalRejectBaru });
+  } catch (e) {
+    return jsonResponse({ ok: false, error: e.message }, 500);
+  }
+}
+
+// v.80 (perf): pembungkus kirimAtauEditNotifikasiQC_ + update id_pesan_qc, dijalankan lewat
+// ctx.waitUntil di handleSubmitQC_ (lihat komentar di atas) - jadi TIDAK ditunggu sebelum
+// respons ke Mini App.
+async function kirimNotifikasiQCLatar_(env, tp, totalSelesai, totalReject, statusBaru, varianQC, perUkuranBaru, timPotongId) {
+  try {
+    const idPesanBaru = await kirimAtauEditNotifikasiQC_(env, tp, totalSelesai, totalReject, statusBaru, varianQC, perUkuranBaru);
     if (idPesanBaru && idPesanBaru !== tp.id_pesan_qc) {
       await fetch(env.SUPABASE_URL + '/rest/v1/tim_potong?id=eq.' + timPotongId, {
         method: 'PATCH',
@@ -2324,10 +2353,8 @@ async function handleSubmitQC_(body, env) {
         body: JSON.stringify({ id_pesan_qc: idPesanBaru })
       });
     }
-
-    return jsonResponse({ ok: true, status: statusBaru, totalSelesai: totalSelesaiBaru, totalReject: totalRejectBaru, sisa: tp.jumlah - totalSelesaiBaru - totalRejectBaru });
   } catch (e) {
-    return jsonResponse({ ok: false, error: e.message }, 500);
+    // gagal kirim/update notifikasi TIDAK dianggap fatal - data QC sudah tersimpan duluan
   }
 }
 
