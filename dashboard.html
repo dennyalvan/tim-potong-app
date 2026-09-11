@@ -1,10 +1,13 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.82
+DASHBOARD ver.83
 ============================================================
-PERUBAHAN ver.82 (request Denny): tombol baru "Isi Upah" (admin-only, muncul pas tab Rekap QC
-aktif) - isi ulang otomatis upah QC lama yang kosong lewat endpoint /data/isi-ulang-upah-qc.
+PERUBAHAN ver.83 (request Denny): modal Edit Data Produksi dirombak - Nama Item jadi dropdown
+Jenis (dari daftar resmi kategori_varian_produksi) + field Warna terpisah, bukan teks bebas
+lagi. Item kombinasi cuma boleh ganti Jenis (Pendek<->Panjang), Warna/Kode Roll tetap terkunci.
+Guard status-QC diperluas: Jenis/Warna/Kode Roll/Kg sekarang ikut terkunci (sebelumnya cuma
+Jumlah) begitu laporan udah ada progres QC.
 Riwayat lengkap: git log.
 ============================================================
 
@@ -402,8 +405,8 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .mf-row { display: flex; gap: 8px; margin-bottom: 8px; }
   .mf-field { flex: 1; display: flex; flex-direction: column; gap: 3px; }
   .mf-field label { font-size: 11px; font-weight: 700; color: var(--gray-label); }
-  .mf-field input { border: 1px solid var(--border); border-radius: 10px; padding: 9px 10px; font-size: 13.5px; font-family: inherit; background: #fff; }
-  .mf-field input:disabled { background: var(--surface-2); color: var(--gray-text); }
+  .mf-field input, .mf-field select { border: 1px solid var(--border); border-radius: 10px; padding: 9px 10px; font-size: 13.5px; font-family: inherit; background: #fff; }
+  .mf-field input:disabled, .mf-field select:disabled { background: var(--surface-2); color: var(--gray-text); }
   /* v.43: checkbox "Terpakai habis" - shortcut buat Write-off (request Denny), gaya sama kayak
      .chk-sub yang udah dipakai di index.html biar konsisten. */
   .chk-sub { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--gray-text); font-weight: 600; margin: -2px 0 8px; }
@@ -1181,7 +1184,7 @@ function pasangEventLaporanCard() {
       e.stopPropagation();
       const id = parseInt(el.dataset.editproduksi, 10);
       const r = daftarLaporanData.find(function (x) { return x.id === id; });
-      if (r) bukaModalEditProduksi_(r);
+      if (r) muatKategoriVarianProduksi_().then(function (daftarPrefix) { bukaModalEditProduksi_(r, daftarPrefix); });
     });
   });
   // v.32: tombol Hapus Laporan (khusus admin, lihat isAdmin) - konfirmasi native dulu (aksi
@@ -1271,40 +1274,89 @@ function pasangEventLaporanCard() {
 }
 
 // ------------------------------------------------------------
-// MODAL EDIT DATA PRODUKSI (admin only, v.42) - nama item/kode roll/kg pemakaian/jumlah, buat
-// stok opname. Ukuran per-size SENGAJA belum ada form-nya di v1 (server sebenarnya sudah
-// dukung lewat body.ukuran kalau nanti perlu ditambah).
+// MODAL EDIT DATA PRODUKSI (admin only, v.42; dirombak v.83) - Jenis (dropdown dari daftar
+// resmi kategori_varian_produksi) + Warna/Kode Roll/Kg Pemakaian/Jumlah, buat stok opname atau
+// koreksi salah catat jenis. Ukuran per-size SENGAJA belum ada form-nya (server sebenarnya
+// sudah dukung lewat body.ukuran kalau nanti perlu ditambah).
 // ------------------------------------------------------------
-function bukaModalEditProduksi_(r) {
+let kategoriVarianProduksiCache_ = null;
+function muatKategoriVarianProduksi_() {
+  if (kategoriVarianProduksiCache_) return Promise.resolve(kategoriVarianProduksiCache_);
+  return fetch(WORKER_URL + '/data/kategori-varian').then(function (r) { return r.json(); }).then(function (rows) {
+    kategoriVarianProduksiCache_ = (rows || [])
+      .filter(function (r) { return String(r.prefix_tele || '').trim(); })
+      .map(function (r) { return { prefix: String(r.prefix_tele).trim().toUpperCase(), varian: r.label_varian, kategori: r.kategori }; })
+      .sort(function (a, b) { return b.prefix.length - a.prefix.length; });
+    return kategoriVarianProduksiCache_;
+  });
+}
+
+// Porting dari cariPrefixLengkap_ (Worker) - cocokkan Nama Item ke daftar prefix resmi, balikin
+// { prefix, varian, warna } (warna = sisa teks setelah prefix) atau null kalau gak ketemu.
+function cariPrefixLengkapClient_(namaItem, daftarPrefix) {
+  const namaAsli = String(namaItem || '').trim();
+  const nama = namaAsli.toUpperCase();
+  for (let i = 0; i < daftarPrefix.length; i++) {
+    const p = daftarPrefix[i];
+    if (nama === p.prefix) return { prefix: p.prefix, varian: p.varian, warna: '' };
+    if (nama.indexOf(p.prefix) === 0) {
+      const setelah = nama.charAt(p.prefix.length);
+      if (setelah === '' || setelah === ' ' || setelah === '-') {
+        return { prefix: p.prefix, varian: p.varian, warna: namaAsli.slice(p.prefix.length).replace(/^[\s-]+/, '').trim() };
+      }
+    }
+  }
+  return null;
+}
+
+function bukaModalEditProduksi_(r, daftarPrefix) {
   if (!tg || !tg.initData) { tampilkanToast('Harus dibuka lewat Telegram.'); return; }
   const adaProgresQC = (r.totalSelesai + r.totalReject) > 0;
+  const isKombinasi = !!r.isKombinasi;
+  const cocok = cariPrefixLengkapClient_(r.jenisWarnaBaju, daftarPrefix) || { prefix: '', varian: '', warna: r.jenisWarnaBaju || '' };
+  // v.83: dropdown Jenis cuma nampilin varian KOMBINASI (kalau laporannya kombinasi) atau
+  // NON-kombinasi (kalau bukan) - ganti lintas kombinasi<->non-kombinasi gak didukung di sini.
+  const daftarPilihan = daftarPrefix.filter(function (p) {
+    const labelKombinasi = p.varian.toUpperCase().indexOf('KOMBINASI') !== -1;
+    return isKombinasi ? labelKombinasi : !labelKombinasi;
+  });
+  const kunciSemua = adaProgresQC; // v.83: sebelumnya cuma ngunci Jumlah, sekarang semua field
+  const opsiHtml = daftarPilihan.map(function (p) {
+    return '<option value="' + escapeAttr(p.prefix) + '"' + (p.prefix === cocok.prefix ? ' selected' : '') + '>' + escapeHtml(p.varian) + '</option>';
+  }).join('');
+
   const ov = document.createElement('div');
   ov.className = 'modal-overlay';
   ov.id = 'modalEditProduksi';
   ov.innerHTML = '<div class="modal-box">' +
     '<button class="modal-close" data-tutupmodal>✕</button>' +
     '<h2>Edit Data Produksi</h2>' +
-    '<div class="mf-row"><div class="mf-field" style="flex:2"><label>Nama Item</label><input type="text" id="epNama" value="' + escapeAttr(r.jenisWarnaBaju || '') + '"></div>' +
-    '<div class="mf-field"><label>Kode Roll</label><input type="text" id="epKodeRoll" value="' + escapeAttr(r.kodeRoll || '') + '"></div></div>' +
-    '<div class="mf-row"><div class="mf-field"><label>Kg Pemakaian</label><input type="number" step="0.01" id="epKg" value="' + (r.pemakaianKainKg || '') + '"></div>' +
-    '<div class="mf-field"><label>Jumlah (pcs)</label><input type="number" id="epJumlah" value="' + r.jumlah + '"' + (adaProgresQC ? ' disabled' : '') + '></div></div>' +
-    (adaProgresQC ? '<div class="mf-peringatan">⚠️ Jumlah dikunci karena laporan ini udah punya progres QC (' + r.totalSelesai + ' selesai, ' + r.totalReject + ' reject). Batalkan submit QC terkait dulu kalau memang perlu ubah jumlah.</div>' : '') +
-    '<div class="mf-peringatan" style="background:var(--surface-2);color:var(--gray-text)">ℹ️ Ganti Kode Roll/Kg Pemakaian otomatis potong-ulang stok kain (potongan lama dikembalikan, dipotong lagi pakai nilai baru).</div>' +
-    '<button class="mf-save-btn" data-simpaneditproduksi>💾 Simpan Perubahan</button>' +
+    '<div class="mf-row"><div class="mf-field" style="flex:2"><label>Jenis</label><select id="epVarian"' + (kunciSemua ? ' disabled' : '') + '>' + opsiHtml + '</select></div>' +
+    '<div class="mf-field"><label>Warna</label><input type="text" id="epWarna" value="' + escapeAttr(cocok.warna || '') + '"' + (kunciSemua || isKombinasi ? ' disabled' : '') + '></div></div>' +
+    '<div class="mf-row"><div class="mf-field"><label>Kode Roll</label><input type="text" id="epKodeRoll" value="' + escapeAttr(r.kodeRoll || '') + '"' + (kunciSemua || isKombinasi ? ' disabled' : '') + '></div>' +
+    '<div class="mf-field"><label>Kg Pemakaian</label><input type="number" step="0.01" id="epKg" value="' + (r.pemakaianKainKg || '') + '"' + (kunciSemua || isKombinasi ? ' disabled' : '') + '></div></div>' +
+    '<div class="mf-field"><label>Jumlah (pcs)</label><input type="number" id="epJumlah" value="' + r.jumlah + '"' + (kunciSemua ? ' disabled' : '') + '></div>' +
+    (kunciSemua ? '<div class="mf-peringatan">⚠️ Laporan ini udah punya progres QC (' + r.totalSelesai + ' selesai, ' + r.totalReject + ' reject) - semua field di sini terkunci. Batalkan submit QC terkait dulu kalau memang perlu diubah.</div>' : '') +
+    (!kunciSemua && isKombinasi ? '<div class="mf-peringatan" style="background:var(--surface-2);color:var(--gray-text)">ℹ️ Item kombinasi: cuma Jenis (Pendek/Panjang) yang bisa diganti - Warna & Kode Roll tetap. Kalau kg sebelumnya dari estimasi, dihitung ulang otomatis sesuai Jenis baru & stok disesuaikan.</div>' : '') +
+    (!kunciSemua && !isKombinasi ? '<div class="mf-peringatan" style="background:var(--surface-2);color:var(--gray-text)">ℹ️ Ganti Kode Roll/Kg Pemakaian otomatis potong-ulang stok kain (potongan lama dikembalikan, dipotong lagi pakai nilai baru).</div>' : '') +
+    '<button class="mf-save-btn" data-simpaneditproduksi' + (kunciSemua ? ' disabled' : '') + '>💾 Simpan Perubahan</button>' +
     '</div>';
   document.body.appendChild(ov);
   ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
   ov.querySelector('[data-tutupmodal]').addEventListener('click', function () { ov.remove(); });
-  ov.querySelector('[data-simpaneditproduksi]').addEventListener('click', function () {
+  const btn = ov.querySelector('[data-simpaneditproduksi]');
+  if (!btn) return;
+  btn.addEventListener('click', function () {
+    const varianBaru = document.getElementById('epVarian').value;
+    const warnaBaru = isKombinasi ? cocok.warna : document.getElementById('epWarna').value.trim();
     const payload = {
       initData: tg.initData,
       id: r.id,
-      jenisWarnaBaju: document.getElementById('epNama').value,
+      jenisWarnaBaju: (varianBaru + ' ' + warnaBaru).trim(),
       kodeRoll: document.getElementById('epKodeRoll').value,
-      pemakaianKainKg: document.getElementById('epKg').value
+      pemakaianKainKg: document.getElementById('epKg').value,
+      jumlah: document.getElementById('epJumlah').value
     };
-    if (!adaProgresQC) payload.jumlah = document.getElementById('epJumlah').value;
-    const btn = ov.querySelector('[data-simpaneditproduksi]');
     btn.disabled = true; btn.textContent = 'Menyimpan...';
     fetch(WORKER_URL + '/data/edit-produksi', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
@@ -1317,7 +1369,10 @@ function bukaModalEditProduksi_(r) {
           return;
         }
         ov.remove();
-        tampilkanToast((data.peringatanStok && data.peringatanStok.length) ? '✓ Tersimpan, TAPI stok gak kepotong: ' + data.peringatanStok.join('; ') : '✓ Data produksi diperbarui.');
+        const infoPenyesuaian = (data.penyesuaianKg && data.penyesuaianKg.length)
+          ? ' Kg disesuaikan: ' + data.penyesuaianKg.map(function (p) { return p.bagian + ' ' + p.kgLama.toFixed(2) + '→' + p.kgBaru.toFixed(2) + 'kg'; }).join(', ') + '.'
+          : '';
+        tampilkanToast(((data.peringatanStok && data.peringatanStok.length) ? '✓ Tersimpan, TAPI stok gak kepotong: ' + data.peringatanStok.join('; ') : '✓ Data produksi diperbarui.') + infoPenyesuaian);
         muatDaftarLaporan();
       })
       .catch(function (e) {

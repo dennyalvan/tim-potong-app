@@ -1,11 +1,13 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.80
+// CODE WORKER PRODUKSI ver.81
 // ============================================================
-// PERUBAHAN ver.80 (perf, request Denny): optimasi Submit QC - pola sama yang sudah dipakai di
-// Submit Produksi (v.71/v.73). (1) tim_potong & log_qc, lalu daftar prefix QC & tarif jahit,
-// masing-masing pasangan ditarik BARENGAN (Promise.all) bukan gantian. (2) Kirim/edit
-// notifikasi ke grup QC + update id_pesan_qc dipindah ke belakang layar (ctx.waitUntil), gak
-// ditunggu sebelum respons ke Mini App.
+// PERUBAHAN ver.81 (request Denny): /data/edit-produksi dirombak. (1) Guard status-QC
+// diperluas - Nama Item/Kode Roll/Kg sekarang ikut terkunci (sebelumnya cuma jumlah/ukuran)
+// begitu laporan udah ada progres QC. (2) Nama Item wajib salah satu varian resmi di
+// kategori_varian_produksi (gak nerima teks bebas lagi). (3) Item kombinasi sekarang boleh
+// ganti Jenis (Pendek<->Panjang, Warna tetap) - kg yang sumbernya "Estimasi" dihitung ulang
+// otomatis pakai standar_pemakaian varian baru & stok kain disesuaikan selisihnya (roll gak
+// berubah). /data/laporan-qc ikut nambah field isKombinasi buat Dashboard.
 //
 // Riwayat versi lengkap: git log.
 //
@@ -619,6 +621,113 @@ async function handleIsiUlangUpahQC_(body, env) {
 // balikin kg_terpakai ke roll lama - kalau laporan ini belum pernah kesentuh stok, DELETE 0 baris,
 // gak masalah) -> potong ulang pakai kurangiStokKain_ yang SAMA PERSIS dipakai submit produksi.
 // 1 mekanisme ini otomatis nyakup laporan yang sudah PERNAH & yang BELUM PERNAH kesentuh stok.
+// v.81 - cocokkan Nama Item ke daftar prefix resmi (kategori_varian_produksi), balikin
+// { prefix, kategori, varian, warna } atau null. Beda dari cariInfoQCLengkap_ (butuh
+// kategori+prefix balik buat lookup standar_pemakaian & validasi ganti Jenis di
+// handleEditProduksi_) - sengaja gak digabung biar gak resiko ganggu pemanggil lama.
+function cariPrefixLengkap_(namaItem, daftarPrefix) {
+  const namaAsli = String(namaItem || '').trim();
+  const nama = namaAsli.toUpperCase();
+  for (let i = 0; i < daftarPrefix.length; i++) {
+    const p = daftarPrefix[i];
+    if (!p.prefix) continue;
+    if (nama === p.prefix) return { prefix: p.prefix, kategori: p.kategori, varian: p.varian, warna: '' };
+    if (nama.indexOf(p.prefix) === 0) {
+      const setelah = nama.charAt(p.prefix.length);
+      if (setelah === '' || setelah === ' ' || setelah === '-') {
+        return { prefix: p.prefix, kategori: p.kategori, varian: p.varian, warna: namaAsli.slice(p.prefix.length).replace(/^[\s-]+/, '').trim() };
+      }
+    }
+  }
+  return null;
+}
+
+// v.81 - dipanggil dari handleEditProduksi_ HANYA pas ganti Jenis item kombinasi (mis. TR->LT).
+// Badan (tim_potong.pemakaian_kain_kg/sumber_kg) & tiap entry Tangan (ref_stok, sumberKg
+// sendiri-sendiri) yang sumbernya "Estimasi" dihitung ULANG pakai standar_pemakaian punya
+// varian baru. Yang sumbernya null (manual) atau "Pakai Habis" (aktual, roll fisiknya beneran
+// habis) DIBIARKAN apa adanya - itu angka fisik nyata, bukan rumus. Roll TIDAK berubah (cuma
+// jumlah kg yang diambil dari roll yang sama itu yang mungkin nambah/berkurang).
+async function hitungPenyesuaianKgKombinasi_(env, tp, kategoriBaru, varianBaru) {
+  const ukuranObj = kolomKeUkuran_(tp);
+  const rowsStandar = await ambilDariSupabase_(env, '/rest/v1/standar_pemakaian?select=*');
+  const standarMap = {};
+  rowsStandar.forEach(function (s) { standarMap[s.kategori + '|' + s.varian + '|' + (s.posisi || '')] = s; });
+
+  const semuaLog = await ambilDariSupabase_(env, '/rest/v1/log_pemakaian_kain?select=id,stok_kain_id,kg,warna&tim_potong_id=eq.' + tp.id);
+  const sisaLog = semuaLog.slice();
+  function ambilLog_(warna) {
+    const target = String(warna || '').trim().toUpperCase();
+    const idx = sisaLog.findIndex(function (l) { return String(l.warna || '').trim().toUpperCase() === target; });
+    return idx === -1 ? null : sisaLog.splice(idx, 1)[0];
+  }
+
+  const refStokBaru = (tp.ref_stok || []).map(function (rs) { return Object.assign({}, rs); });
+  const warnaTanganSet = refStokBaru.map(function (rs) { return String(rs.warna || '').trim().toUpperCase(); });
+  const penyesuaian = [];
+  const aksiStok = [];
+  let pemakaianKainKgBaru = null;
+  let adaPerubahanRefStok = false;
+
+  if (tp.sumber_kg === 'Estimasi') {
+    const est = hitungEstimasiKg_(ukuranObj, standarMap[kategoriBaru + '|' + varianBaru + '|badan']);
+    if (!est) return { ok: false, error: 'Standar pemakaian (Badan) buat varian "' + varianBaru + '" belum lengkap utk ukuran di laporan ini - gak bisa dihitung ulang otomatis.' };
+    const kgBaruBadan = Math.round(est.kg * 100) / 100; // dibulatkan 2 desimal - samain sama konvensi kg tersimpan, biar gak keanggep "berubah" cuma gara2 noise pembulatan
+    const kgLama = parseFloat(tp.pemakaian_kain_kg) || 0;
+    if (Math.abs(kgBaruBadan - kgLama) > 0.001) {
+      pemakaianKainKgBaru = kgBaruBadan;
+      penyesuaian.push({ bagian: 'Badan', kgLama: kgLama, kgBaru: kgBaruBadan });
+      const idxBadan = sisaLog.findIndex(function (l) { return warnaTanganSet.indexOf(String(l.warna || '').trim().toUpperCase()) === -1; });
+      const logBadan = idxBadan === -1 ? null : sisaLog.splice(idxBadan, 1)[0];
+      if (logBadan) aksiStok.push({ stokKainId: logBadan.stok_kain_id, deltaKg: kgBaruBadan - kgLama, logId: logBadan.id, kgBaru: kgBaruBadan });
+    }
+  }
+
+  for (let i = 0; i < refStokBaru.length; i++) {
+    const rs = refStokBaru[i];
+    if (rs.sumberKg !== 'Estimasi') continue;
+    const est = hitungEstimasiKg_(ukuranObj, standarMap[kategoriBaru + '|' + varianBaru + '|tangan']);
+    if (!est) return { ok: false, error: 'Standar pemakaian (Tangan) buat varian "' + varianBaru + '" belum lengkap utk ukuran di laporan ini - gak bisa dihitung ulang otomatis.' };
+    const kgBaruTangan = Math.round(est.kg * 100) / 100;
+    const kgLama = parseFloat(rs.kg) || 0;
+    if (Math.abs(kgBaruTangan - kgLama) > 0.001) {
+      refStokBaru[i] = Object.assign({}, rs, { kg: kgBaruTangan });
+      adaPerubahanRefStok = true;
+      penyesuaian.push({ bagian: 'Tangan' + (refStokBaru.length > 1 ? (i === 0 ? ' Kanan' : ' Kiri') : ''), kgLama: kgLama, kgBaru: kgBaruTangan });
+      const logTangan = ambilLog_(rs.warna);
+      if (logTangan) aksiStok.push({ stokKainId: logTangan.stok_kain_id, deltaKg: kgBaruTangan - kgLama, logId: logTangan.id, kgBaru: kgBaruTangan });
+    }
+  }
+
+  return {
+    ok: true,
+    pemakaianKainKgBaru: pemakaianKainKgBaru,
+    refStokBaru: adaPerubahanRefStok ? refStokBaru : null,
+    penyesuaian: penyesuaian,
+    aksiStok: aksiStok
+  };
+}
+
+async function sesuaikanKgTerpakaiStok_(env, stokKainId, deltaKg) {
+  if (!stokKainId || Math.abs(deltaKg) < 0.0001) return;
+  const rows = await ambilDariSupabase_(env, '/rest/v1/stok_kain?select=id,kg_terpakai&id=eq.' + stokKainId);
+  if (!rows || rows.length === 0) return;
+  const baru = Math.max(0, (parseFloat(rows[0].kg_terpakai) || 0) + deltaKg);
+  await fetch(env.SUPABASE_URL + '/rest/v1/stok_kain?id=eq.' + stokKainId, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', apikey: env.SUPABASE_SECRET_KEY, Authorization: 'Bearer ' + env.SUPABASE_SECRET_KEY, Prefer: 'return=minimal' },
+    body: JSON.stringify({ kg_terpakai: baru })
+  });
+}
+
+async function updateKgLogPemakaian_(env, logId, kgBaru) {
+  await fetch(env.SUPABASE_URL + '/rest/v1/log_pemakaian_kain?id=eq.' + logId, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', apikey: env.SUPABASE_SECRET_KEY, Authorization: 'Bearer ' + env.SUPABASE_SECRET_KEY, Prefer: 'return=minimal' },
+    body: JSON.stringify({ kg: kgBaru })
+  });
+}
+
 async function handleEditProduksi_(body, env) {
   const validasi = await validasiInitData_(body.initData, env);
   if (!validasi.ok) return jsonResponse(validasi, 401);
@@ -634,8 +743,6 @@ async function handleEditProduksi_(body, env) {
     if (!rows || rows.length === 0) return jsonResponse({ ok: false, error: 'Laporan id=' + id + ' tidak ditemukan.' }, 404);
     const tp = rows[0];
 
-    // Guardrail: jumlah/ukuran diblokir kalau laporan ini udah punya progres QC (status != '') -
-    // ubah kuantitas setelah QC jalan bisa bikin hitungan yang udah lapor jadi gak konsisten.
     const jumlahBaru = body.jumlah !== undefined ? parseInt(body.jumlah, 10) : tp.jumlah;
     const ubahJumlah = jumlahBaru !== tp.jumlah;
     let ubahUkuran = false;
@@ -645,20 +752,78 @@ async function handleEditProduksi_(body, env) {
         if (body.ukuran[u] !== undefined && (parseFloat(body.ukuran[u]) || 0) !== (parseFloat(tp[kolom]) || 0)) ubahUkuran = true;
       });
     }
-    if ((ubahJumlah || ubahUkuran) && tp.status) {
-      return jsonResponse({ ok: false, error: 'Laporan ini sudah punya progres QC (status: "' + tp.status + '") - jumlah/ukuran gak bisa diubah lewat sini karena bisa bikin hitungan QC yang udah jalan jadi gak konsisten. Batalkan dulu submit QC terkait kalau memang perlu diubah.' }, 400);
-    }
 
     const namaBaru = body.jenisWarnaBaju !== undefined ? String(body.jenisWarnaBaju).trim() : tp.jenis_warna_baju;
     const kodeRollBaru = body.kodeRoll !== undefined ? (body.kodeRoll ? String(body.kodeRoll).trim() : null) : tp.kode_roll;
     const kgBaru = body.pemakaianKainKg !== undefined ? (parseFloat(body.pemakaianKainKg) || 0) : (parseFloat(tp.pemakaian_kain_kg) || 0);
     if (!namaBaru) return jsonResponse({ ok: false, error: 'Nama item wajib diisi.' }, 400);
 
-    const perluPotongUlang = (namaBaru !== tp.jenis_warna_baju) || (kodeRollBaru !== tp.kode_roll) || (kgBaru !== (parseFloat(tp.pemakaian_kain_kg) || 0));
-    const itemKombinasi = Array.isArray(tp.ref_stok) && tp.ref_stok.length > 0;
-    if (perluPotongUlang && itemKombinasi) {
-      return jsonResponse({ ok: false, error: 'Item ini kombinasi (2-3 warna) - edit nama/kode roll/kg belum didukung lewat sini (v1), soalnya breakdown warna ke-2/ke-3-nya (ref_stok) ikut kepotong terpisah dan belum ada form buat itu. Kasih tau saya kalau perlu, atau edit field lain (jumlah/ukuran) yang gak nyentuh stok.' }, 400);
+    const namaBerubah = namaBaru !== tp.jenis_warna_baju;
+    const kodeRollBerubah = kodeRollBaru !== tp.kode_roll;
+    const kgBerubah = kgBaru !== (parseFloat(tp.pemakaian_kain_kg) || 0);
+
+    // v.81 (request Denny): guard status-QC DIPERLUAS - sebelumnya cuma ngunci jumlah/ukuran,
+    // sekarang Nama Item/Kode Roll/Kg ikut kekunci begitu laporan udah ada progres QC, biar
+    // riwayat & upah yang udah tercatat gak jadi gak konsisten.
+    if ((ubahJumlah || ubahUkuran || namaBerubah || kodeRollBerubah || kgBerubah) && tp.status) {
+      return jsonResponse({ ok: false, error: 'Laporan ini sudah punya progres QC (status: "' + tp.status + '") - Nama Item/Kode Roll/Kg/Jumlah gak bisa diubah lewat sini karena bisa bikin riwayat & upah yang udah tercatat jadi gak konsisten. Batalkan dulu submit QC terkait kalau memang perlu diubah.' }, 400);
     }
+
+    const itemKombinasi = Array.isArray(tp.ref_stok) && tp.ref_stok.length > 0;
+
+    // v.81: item kombinasi SEKARANG boleh ganti Nama Item (Jenis Pendek<->Panjang, Warna TIDAK
+    // ikut berubah) - TAPI Kode Roll/Kg tetap belum didukung diubah lewat sini.
+    if (itemKombinasi && (kodeRollBerubah || kgBerubah)) {
+      return jsonResponse({ ok: false, error: 'Item ini kombinasi (2-3 warna) - Kode Roll/Kg belum didukung diubah lewat sini (breakdown warna ke-2/ke-3-nya di ref_stok belum ada form buat itu). Kirim tanpa mengubah Kode Roll/Kg, atau kasih tau saya kalau memang perlu.' }, 400);
+    }
+
+    const payload = { jenis_warna_baju: namaBaru, kode_roll: kodeRollBaru, pemakaian_kain_kg: kgBaru };
+    if (body.jumlah !== undefined) payload.jumlah = jumlahBaru;
+    if (body.ukuran) {
+      DAFTAR_UKURAN_TIMPOTONG.forEach(function (u) {
+        if (body.ukuran[u] !== undefined) payload[KOLOM_UKURAN_MAP[u]] = parseFloat(body.ukuran[u]) || null;
+      });
+    }
+
+    let penyesuaianKg = [];
+
+    if (namaBerubah) {
+      const daftarPrefixRows = await ambilDariSupabase_(env, '/rest/v1/kategori_varian_produksi?select=kategori,label_varian,prefix_tele');
+      const daftarPrefix = daftarPrefixRows.filter(function (r) { return String(r.prefix_tele || '').trim(); })
+        .map(function (r) { return { prefix: String(r.prefix_tele).trim().toUpperCase(), kategori: r.kategori, varian: r.label_varian }; })
+        .sort(function (a, b) { return b.prefix.length - a.prefix.length; });
+
+      if (itemKombinasi) {
+        const daftarKombinasi = daftarPrefix.filter(function (p) { return p.varian.toUpperCase().indexOf('KOMBINASI') !== -1; });
+        const lama = cariPrefixLengkap_(tp.jenis_warna_baju, daftarKombinasi);
+        const baru = cariPrefixLengkap_(namaBaru, daftarKombinasi);
+        if (!baru) return jsonResponse({ ok: false, error: 'Nama Item baru harus salah satu varian kombinasi resmi (Anak/Dewasa Pendek/Panjang Kombinasi).' }, 400);
+        if (!lama || lama.warna.toUpperCase() !== baru.warna.toUpperCase()) {
+          return jsonResponse({ ok: false, error: 'Warna item kombinasi gak bisa diubah lewat sini - cuma Jenis (Pendek/Panjang) yang bisa diganti.' }, 400);
+        }
+
+        const hasilPenyesuaian = await hitungPenyesuaianKgKombinasi_(env, tp, baru.kategori, baru.varian);
+        if (!hasilPenyesuaian.ok) return jsonResponse({ ok: false, error: hasilPenyesuaian.error }, 400);
+        if (hasilPenyesuaian.pemakaianKainKgBaru !== null) payload.pemakaian_kain_kg = hasilPenyesuaian.pemakaianKainKgBaru;
+        if (hasilPenyesuaian.refStokBaru) payload.ref_stok = hasilPenyesuaian.refStokBaru;
+        penyesuaianKg = hasilPenyesuaian.penyesuaian;
+
+        for (const aksi of hasilPenyesuaian.aksiStok) {
+          await sesuaikanKgTerpakaiStok_(env, aksi.stokKainId, aksi.deltaKg);
+          if (aksi.logId) await updateKgLogPemakaian_(env, aksi.logId, aksi.kgBaru);
+        }
+      } else {
+        const daftarNonKombinasi = daftarPrefix.filter(function (p) { return p.varian.toUpperCase().indexOf('KOMBINASI') === -1; });
+        if (!cariPrefixLengkap_(namaBaru, daftarNonKombinasi)) {
+          return jsonResponse({ ok: false, error: 'Nama Item harus salah satu varian resmi yang sudah terdaftar.' }, 400);
+        }
+      }
+    }
+
+    // v.81: perluPotongUlang (delete + kurangiStokKain_ ulang) SEKARANG cuma jalan buat item
+    // NON-kombinasi - item kombinasi pakai jalur penyesuaian delta di atas (roll gak pernah
+    // dicari ulang, cuma kg di roll yang sama yang disesuaikan).
+    const perluPotongUlang = !itemKombinasi && (namaBerubah || kodeRollBerubah || kgBerubah);
 
     if (perluPotongUlang) {
       const rowsLogLama = await ambilDariSupabase_(env, '/rest/v1/log_pemakaian_kain?select=id&tim_potong_id=eq.' + id);
@@ -669,14 +834,6 @@ async function handleEditProduksi_(body, env) {
         });
         if (resDel.status >= 300) return jsonResponse({ ok: false, error: 'Gagal hapus potongan stok lama: HTTP ' + resDel.status }, 500);
       }
-    }
-
-    const payload = { jenis_warna_baju: namaBaru, kode_roll: kodeRollBaru, pemakaian_kain_kg: kgBaru };
-    if (body.jumlah !== undefined) payload.jumlah = jumlahBaru;
-    if (body.ukuran) {
-      DAFTAR_UKURAN_TIMPOTONG.forEach(function (u) {
-        if (body.ukuran[u] !== undefined) payload[KOLOM_UKURAN_MAP[u]] = parseFloat(body.ukuran[u]) || null;
-      });
     }
 
     const resUpdate = await fetch(env.SUPABASE_URL + '/rest/v1/tim_potong?id=eq.' + id, {
@@ -693,7 +850,7 @@ async function handleEditProduksi_(body, env) {
       if (!hasilStok.matched) peringatanStok.push(hasilStok.keterangan);
     }
 
-    return jsonResponse({ ok: true, peringatanStok: peringatanStok });
+    return jsonResponse({ ok: true, peringatanStok: peringatanStok, penyesuaianKg: penyesuaianKg });
   } catch (e) {
     return jsonResponse({ ok: false, error: e.message }, 500);
   }
@@ -2559,6 +2716,7 @@ async function handleDaftarLaporanQC_(env) {
         kodeRoll: tp.kode_roll,
         pemakaianKainKg: tp.pemakaian_kain_kg,
         jumlah: tp.jumlah,
+        isKombinasi: isKombinasi, // v.81: dipakai Dashboard buat batasi dropdown Jenis di modal Edit Data Produksi
         perUkuran: perUkuran,
         totalSelesai: totalSelesai,
         totalReject: totalReject,
