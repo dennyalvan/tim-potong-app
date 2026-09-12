@@ -1,12 +1,11 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.86
+DASHBOARD ver.87
 ============================================================
-PERUBAHAN ver.86 (bugfix, request Denny): tombol Login Admin gak pernah muncul di browser biasa
-- penyebabnya SDK Telegram (telegram-web-app.js) selalu bikin window.Telegram.WebApp ADA walau
-dibuka di luar Telegram (initData-nya yang kosong, bukan objeknya null), jadi deteksi "di luar
-Telegram" yang cuma cek `!tg` gak pernah kena. Sekarang ceknya pakai tg.initData.
+PERUBAHAN ver.87 (request Denny): tombol Login/Logout Admin dipindah dari elemen mengambang
+(numpuk sama tombol Sync) jadi bagian resmi header di sebelah Sync - ikon gembok doang (🔒/🔓)
+tanpa tulisan, ukuran disamain ke tombol refresh sebelahnya.
 Riwayat lengkap: git log.
 ============================================================
 
@@ -68,6 +67,13 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
      sama sekali, tinggal disamain ukurannya sama tombol Sync sebelahnya (~36px tinggi) biar
      gak keliatan lebih kecil/gak proporsional, dan gak numpuk (overlap) sama elemen lain. */
   .btn-refresh {
+    background: none; border: none; padding: 0; margin: 0; cursor: pointer;
+    width: 36px; height: 36px; font-size: 26px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+  }
+  /* v.87: tombol Login/Logout Admin (mode browser) - ukuran & gaya disamain persis .btn-refresh
+     sebelahnya (request Denny), cuma ikon doang tanpa tulisan. */
+  .btn-admin-auth {
     background: none; border: none; padding: 0; margin: 0; cursor: pointer;
     width: 36px; height: 36px; font-size: 26px; line-height: 1;
     display: flex; align-items: center; justify-content: center;
@@ -467,6 +473,10 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
     </div>
     <div class="header-right">
       <button class="btn-sinkron" id="btnSinkronAkuntansi">📤 Sync</button>
+      <!-- v.87: tombol Login/Logout Admin (mode Admin lewat browser biasa, di luar Telegram) -
+           disembunyikan default, JS (lihat deklarasi `tg` di atas) yang nampilin & isi ikon/title/
+           listener-nya kalau memang lagi di luar Mini App Telegram. -->
+      <button class="btn-admin-auth" id="btnAdminAuth" style="display:none"></button>
       <!-- v.57: tombol Pilih (write-off massal, admin-only) dipindah kesini dari tab Stok Kain
            (request Denny: "sebelah tombol sync") - visibilitasnya sekarang diatur JS
            (perbaruiVisibilitasBtnPilihMassal_), gabungan isAdmin DAN tab Stok Kain lagi aktif,
@@ -716,21 +726,25 @@ let tg = window.Telegram ? window.Telegram.WebApp : null;
 // <head>) selalu bikin window.Telegram.WebApp ADA walau halamannya dibuka di luar Telegram -
 // yang kosong itu initData-nya, bukan objeknya. Makanya deteksi "lagi di luar Telegram" pakai
 // tg.initData (bukan tg doang) - sebelumnya salah cek, makanya tombol Login Admin gak muncul.
+// v.87: tombolnya sekarang elemen statis #btnAdminAuth di header (sebelah Sync, samain ukuran ke
+// .btn-refresh) - ikon doang (🔒 login / 🔓 logout), bukan lagi elemen mengambang bertuliskan.
 if (tg && tg.initData) {
   tg.ready(); tg.expand();
 } else {
   const tokenTersimpan = localStorage.getItem('adminPinToken');
-  const tombolAuth = document.createElement('button');
-  tombolAuth.style.cssText = 'position:fixed;top:8px;right:8px;z-index:9999;background:var(--indigo);color:#fff;border:none;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;';
+  const tombolAuth = document.getElementById('btnAdminAuth');
+  tombolAuth.style.display = 'flex';
   if (tokenTersimpan) {
     tg = { initData: tokenTersimpan };
-    tombolAuth.textContent = '🔓 Logout Admin';
+    tombolAuth.textContent = '🔓';
+    tombolAuth.title = 'Logout Admin';
     tombolAuth.addEventListener('click', function () {
       localStorage.removeItem('adminPinToken');
       location.reload();
     });
   } else {
-    tombolAuth.textContent = '🔒 Login Admin';
+    tombolAuth.textContent = '🔒';
+    tombolAuth.title = 'Login Admin';
     tombolAuth.addEventListener('click', function () {
       const pin = prompt('Masukkan PIN Admin:');
       if (!pin) return;
@@ -746,7 +760,6 @@ if (tg && tg.initData) {
         .catch(function (e) { alert('Gagal login: ' + e.message); });
     });
   }
-  document.body.appendChild(tombolAuth);
 }
 
 // v.32: cek status admin sekali di awal (buat nentuin tombol Hapus Laporan ditampilin atau
