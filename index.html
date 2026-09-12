@@ -1,14 +1,11 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-HTML PRODUKSI (Supabase/testproduksi) - ver.46
+HTML PRODUKSI (Supabase/testproduksi) - ver.47
 ============================================================
-PERUBAHAN ver.46 (fix bug, request Denny - temuan kasus "HITAM 12 roll gak muncul, ketik BLACK
-baru muncul"): saran warna & Kode Roll (renderWarnaSuggestions & renderCustomWarnaSuggestions)
-SEBELUMNYA cuma cocokkan ketikan ke nama WARNA 1 (kunci stokRollData) - efek dari v.77 Worker yang
-sekarang ngelompokkan stok per WARNA 1, bukan kanonik lagi. Ejaan lama/sinonim yang masih diketik
-manual (mis. "HITAM" utk grup "BLACK") jadi gak ketemu walau stoknya beneran ada. Sekarang ketikan
-JUGA dicek ke semua sinonim yang mengarah ke tiap grup WARNA 1 (dari warnaKanonikMap).
+PERUBAHAN ver.47 (request Denny): dropdown-list (Varian/Kombinasi/Ringer) & suggestion-list
+(Warna/Kode Roll) dikasih shadow + border lebih kuat (sama treatment yang barusan dipasang di
+Dashboard), biar batas kotaknya keliatan jelas, gak nyatu ke background di belakangnya.
 Riwayat versi lengkap: git log.
 ============================================================
 -->
@@ -141,7 +138,7 @@ Riwayat versi lengkap: git log.
   }
   .combo-picker-btn .chev { font-size: 13px; opacity: .7; }
 
-  .dropdown-list { max-height: 260px; overflow-y: auto; overflow-x: hidden; margin: 8px 14px 10px; border-radius: 14px; border: 1px solid var(--border); }
+  .dropdown-list { max-height: 260px; overflow-y: auto; overflow-x: hidden; margin: 8px 14px 10px; border-radius: 14px; border: 1.5px solid rgba(var(--mode-accent-rgb),0.53); box-shadow: 0 6px 16px rgba(41,43,49,0.24); }
   .dropdown-item { padding: 10px 14px; font-weight: 600; font-size: 14.5px; cursor: pointer; border-bottom: 0.5px solid rgba(0,0,0,.06); }
   .dropdown-item:last-child { border-bottom: none; }
   .dropdown-item:nth-child(6n+1) { background: #F1F7FD; }
@@ -186,7 +183,7 @@ Riwayat versi lengkap: git log.
   .kombi-warna-section input.kg-mini::placeholder, .kombi-warna-section input.roll-mini-input::placeholder, .kombi-warna-section input.roll-mini-input-custom::placeholder { font-weight: 500; color: #9aa3b2; }
 
   .autocomplete-input { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 10px; font-size: 15px; }
-  .suggestion-list { max-height: 260px; overflow-y: auto; overflow-x: hidden; margin-top: 8px; border-radius: 14px; border: 1px solid var(--border); }
+  .suggestion-list { max-height: 260px; overflow-y: auto; overflow-x: hidden; margin-top: 8px; border-radius: 14px; border: 1.5px solid rgba(var(--mode-accent-rgb),0.53); box-shadow: 0 6px 16px rgba(41,43,49,0.24); }
   .suggestion-item { padding: 10px 14px; font-size: 14.5px; font-weight: 600; cursor: pointer; border-bottom: 0.5px solid rgba(0,0,0,.06); }
   .suggestion-item:last-child { border-bottom: none; }
   .suggestion-item:nth-child(6n+1) { background: #F1F7FD; }

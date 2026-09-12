@@ -1,12 +1,10 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.89
+DASHBOARD ver.90
 ============================================================
-PERUBAHAN ver.89 (request Denny): dropdown Jenis di modal Edit Data Produksi - tiap opsi sekarang
-nampilin keterangan kategori (Anak/Dewasa) di kanan, biar gak bingung soalnya daftarnya nyampur
-2 kategori. Kotak dropdown-nya juga dikasih shadow + border lebih kuat biar gak nyatu keliatan
-sama background modal.
+PERUBAHAN ver.90 (request Denny): border/shadow dropdown (varian-filter-list) digelapin lagi
+0.5x dari ver.89 - biar batasnya makin jelas kelihatan.
 Riwayat lengkap: git log.
 ============================================================
 
@@ -132,7 +130,7 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .varian-filter-trigger { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border: 1px solid var(--border); border-radius: 12px; background: #fff; font-size: 13px; font-weight: 700; color: var(--navy-dark); margin-bottom: 8px; cursor: pointer; }
   .varian-filter-trigger.mf-terkunci { background: var(--surface-2); color: var(--gray-text); cursor: default; }
   .varian-filter-trigger .chevron { color: var(--gray-label); font-size: 11px; margin-left: 8px; }
-  .varian-filter-list { max-height: 260px; overflow-y: auto; overflow-x: hidden; margin-bottom: 8px; border-radius: 14px; border: 1.5px solid rgba(93,82,148,0.35); box-shadow: 0 6px 16px rgba(41,43,49,0.16); }
+  .varian-filter-list { max-height: 260px; overflow-y: auto; overflow-x: hidden; margin-bottom: 8px; border-radius: 14px; border: 1.5px solid rgba(93,82,148,0.53); box-shadow: 0 6px 16px rgba(41,43,49,0.24); }
   .varian-filter-item { padding: 10px 14px; font-weight: 600; font-size: 13.5px; cursor: pointer; color: var(--navy-dark); border-bottom: 0.5px solid rgba(0,0,0,.06); }
   .varian-filter-item:last-child { border-bottom: none; }
   /* v.65 (request Denny, koreksi ver.61+64): grid 2 kolom x 2 baris SUNGGUHAN - kolom kiri
