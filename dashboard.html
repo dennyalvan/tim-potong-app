@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.87
+DASHBOARD ver.88
 ============================================================
-PERUBAHAN ver.87 (request Denny): tombol Login/Logout Admin dipindah dari elemen mengambang
-(numpuk sama tombol Sync) jadi bagian resmi header di sebelah Sync - ikon gembok doang (🔒/🔓)
-tanpa tulisan, ukuran disamain ke tombol refresh sebelahnya.
+PERUBAHAN ver.88 (request Denny): tombol Admin sekarang 2 tampilan sesuai status - belum login
+= gembok terkunci di roundbox ungu (kayak tombol Sync), udah login = gembok terbuka polos tanpa
+roundbox (kayak tombol refresh).
 Riwayat lengkap: git log.
 ============================================================
 
@@ -71,12 +71,18 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
     width: 36px; height: 36px; font-size: 26px; line-height: 1;
     display: flex; align-items: center; justify-content: center;
   }
-  /* v.87: tombol Login/Logout Admin (mode browser) - ukuran & gaya disamain persis .btn-refresh
-     sebelahnya (request Denny), cuma ikon doang tanpa tulisan. */
+  /* v.87: tombol Login/Logout Admin (mode browser) - ukuran disamain .btn-refresh sebelahnya
+     (request Denny), cuma ikon doang tanpa tulisan.
+     v.88: 2 tampilan beda sesuai status (request Denny) - .terkunci (belum login) = roundbox
+     ungu kayak tombol Sync; udah login (gembok terbuka) = polos tanpa roundbox kayak refresh. */
   .btn-admin-auth {
     background: none; border: none; padding: 0; margin: 0; cursor: pointer;
-    width: 36px; height: 36px; font-size: 26px; line-height: 1;
+    width: 36px; height: 36px; font-size: 20px; line-height: 1;
     display: flex; align-items: center; justify-content: center;
+  }
+  .btn-admin-auth.terkunci {
+    background: var(--indigo); border: 1.5px solid var(--indigo); border-radius: 10px; color: #fff;
+    box-shadow: 0 1px 4px rgba(41,43,49,0.10);
   }
   .btn-sinkron { background: var(--indigo); border: 1.5px solid var(--indigo); border-radius: 10px; padding: 8px 16px; font-weight: 700; font-size: 13px; cursor: pointer; color: #fff; box-shadow: 0 1px 4px rgba(41,43,49,0.10); }
   .btn-sinkron:disabled { opacity: 0.6; cursor: default; }
@@ -738,6 +744,7 @@ if (tg && tg.initData) {
     tg = { initData: tokenTersimpan };
     tombolAuth.textContent = '🔓';
     tombolAuth.title = 'Logout Admin';
+    tombolAuth.classList.remove('terkunci');
     tombolAuth.addEventListener('click', function () {
       localStorage.removeItem('adminPinToken');
       location.reload();
@@ -745,6 +752,7 @@ if (tg && tg.initData) {
   } else {
     tombolAuth.textContent = '🔒';
     tombolAuth.title = 'Login Admin';
+    tombolAuth.classList.add('terkunci');
     tombolAuth.addEventListener('click', function () {
       const pin = prompt('Masukkan PIN Admin:');
       if (!pin) return;
