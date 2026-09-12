@@ -1,12 +1,11 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.84
+DASHBOARD ver.85
 ============================================================
-PERUBAHAN ver.84 (request Denny): dropdown Jenis di modal Edit Data Produksi direstyle jadi
-custom trigger+list (reuse pola varian-filter-trigger/-list/-item yang dipakai filter Varian/
-Bulan di Rekap QC) - bukan native <select> lagi. Kg Pemakaian item NON-kombinasi sekarang juga
-otomatis dihitung ulang & terkunci kalau sumbernya Estimasi (sebelumnya cuma kombinasi).
+PERUBAHAN ver.85 (request Denny): mode Admin sekarang bisa diakses lewat browser biasa (di luar
+Telegram) - tombol "Login Admin" muncul otomatis kalau bukan dari Mini App, login pakai PIN
+(endpoint /admin/login di Worker), sesinya tersimpan 30 hari di browser (localStorage).
 Riwayat lengkap: git log.
 ============================================================
 
@@ -710,8 +709,44 @@ function warnaKeHex_(namaWarna) {
   return '#9aa3b2'; // gak ketemu sama sekali - default abu-abu netral
 }
 
-const tg = window.Telegram ? window.Telegram.WebApp : null;
+let tg = window.Telegram ? window.Telegram.WebApp : null;
 if (tg) { tg.ready(); tg.expand(); }
+
+// v.85 (request Denny): mode Admin lewat browser biasa. Telegram initData cuma ada di dalam
+// Mini App, jadi di luar itu login pakai PIN (/admin/login, dicek ke secret ADMIN_PIN) - token
+// hasilnya disimpan di localStorage & dipasang ke variabel `tg` yang SAMA (bukan variabel baru),
+// jadi semua fetch admin yang sudah ada (tg.initData) otomatis kepakai tanpa diubah satupun -
+// Worker yang bedain format token PIN vs initData Telegram asli (lihat validasiInitData_).
+if (!tg) {
+  const tokenTersimpan = localStorage.getItem('adminPinToken');
+  const tombolAuth = document.createElement('button');
+  tombolAuth.style.cssText = 'position:fixed;top:8px;right:8px;z-index:9999;background:var(--indigo);color:#fff;border:none;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;';
+  if (tokenTersimpan) {
+    tg = { initData: tokenTersimpan };
+    tombolAuth.textContent = '🔓 Logout Admin';
+    tombolAuth.addEventListener('click', function () {
+      localStorage.removeItem('adminPinToken');
+      location.reload();
+    });
+  } else {
+    tombolAuth.textContent = '🔒 Login Admin';
+    tombolAuth.addEventListener('click', function () {
+      const pin = prompt('Masukkan PIN Admin:');
+      if (!pin) return;
+      fetch(WORKER_URL + '/admin/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: pin })
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (!data.ok) { alert('Gagal login: ' + data.error); return; }
+          localStorage.setItem('adminPinToken', data.token);
+          location.reload();
+        })
+        .catch(function (e) { alert('Gagal login: ' + e.message); });
+    });
+  }
+  document.body.appendChild(tombolAuth);
+}
 
 // v.32: cek status admin sekali di awal (buat nentuin tombol Hapus Laporan ditampilin atau
 // enggak) - keamanan sebenarnya tetap ditegakkan di Worker (/data/hapus-laporan ngecek ulang

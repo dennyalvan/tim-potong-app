@@ -1,11 +1,10 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.82
+// CODE WORKER PRODUKSI ver.83
 // ============================================================
-// PERUBAHAN ver.82 (request Denny): kg-estimasi auto-recompute (v.81, sebelumnya cuma buat item
-// kombinasi) sekarang JUGA berlaku buat item NON-kombinasi - kalau sumbernya "Estimasi", ganti
-// Jenis otomatis hitung ulang Kg Pemakaian pakai standar_pemakaian varian baru (potong-ulang
-// stok tetap lewat mekanisme kurangiStokKain_ yang sudah ada). /data/laporan-qc nambah field
-// sumberKg buat Dashboard nentuin kapan Kg dikunci.
+// PERUBAHAN ver.83 (request Denny): endpoint baru /admin/login - mode Admin sekarang bisa
+// diakses lewat browser biasa (di luar Telegram), login pakai PIN (dicek ke secret ADMIN_PIN).
+// Token hasil login dipakai gantiin initData Telegram di endpoint admin yang SUDAH ADA -
+// validasiInitData_ otomatis bedain formatnya, endpoint lain gak ada yang perlu diubah.
 //
 // Riwayat versi lengkap: git log.
 //
@@ -96,6 +95,16 @@ export default {
       let body;
       try { body = await request.json(); } catch (e) { return jsonResponse({ ok: false, error: 'Body harus JSON.' }, 400); }
       return await handleCekAdmin_(body, env);
+    }
+
+    // v.83 (request Denny): login PIN buat mode Admin lewat browser biasa (di luar Telegram, jadi
+    // gak ada initData buat divalidasi). PIN dicek ke secret ADMIN_PIN, kalau cocok balikin token
+    // ber-masa-berlaku yang dipakai gantiin initData di semua endpoint admin yang SUDAH ADA (lihat
+    // validasiPinToken_/validasiInitData_ - endpoint lain gak ada yang perlu diubah).
+    if (url.pathname === '/admin/login' && request.method === 'POST') {
+      let body;
+      try { body = await request.json(); } catch (e) { return jsonResponse({ ok: false, error: 'Body harus JSON.' }, 400); }
+      return await handleAdminLogin_(body, env);
     }
 
     // v.32 - hapus 1 laporan tim_potong beserta semua data anaknya (log_qc, log_pemakaian_kain,
@@ -321,6 +330,11 @@ function jsonResponse(obj, status) {
 // https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
 // ============================================================
 async function validasiInitData_(initData, env) {
+  // v.83: token PIN (mode Admin browser) formatnya "<expiryMs>.<hmacHex>" - beda dari initData
+  // Telegram asli yang selalu berisi "hash=" & "&". Dicek duluan sebelum parsing ala Telegram.
+  if (initData && /^\d+\.[0-9a-f]+$/.test(initData)) {
+    return await validasiPinToken_(initData, env);
+  }
   try {
     const botToken = env.TELEGRAM_BOT_TOKEN;
     if (!botToken || !initData) return { ok: false, error: 'initData atau TELEGRAM_BOT_TOKEN kosong.' };
@@ -372,8 +386,42 @@ async function validasiInitData_(initData, env) {
 // lebih dari 1 orang, mis. "111111,222222"). Dipakai buat fitur Hapus Laporan - user biasa
 // TETAP bisa lihat & submit seperti biasa, cuma aksi hapus yang dibatasi ke daftar ini.
 function cekAdmin_(userId, env) {
+  if (userId === 'BROWSER_ADMIN') return true; // v.83: lolos PIN = admin, gak perlu dicek ke ADMIN_USER_ID
   const daftar = String(env.ADMIN_USER_ID || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
   return daftar.length > 0 && daftar.indexOf(String(userId)) !== -1;
+}
+
+// v.83: token = "<expiryMs>.<hmacHex>", ditandatangani pakai ADMIN_PIN sendiri sebagai kunci -
+// stateless (gak perlu tabel sesi), tinggal dicek tanda tangan & masa berlakunya tiap request.
+const MASA_BERLAKU_PIN_TOKEN_MS_ = 30 * 24 * 60 * 60 * 1000; // 30 hari
+
+async function buatPinToken_(env) {
+  const exp = String(Date.now() + MASA_BERLAKU_PIN_TOKEN_MS_);
+  const encoder = new TextEncoder();
+  const hashBytes = await hmacSha256_(encoder.encode(env.ADMIN_PIN), encoder.encode(exp));
+  const hashHex = Array.from(hashBytes).map(function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+  return exp + '.' + hashHex;
+}
+
+async function validasiPinToken_(token, env) {
+  if (!env.ADMIN_PIN) return { ok: false, error: 'ADMIN_PIN belum di-set di Worker.' };
+  const titik = token.indexOf('.');
+  const exp = parseInt(token.substring(0, titik), 10);
+  const hashHex = token.substring(titik + 1);
+  if (!exp || Date.now() > exp) return { ok: false, error: 'Sesi login browser sudah kedaluwarsa, login ulang.' };
+  const encoder = new TextEncoder();
+  const hashBytes = await hmacSha256_(encoder.encode(env.ADMIN_PIN), encoder.encode(String(exp)));
+  const hashHexHitung = Array.from(hashBytes).map(function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+  if (hashHexHitung !== hashHex) return { ok: false, error: 'Sesi login browser tidak valid.' };
+  return { ok: true, userId: 'BROWSER_ADMIN' };
+}
+
+async function handleAdminLogin_(body, env) {
+  if (!env.ADMIN_PIN) return jsonResponse({ ok: false, error: 'ADMIN_PIN belum di-set di Worker - kasih tau Denny buat set secret-nya dulu.' }, 500);
+  if (!body.pin || String(body.pin) !== String(env.ADMIN_PIN)) {
+    return jsonResponse({ ok: false, error: 'PIN salah.' }, 401);
+  }
+  return jsonResponse({ ok: true, token: await buatPinToken_(env) });
 }
 
 async function handleCekAdmin_(body, env) {
