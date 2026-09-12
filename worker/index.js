@@ -755,7 +755,7 @@ async function handleEditProduksi_(body, env) {
 
     const namaBaru = body.jenisWarnaBaju !== undefined ? String(body.jenisWarnaBaju).trim() : tp.jenis_warna_baju;
     const kodeRollBaru = body.kodeRoll !== undefined ? (body.kodeRoll ? String(body.kodeRoll).trim() : null) : tp.kode_roll;
-    const kgBaru = body.pemakaianKainKg !== undefined ? (parseFloat(body.pemakaianKainKg) || 0) : (parseFloat(tp.pemakaian_kain_kg) || 0);
+    let kgBaru = body.pemakaianKainKg !== undefined ? (parseFloat(body.pemakaianKainKg) || 0) : (parseFloat(tp.pemakaian_kain_kg) || 0);
     if (!namaBaru) return jsonResponse({ ok: false, error: 'Nama item wajib diisi.' }, 400);
 
     const namaBerubah = namaBaru !== tp.jenis_warna_baju;
@@ -814,8 +814,22 @@ async function handleEditProduksi_(body, env) {
         }
       } else {
         const daftarNonKombinasi = daftarPrefix.filter(function (p) { return p.varian.toUpperCase().indexOf('KOMBINASI') === -1; });
-        if (!cariPrefixLengkap_(namaBaru, daftarNonKombinasi)) {
+        const baru = cariPrefixLengkap_(namaBaru, daftarNonKombinasi);
+        if (!baru) {
           return jsonResponse({ ok: false, error: 'Nama Item harus salah satu varian resmi yang sudah terdaftar.' }, 400);
+        }
+        if (tp.sumber_kg === 'Estimasi') {
+          const rowsStandar = await ambilDariSupabase_(env, '/rest/v1/standar_pemakaian?select=*');
+          const standarMap = {};
+          rowsStandar.forEach(function (s) { standarMap[s.kategori + '|' + s.varian + '|' + (s.posisi || '')] = s; });
+          const est = hitungEstimasiKg_(kolomKeUkuran_(tp), standarMap[baru.kategori + '|' + baru.varian + '|']);
+          if (!est) return jsonResponse({ ok: false, error: 'Standar pemakaian buat varian "' + baru.varian + '" belum lengkap utk ukuran di laporan ini - gak bisa dihitung ulang otomatis.' }, 400);
+          const kgBaruEstimasi = Math.round(est.kg * 100) / 100;
+          if (Math.abs(kgBaruEstimasi - kgBaru) > 0.001) {
+            penyesuaianKg.push({ bagian: 'Kg Pemakaian', kgLama: kgBaru, kgBaru: kgBaruEstimasi });
+            kgBaru = kgBaruEstimasi;
+            payload.pemakaian_kain_kg = kgBaruEstimasi;
+          }
         }
       }
     }
@@ -2715,6 +2729,7 @@ async function handleDaftarLaporanQC_(env) {
         varian: cocok ? (cocok.varian || '') : '',
         kodeRoll: tp.kode_roll,
         pemakaianKainKg: tp.pemakaian_kain_kg,
+        sumberKg: tp.sumber_kg, // v.82: dipakai Dashboard buat kunci field Kg Pemakaian pas sumbernya "Estimasi"
         jumlah: tp.jumlah,
         isKombinasi: isKombinasi, // v.81: dipakai Dashboard buat batasi dropdown Jenis di modal Edit Data Produksi
         perUkuran: perUkuran,

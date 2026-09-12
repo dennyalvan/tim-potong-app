@@ -118,6 +118,7 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
      (var(--indigo)/var(--border)), bukan biru dari index.html - biar nyambung ke tema di sini.
   */
   .varian-filter-trigger { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border: 1px solid var(--border); border-radius: 12px; background: #fff; font-size: 13px; font-weight: 700; color: var(--navy-dark); margin-bottom: 8px; cursor: pointer; }
+  .varian-filter-trigger.mf-terkunci { background: var(--surface-2); color: var(--gray-text); cursor: default; }
   .varian-filter-trigger .chevron { color: var(--gray-label); font-size: 11px; margin-left: 8px; }
   .varian-filter-list { max-height: 260px; overflow-y: auto; overflow-x: hidden; margin-bottom: 8px; border-radius: 14px; border: 1px solid var(--border); }
   .varian-filter-item { padding: 10px 14px; font-weight: 600; font-size: 13.5px; cursor: pointer; color: var(--navy-dark); border-bottom: 0.5px solid rgba(0,0,0,.06); }
@@ -405,8 +406,8 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .mf-row { display: flex; gap: 8px; margin-bottom: 8px; }
   .mf-field { flex: 1; display: flex; flex-direction: column; gap: 3px; }
   .mf-field label { font-size: 11px; font-weight: 700; color: var(--gray-label); }
-  .mf-field input, .mf-field select { border: 1px solid var(--border); border-radius: 10px; padding: 9px 10px; font-size: 13.5px; font-family: inherit; background: #fff; }
-  .mf-field input:disabled, .mf-field select:disabled { background: var(--surface-2); color: var(--gray-text); }
+  .mf-field input { border: 1px solid var(--border); border-radius: 10px; padding: 9px 10px; font-size: 13.5px; font-family: inherit; background: #fff; }
+  .mf-field input:disabled { background: var(--surface-2); color: var(--gray-text); }
   /* v.43: checkbox "Terpakai habis" - shortcut buat Write-off (request Denny), gaya sama kayak
      .chk-sub yang udah dipakai di index.html biar konsisten. */
   .chk-sub { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--gray-text); font-weight: 600; margin: -2px 0 8px; }
@@ -1321,8 +1322,17 @@ function bukaModalEditProduksi_(r, daftarPrefix) {
     return isKombinasi ? labelKombinasi : !labelKombinasi;
   });
   const kunciSemua = adaProgresQC; // v.83: sebelumnya cuma ngunci Jumlah, sekarang semua field
+  // v.84 (request Denny): Kg Pemakaian item NON-kombinasi ikut dikunci & dihitung ulang otomatis
+  // pas Jenis diganti, KALAU sumbernya "Estimasi" - sama semangatnya kayak yang udah ada di
+  // kombinasi (v.81/v.83). Kalau manual/"Pakai Habis", Kg tetap bisa diketik bebas kayak biasa.
+  const kgTerkunciEstimasi = !isKombinasi && r.sumberKg === 'Estimasi';
+  let varianTerpilih = cocok.prefix || '';
+
+  // v.84: dropdown Jenis direstyle jadi custom trigger+list (request Denny: "seperti di frontend
+  // miniapp, jangan default system") - reuse persis pola .varian-filter-trigger/-list/-item yang
+  // sudah dipakai buat filter Varian/Bulan di tab Rekap QC (v.60/v.63), bukan native <select> lagi.
   const opsiHtml = daftarPilihan.map(function (p) {
-    return '<option value="' + escapeAttr(p.prefix) + '"' + (p.prefix === cocok.prefix ? ' selected' : '') + '>' + escapeHtml(p.varian) + '</option>';
+    return '<div class="varian-filter-item' + (p.prefix === varianTerpilih ? ' aktif' : '') + '" data-prefix="' + escapeAttr(p.prefix) + '" data-label="' + escapeAttr(p.varian) + '">' + escapeHtml(p.varian) + '</div>';
   }).join('');
 
   const ov = document.createElement('div');
@@ -1331,28 +1341,48 @@ function bukaModalEditProduksi_(r, daftarPrefix) {
   ov.innerHTML = '<div class="modal-box">' +
     '<button class="modal-close" data-tutupmodal>✕</button>' +
     '<h2>Edit Data Produksi</h2>' +
-    '<div class="mf-row"><div class="mf-field" style="flex:2"><label>Jenis</label><select id="epVarian"' + (kunciSemua ? ' disabled' : '') + '>' + opsiHtml + '</select></div>' +
+    '<div class="mf-row"><div class="mf-field" style="flex:2"><label>Jenis</label>' +
+    '<div class="varian-filter-trigger' + (kunciSemua ? ' mf-terkunci' : '') + '" id="epVarianTrigger" style="margin-bottom:0"><span id="epVarianValue">' + escapeHtml(cocok.varian || 'Pilih Jenis') + '</span><span class="chevron">▾</span></div></div>' +
     '<div class="mf-field"><label>Warna</label><input type="text" id="epWarna" value="' + escapeAttr(cocok.warna || '') + '"' + (kunciSemua || isKombinasi ? ' disabled' : '') + '></div></div>' +
+    '<div class="varian-filter-list" id="epVarianList" style="display:none">' + opsiHtml + '</div>' +
     '<div class="mf-row"><div class="mf-field"><label>Kode Roll</label><input type="text" id="epKodeRoll" value="' + escapeAttr(r.kodeRoll || '') + '"' + (kunciSemua || isKombinasi ? ' disabled' : '') + '></div>' +
-    '<div class="mf-field"><label>Kg Pemakaian</label><input type="number" step="0.01" id="epKg" value="' + (r.pemakaianKainKg || '') + '"' + (kunciSemua || isKombinasi ? ' disabled' : '') + '></div></div>' +
+    '<div class="mf-field"><label>Kg Pemakaian</label><input type="number" step="0.01" id="epKg" value="' + (r.pemakaianKainKg || '') + '"' + (kunciSemua || isKombinasi || kgTerkunciEstimasi ? ' disabled' : '') + '></div></div>' +
     '<div class="mf-field"><label>Jumlah (pcs)</label><input type="number" id="epJumlah" value="' + r.jumlah + '"' + (kunciSemua ? ' disabled' : '') + '></div>' +
     (kunciSemua ? '<div class="mf-peringatan">⚠️ Laporan ini udah punya progres QC (' + r.totalSelesai + ' selesai, ' + r.totalReject + ' reject) - semua field di sini terkunci. Batalkan submit QC terkait dulu kalau memang perlu diubah.</div>' : '') +
     (!kunciSemua && isKombinasi ? '<div class="mf-peringatan" style="background:var(--surface-2);color:var(--gray-text)">ℹ️ Item kombinasi: cuma Jenis (Pendek/Panjang) yang bisa diganti - Warna & Kode Roll tetap. Kalau kg sebelumnya dari estimasi, dihitung ulang otomatis sesuai Jenis baru & stok disesuaikan.</div>' : '') +
-    (!kunciSemua && !isKombinasi ? '<div class="mf-peringatan" style="background:var(--surface-2);color:var(--gray-text)">ℹ️ Ganti Kode Roll/Kg Pemakaian otomatis potong-ulang stok kain (potongan lama dikembalikan, dipotong lagi pakai nilai baru).</div>' : '') +
+    (!kunciSemua && !isKombinasi && kgTerkunciEstimasi ? '<div class="mf-peringatan" style="background:var(--surface-2);color:var(--gray-text)">ℹ️ Kg Pemakaian kekunci karena angkanya dari estimasi - begitu Jenis diganti, kg dihitung ulang otomatis & stok disesuaikan. Ganti Kode Roll tetap potong-ulang stok seperti biasa.</div>' : '') +
+    (!kunciSemua && !isKombinasi && !kgTerkunciEstimasi ? '<div class="mf-peringatan" style="background:var(--surface-2);color:var(--gray-text)">ℹ️ Ganti Kode Roll/Kg Pemakaian otomatis potong-ulang stok kain (potongan lama dikembalikan, dipotong lagi pakai nilai baru).</div>' : '') +
     '<button class="mf-save-btn" data-simpaneditproduksi' + (kunciSemua ? ' disabled' : '') + '>💾 Simpan Perubahan</button>' +
     '</div>';
   document.body.appendChild(ov);
   ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
   ov.querySelector('[data-tutupmodal]').addEventListener('click', function () { ov.remove(); });
+
+  const trigger = document.getElementById('epVarianTrigger');
+  const list = document.getElementById('epVarianList');
+  if (!kunciSemua) {
+    trigger.addEventListener('click', function () {
+      list.style.display = (list.style.display === 'none') ? 'block' : 'none';
+    });
+    list.querySelectorAll('[data-prefix]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        varianTerpilih = el.dataset.prefix;
+        document.getElementById('epVarianValue').textContent = el.dataset.label;
+        list.querySelectorAll('.varian-filter-item').forEach(function (x) { x.classList.remove('aktif'); });
+        el.classList.add('aktif');
+        list.style.display = 'none';
+      });
+    });
+  }
+
   const btn = ov.querySelector('[data-simpaneditproduksi]');
   if (!btn) return;
   btn.addEventListener('click', function () {
-    const varianBaru = document.getElementById('epVarian').value;
     const warnaBaru = isKombinasi ? cocok.warna : document.getElementById('epWarna').value.trim();
     const payload = {
       initData: tg.initData,
       id: r.id,
-      jenisWarnaBaju: (varianBaru + ' ' + warnaBaru).trim(),
+      jenisWarnaBaju: (varianTerpilih + ' ' + warnaBaru).trim(),
       kodeRoll: document.getElementById('epKodeRoll').value,
       pemakaianKainKg: document.getElementById('epKg').value,
       jumlah: document.getElementById('epJumlah').value
