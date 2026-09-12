@@ -1,13 +1,12 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.83
+DASHBOARD ver.84
 ============================================================
-PERUBAHAN ver.83 (request Denny): modal Edit Data Produksi dirombak - Nama Item jadi dropdown
-Jenis (dari daftar resmi kategori_varian_produksi) + field Warna terpisah, bukan teks bebas
-lagi. Item kombinasi cuma boleh ganti Jenis (Pendek<->Panjang), Warna/Kode Roll tetap terkunci.
-Guard status-QC diperluas: Jenis/Warna/Kode Roll/Kg sekarang ikut terkunci (sebelumnya cuma
-Jumlah) begitu laporan udah ada progres QC.
+PERUBAHAN ver.84 (request Denny): dropdown Jenis di modal Edit Data Produksi direstyle jadi
+custom trigger+list (reuse pola varian-filter-trigger/-list/-item yang dipakai filter Varian/
+Bulan di Rekap QC) - bukan native <select> lagi. Kg Pemakaian item NON-kombinasi sekarang juga
+otomatis dihitung ulang & terkunci kalau sumbernya Estimasi (sebelumnya cuma kombinasi).
 Riwayat lengkap: git log.
 ============================================================
 

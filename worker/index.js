@@ -1,13 +1,11 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.81
+// CODE WORKER PRODUKSI ver.82
 // ============================================================
-// PERUBAHAN ver.81 (request Denny): /data/edit-produksi dirombak. (1) Guard status-QC
-// diperluas - Nama Item/Kode Roll/Kg sekarang ikut terkunci (sebelumnya cuma jumlah/ukuran)
-// begitu laporan udah ada progres QC. (2) Nama Item wajib salah satu varian resmi di
-// kategori_varian_produksi (gak nerima teks bebas lagi). (3) Item kombinasi sekarang boleh
-// ganti Jenis (Pendek<->Panjang, Warna tetap) - kg yang sumbernya "Estimasi" dihitung ulang
-// otomatis pakai standar_pemakaian varian baru & stok kain disesuaikan selisihnya (roll gak
-// berubah). /data/laporan-qc ikut nambah field isKombinasi buat Dashboard.
+// PERUBAHAN ver.82 (request Denny): kg-estimasi auto-recompute (v.81, sebelumnya cuma buat item
+// kombinasi) sekarang JUGA berlaku buat item NON-kombinasi - kalau sumbernya "Estimasi", ganti
+// Jenis otomatis hitung ulang Kg Pemakaian pakai standar_pemakaian varian baru (potong-ulang
+// stok tetap lewat mekanisme kurangiStokKain_ yang sudah ada). /data/laporan-qc nambah field
+// sumberKg buat Dashboard nentuin kapan Kg dikunci.
 //
 // Riwayat versi lengkap: git log.
 //
