@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.88
+DASHBOARD ver.89
 ============================================================
-PERUBAHAN ver.88 (request Denny): tombol Admin sekarang 2 tampilan sesuai status - belum login
-= gembok terkunci di roundbox ungu (kayak tombol Sync), udah login = gembok terbuka polos tanpa
-roundbox (kayak tombol refresh).
+PERUBAHAN ver.89 (request Denny): dropdown Jenis di modal Edit Data Produksi - tiap opsi sekarang
+nampilin keterangan kategori (Anak/Dewasa) di kanan, biar gak bingung soalnya daftarnya nyampur
+2 kategori. Kotak dropdown-nya juga dikasih shadow + border lebih kuat biar gak nyatu keliatan
+sama background modal.
 Riwayat lengkap: git log.
 ============================================================
 
@@ -131,7 +132,7 @@ terus update juga string di bawah ini + deploy ulang halaman ini.
   .varian-filter-trigger { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border: 1px solid var(--border); border-radius: 12px; background: #fff; font-size: 13px; font-weight: 700; color: var(--navy-dark); margin-bottom: 8px; cursor: pointer; }
   .varian-filter-trigger.mf-terkunci { background: var(--surface-2); color: var(--gray-text); cursor: default; }
   .varian-filter-trigger .chevron { color: var(--gray-label); font-size: 11px; margin-left: 8px; }
-  .varian-filter-list { max-height: 260px; overflow-y: auto; overflow-x: hidden; margin-bottom: 8px; border-radius: 14px; border: 1px solid var(--border); }
+  .varian-filter-list { max-height: 260px; overflow-y: auto; overflow-x: hidden; margin-bottom: 8px; border-radius: 14px; border: 1.5px solid rgba(93,82,148,0.35); box-shadow: 0 6px 16px rgba(41,43,49,0.16); }
   .varian-filter-item { padding: 10px 14px; font-weight: 600; font-size: 13.5px; cursor: pointer; color: var(--navy-dark); border-bottom: 0.5px solid rgba(0,0,0,.06); }
   .varian-filter-item:last-child { border-bottom: none; }
   /* v.65 (request Denny, koreksi ver.61+64): grid 2 kolom x 2 baris SUNGGUHAN - kolom kiri
@@ -1388,7 +1389,7 @@ function bukaModalEditProduksi_(r, daftarPrefix) {
   // miniapp, jangan default system") - reuse persis pola .varian-filter-trigger/-list/-item yang
   // sudah dipakai buat filter Varian/Bulan di tab Rekap QC (v.60/v.63), bukan native <select> lagi.
   const opsiHtml = daftarPilihan.map(function (p) {
-    return '<div class="varian-filter-item' + (p.prefix === varianTerpilih ? ' aktif' : '') + '" data-prefix="' + escapeAttr(p.prefix) + '" data-label="' + escapeAttr(p.varian) + '">' + escapeHtml(p.varian) + '</div>';
+    return '<div class="varian-filter-item' + (p.prefix === varianTerpilih ? ' aktif' : '') + '" data-prefix="' + escapeAttr(p.prefix) + '" data-label="' + escapeAttr(p.varian) + '">' + escapeHtml(p.varian) + ' <span style="float:right;font-size:11px;font-weight:600;opacity:0.7;">' + escapeHtml(p.kategori || '') + '</span></div>';
   }).join('');
 
   const ov = document.createElement('div');
