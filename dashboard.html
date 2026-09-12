@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.85
+DASHBOARD ver.86
 ============================================================
-PERUBAHAN ver.85 (request Denny): mode Admin sekarang bisa diakses lewat browser biasa (di luar
-Telegram) - tombol "Login Admin" muncul otomatis kalau bukan dari Mini App, login pakai PIN
-(endpoint /admin/login di Worker), sesinya tersimpan 30 hari di browser (localStorage).
+PERUBAHAN ver.86 (bugfix, request Denny): tombol Login Admin gak pernah muncul di browser biasa
+- penyebabnya SDK Telegram (telegram-web-app.js) selalu bikin window.Telegram.WebApp ADA walau
+dibuka di luar Telegram (initData-nya yang kosong, bukan objeknya null), jadi deteksi "di luar
+Telegram" yang cuma cek `!tg` gak pernah kena. Sekarang ceknya pakai tg.initData.
 Riwayat lengkap: git log.
 ============================================================
 
@@ -710,14 +711,14 @@ function warnaKeHex_(namaWarna) {
 }
 
 let tg = window.Telegram ? window.Telegram.WebApp : null;
-if (tg) { tg.ready(); tg.expand(); }
 
-// v.85 (request Denny): mode Admin lewat browser biasa. Telegram initData cuma ada di dalam
-// Mini App, jadi di luar itu login pakai PIN (/admin/login, dicek ke secret ADMIN_PIN) - token
-// hasilnya disimpan di localStorage & dipasang ke variabel `tg` yang SAMA (bukan variabel baru),
-// jadi semua fetch admin yang sudah ada (tg.initData) otomatis kepakai tanpa diubah satupun -
-// Worker yang bedain format token PIN vs initData Telegram asli (lihat validasiInitData_).
-if (!tg) {
+// v.85 (request Denny): mode Admin lewat browser biasa. SDK Telegram (telegram-web-app.js di
+// <head>) selalu bikin window.Telegram.WebApp ADA walau halamannya dibuka di luar Telegram -
+// yang kosong itu initData-nya, bukan objeknya. Makanya deteksi "lagi di luar Telegram" pakai
+// tg.initData (bukan tg doang) - sebelumnya salah cek, makanya tombol Login Admin gak muncul.
+if (tg && tg.initData) {
+  tg.ready(); tg.expand();
+} else {
   const tokenTersimpan = localStorage.getItem('adminPinToken');
   const tombolAuth = document.createElement('button');
   tombolAuth.style.cssText = 'position:fixed;top:8px;right:8px;z-index:9999;background:var(--indigo);color:#fff;border:none;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;';
