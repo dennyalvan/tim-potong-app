@@ -1,10 +1,12 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.84
+// CODE WORKER PRODUKSI ver.85
 // ============================================================
-// PERUBAHAN ver.84 (request Denny): alur teks "Masuk ..." (stok kain) sekarang PREVIEW + tombol
-// konfirmasi dulu (pola sama kayak alur foto nota: KV + inline_keyboard "Simpan"/"Batal"), gak
-// langsung ditulis ke Supabase - biar salah parsing/salah ketik ketauan sebelum masuk stok,
-// bukan sesudahnya (root cause bug 1 rol ketuker gara-gara baris kg/kode yang typo).
+// PERUBAHAN ver.85 (request Denny): 2 lanjutan dari ver.84 buat alur teks "Masuk ..." (stok kain).
+// (1) Izin tap tombol Simpan/Batal diubah dari admin-only jadi PENGIRIM LAPORAN ASLINYA sendiri -
+// id pengirim disimpan bareng item di KV, dicek pas callback (bukan ALLOWED_USER_ID lagi).
+// (2) Perbaikan akar masalah parsing: baris lanjutan yang TANPA tanda "/" dan isinya angka semua
+// (bukan nama warna, mis. "25.40 0177" - kelupaan "/") sekarang bikin blok GAGAL parsing dengan
+// jelas, bukan diam-diam ketuker dianggap nama warna baru (root cause bug 3 rol ketulis jadi 2).
 //
 // Riwayat versi lengkap: git log.
 //
@@ -1522,7 +1524,15 @@ function parseBarisMasuk_(lines) {
           hasilD.push({ warna: warnaSaatIni, kg: kgSajaD, kodeRoll: null, supplier: supplierD });
           continue;
         }
-        if (t.indexOf('/') === -1) { warnaSaatIni = t.toUpperCase(); continue; }
+        // v.85 (request Denny, root cause bug "3 rol ketulis jadi 2"): baris ganti warna WAJIB
+        // punya minimal 1 huruf - baris yang isinya angka semua (mis. "25.40 0177", kelupaan
+        // tanda "/") gampang ketuker keanggep nama warna baru, padahal itu kg/kode salah ketik.
+        // GAGALKAN TOTAL blok ini (jangan lanjut jatuh ke Format B/C yang bisa nebak beda lagi &
+        // malah keliatan "berhasil" walau salah) - biar user dapet pesan error yang jelas.
+        if (t.indexOf('/') === -1) {
+          if (!/[a-z]/i.test(t)) return [];
+          warnaSaatIni = t.toUpperCase(); continue;
+        }
         semuaBarisCocokD = false; break;
       }
       if (semuaBarisCocokD && hasilD.length > 0) return hasilD;
@@ -1671,7 +1681,10 @@ async function tanganiPesanMasuk_(env, message) {
   // handleCallbackQueryKainTeks_.
   if (semuaItemMasuk.length > 0) {
     const token = crypto.randomUUID();
-    await env.TIM_POTONG_KV.put('kainMasukTeks_' + token, JSON.stringify(semuaItemMasuk), { expirationTtl: 1800 });
+    // v.85 (request Denny): id pengirim asli ikut disimpan di KV - dipakai
+    // handleCallbackQueryKainTeks_ buat mastiin cuma pengirim laporan ini sendiri yang bisa tap
+    // Simpan/Batal (sebelumnya admin-only, sama kayak nota foto).
+    await env.TIM_POTONG_KV.put('kainMasukTeks_' + token, JSON.stringify({ items: semuaItemMasuk, pengirimId: senderId }), { expirationTtl: 1800 });
     await kirimPesanTelegramLengkap_(env, chatId, bangunTeksPreviewKainTeks_(semuaItemMasuk), {
       reply_markup: {
         inline_keyboard: [[
@@ -4025,29 +4038,20 @@ async function handleCallbackQueryNota_(env, callbackQuery) {
 // HANDLER tombol konfirmasi/batal buat alur teks "Masuk ..." - v.84 (request Denny), pola sama
 // kayak handleCallbackQueryNota_ di atas tapi lebih simpel (item udah lengkap dari parsing teks,
 // gak ada harga/diskon/tglBeli override kayak nota foto).
+// v.85 (request Denny): izin tap Simpan/Batal PINDAH dari admin-only (ALLOWED_USER_ID) jadi milik
+// pengirim laporan aslinya sendiri - id pengirim udah disimpan bareng item di KV sejak
+// tanganiPesanMasuk_, jadi KV WAJIB dibaca DULU sebelum bisa cek izinnya (beda urutan dari versi
+// sebelumnya yang cek izin duluan baru baca KV belakangan).
 async function handleCallbackQueryKainTeks_(env, callbackQuery) {
   const data = String(callbackQuery.data || '');
   const chatId = callbackQuery.message.chat.id;
   const messageId = callbackQuery.message.message_id;
-
-  const allowedUserId = env.ALLOWED_USER_ID;
   const senderId = callbackQuery.from ? String(callbackQuery.from.id) : null;
-  if (allowedUserId && senderId !== String(allowedUserId)) {
-    await jawabCallbackQueryTelegram_(env, callbackQuery.id, 'Bukan user yang diizinkan.', true);
-    return jsonResponse({ ok: true, pesan: 'callback ditolak (bukan user diizinkan)' });
-  }
 
   const idxTitik = data.indexOf(':');
   const aksi = idxTitik === -1 ? data : data.substring(0, idxTitik);
   const token = idxTitik === -1 ? '' : data.substring(idxTitik + 1);
   const kvKey = 'kainMasukTeks_' + token;
-
-  if (aksi === 'batalKainTeks') {
-    await env.TIM_POTONG_KV.delete(kvKey);
-    await jawabCallbackQueryTelegram_(env, callbackQuery.id, 'Dibatalkan.');
-    await ubahTeksPesanTelegramPolos_(env, chatId, messageId, '❌ Dibatalkan - data stok tidak disimpan.');
-    return jsonResponse({ ok: true, pesan: 'kain masuk (teks) dibatalkan' });
-  }
 
   let rawKv = null;
   try {
@@ -4062,10 +4066,23 @@ async function handleCallbackQueryKainTeks_(env, callbackQuery) {
     return jsonResponse({ ok: true, pesan: 'kain masuk (teks) kadaluarsa' });
   }
 
+  const simpanan = JSON.parse(rawKv);
+  if (simpanan.pengirimId && senderId !== simpanan.pengirimId) {
+    await jawabCallbackQueryTelegram_(env, callbackQuery.id, 'Cuma pengirim laporan ini yang bisa konfirmasi.', true);
+    return jsonResponse({ ok: true, pesan: 'kain masuk (teks) callback ditolak (bukan pengirim asli)' });
+  }
+
+  if (aksi === 'batalKainTeks') {
+    await env.TIM_POTONG_KV.delete(kvKey);
+    await jawabCallbackQueryTelegram_(env, callbackQuery.id, 'Dibatalkan.');
+    await ubahTeksPesanTelegramPolos_(env, chatId, messageId, '❌ Dibatalkan - data stok tidak disimpan.');
+    return jsonResponse({ ok: true, pesan: 'kain masuk (teks) dibatalkan' });
+  }
+
   await jawabCallbackQueryTelegram_(env, callbackQuery.id, 'Menyimpan ke Stok Kain...');
 
   try {
-    const items = JSON.parse(rawKv);
+    const items = simpanan.items;
     const berhasilItems = [];
     const galat = [];
     for (const pm of items) {
