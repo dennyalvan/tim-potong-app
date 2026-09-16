@@ -1,10 +1,10 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.83
+// CODE WORKER PRODUKSI ver.84
 // ============================================================
-// PERUBAHAN ver.83 (request Denny): endpoint baru /admin/login - mode Admin sekarang bisa
-// diakses lewat browser biasa (di luar Telegram), login pakai PIN (dicek ke secret ADMIN_PIN).
-// Token hasil login dipakai gantiin initData Telegram di endpoint admin yang SUDAH ADA -
-// validasiInitData_ otomatis bedain formatnya, endpoint lain gak ada yang perlu diubah.
+// PERUBAHAN ver.84 (request Denny): alur teks "Masuk ..." (stok kain) sekarang PREVIEW + tombol
+// konfirmasi dulu (pola sama kayak alur foto nota: KV + inline_keyboard "Simpan"/"Batal"), gak
+// langsung ditulis ke Supabase - biar salah parsing/salah ketik ketauan sebelum masuk stok,
+// bukan sesudahnya (root cause bug 1 rol ketuker gara-gara baris kg/kode yang typo).
 //
 // Riwayat versi lengkap: git log.
 //
@@ -1610,6 +1610,17 @@ function bangunTeksSuksesMasukKain_(items) {
   return teks;
 }
 
+// v.84 (request Denny): preview + tombol konfirmasi SEBELUM masuk ke Supabase, pola sama kayak
+// bangunTeksSuksesMasukKain_ di atas tapi buat tahap PREVIEW (belum tersimpan) - dipakai bareng
+// inline_keyboard "Simpan"/"Batal" di tanganiPesanMasuk_.
+function bangunTeksPreviewKainTeks_(items) {
+  const supplierUtama = items.find(function (it) { return it.supplier; });
+  let teks = '📋 Konfirmasi Stok Kain Masuk';
+  if (supplierUtama) teks += ' - ' + supplierUtama.supplier;
+  teks += '\n\n' + bangunDaftarRollTeks_(items) + '\nTOTAL ' + items.length + ' ROL' + '\n\nSudah benar?';
+  return teks;
+}
+
 async function tanganiPesanMasuk_(env, message) {
   const chatId = message.chat.id;
   const teks = message.text;
@@ -1641,8 +1652,7 @@ async function tanganiPesanMasuk_(env, message) {
     return jsonResponse({ ok: true, pesan: 'tidak ada blok Masuk yang terdeteksi' });
   }
 
-  let jumlahBerhasil = 0;
-  const berhasilItems = [];
+  const semuaItemMasuk = [];
   const galat = [];
   for (const blok of kelompok.blokMasuk) {
     const daftarMasuk = parseBarisMasuk_(blok);
@@ -1650,29 +1660,32 @@ async function tanganiPesanMasuk_(env, message) {
       galat.push('Gagal parsing blok: "' + blok[0] + '"');
       continue;
     }
-    for (const pm of daftarMasuk) {
-      try {
-        await tambahStokKainMasukSupabase_(env, { warna: pm.warna, kg: pm.kg, kodeRoll: pm.kodeRoll, supplier: pm.supplier });
-        jumlahBerhasil++;
-        berhasilItems.push(pm);
-      } catch (e) {
-        galat.push(pm.warna + ' (' + pm.kg + 'kg): ' + e.message);
-      }
-    }
+    for (const pm of daftarMasuk) semuaItemMasuk.push(pm);
   }
 
-  console.log('Kain masuk diproses via Worker:', jumlahBerhasil, 'berhasil,', galat.length, 'gagal. Chat:', chatId);
+  console.log('Kain masuk diparsing via Worker (menunggu konfirmasi):', semuaItemMasuk.length, 'baris,', galat.length, 'blok gagal. Chat:', chatId);
 
-  // v.69 (request Denny): sebelumnya senyap total kalau sukses - sekarang balas ringkasan
-  // (supplier, daftar warna/kg/kode roll, total) biar tim langsung tahu datanya kebaca benar.
-  if (berhasilItems.length > 0) {
-    await kirimPesanTelegram_(env, chatId, bangunTeksSuksesMasukKain_(berhasilItems));
+  // v.84 (request Denny): gak langsung ditulis ke Supabase lagi - preview dulu + tombol
+  // konfirmasi (pola sama kayak alur foto nota), item hasil parsing disimpan sementara di KV
+  // (30 menit) dan baru ditulis ke Supabase kalau tombol "Simpan" ditap - lihat
+  // handleCallbackQueryKainTeks_.
+  if (semuaItemMasuk.length > 0) {
+    const token = crypto.randomUUID();
+    await env.TIM_POTONG_KV.put('kainMasukTeks_' + token, JSON.stringify(semuaItemMasuk), { expirationTtl: 1800 });
+    await kirimPesanTelegramLengkap_(env, chatId, bangunTeksPreviewKainTeks_(semuaItemMasuk), {
+      reply_markup: {
+        inline_keyboard: [[
+          { text: '✅ Simpan', callback_data: 'simpanKainTeks:' + token },
+          { text: '❌ Batal', callback_data: 'batalKainTeks:' + token }
+        ]]
+      }
+    });
   }
   if (galat.length > 0) {
-    await kirimPesanTelegram_(env, chatId, '⚠️ ' + jumlahBerhasil + ' baris berhasil disimpan, tapi ada ' + galat.length + ' yang gagal:\n' + galat.join('\n'));
+    await kirimPesanTelegram_(env, chatId, '⚠️ Ada ' + galat.length + ' blok yang gagal diparsing:\n' + galat.join('\n'));
   }
 
-  return jsonResponse({ ok: true, jumlahBerhasil, jumlahGagal: galat.length });
+  return jsonResponse({ ok: true, jumlahMenungguKonfirmasi: semuaItemMasuk.length, jumlahGagal: galat.length });
 }
 
 // ============================================================
@@ -3861,6 +3874,18 @@ async function ubahTeksPesanTelegram_(env, chatId, messageId, teksBaru) {
   } catch (e) { /* gak fatal */ }
 }
 
+// v.84 (request Denny): sama seperti ubahTeksPesanTelegram_ di atas, tapi TANPA parse_mode HTML -
+// dipakai khusus alur konfirmasi teks "Masuk ..." yang konsisten PLAIN TEXT (lihat catatan di
+// bangunTeksSuksesMasukKain_), beda dari alur foto nota yang emang HTML.
+async function ubahTeksPesanTelegramPolos_(env, chatId, messageId, teksBaru) {
+  try {
+    await fetch('https://api.telegram.org/bot' + env.TELEGRAM_BOT_TOKEN + '/editMessageText', {
+      method: 'post', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, message_id: messageId, text: teksBaru, reply_markup: { inline_keyboard: [] } })
+    });
+  } catch (e) { /* gak fatal */ }
+}
+
 async function jawabCallbackQueryTelegram_(env, callbackQueryId, teks, showAlert) {
   try {
     await fetch('https://api.telegram.org/bot' + env.TELEGRAM_BOT_TOKEN + '/answerCallbackQuery', {
@@ -3997,6 +4022,74 @@ async function handleCallbackQueryNota_(env, callbackQuery) {
   }
 }
 
+// HANDLER tombol konfirmasi/batal buat alur teks "Masuk ..." - v.84 (request Denny), pola sama
+// kayak handleCallbackQueryNota_ di atas tapi lebih simpel (item udah lengkap dari parsing teks,
+// gak ada harga/diskon/tglBeli override kayak nota foto).
+async function handleCallbackQueryKainTeks_(env, callbackQuery) {
+  const data = String(callbackQuery.data || '');
+  const chatId = callbackQuery.message.chat.id;
+  const messageId = callbackQuery.message.message_id;
+
+  const allowedUserId = env.ALLOWED_USER_ID;
+  const senderId = callbackQuery.from ? String(callbackQuery.from.id) : null;
+  if (allowedUserId && senderId !== String(allowedUserId)) {
+    await jawabCallbackQueryTelegram_(env, callbackQuery.id, 'Bukan user yang diizinkan.', true);
+    return jsonResponse({ ok: true, pesan: 'callback ditolak (bukan user diizinkan)' });
+  }
+
+  const idxTitik = data.indexOf(':');
+  const aksi = idxTitik === -1 ? data : data.substring(0, idxTitik);
+  const token = idxTitik === -1 ? '' : data.substring(idxTitik + 1);
+  const kvKey = 'kainMasukTeks_' + token;
+
+  if (aksi === 'batalKainTeks') {
+    await env.TIM_POTONG_KV.delete(kvKey);
+    await jawabCallbackQueryTelegram_(env, callbackQuery.id, 'Dibatalkan.');
+    await ubahTeksPesanTelegramPolos_(env, chatId, messageId, '❌ Dibatalkan - data stok tidak disimpan.');
+    return jsonResponse({ ok: true, pesan: 'kain masuk (teks) dibatalkan' });
+  }
+
+  let rawKv = null;
+  try {
+    rawKv = await env.TIM_POTONG_KV.get(kvKey);
+  } catch (e) {
+    rawKv = null;
+  }
+
+  if (!rawKv) {
+    await jawabCallbackQueryTelegram_(env, callbackQuery.id, 'Data sudah kadaluarsa (lewat 30 menit), kirim ulang pesannya.', true);
+    await ubahTeksPesanTelegramPolos_(env, chatId, messageId, '⚠️ Kadaluarsa - kirim ulang pesannya, data preview cuma disimpan 30 menit.');
+    return jsonResponse({ ok: true, pesan: 'kain masuk (teks) kadaluarsa' });
+  }
+
+  await jawabCallbackQueryTelegram_(env, callbackQuery.id, 'Menyimpan ke Stok Kain...');
+
+  try {
+    const items = JSON.parse(rawKv);
+    const berhasilItems = [];
+    const galat = [];
+    for (const pm of items) {
+      try {
+        await tambahStokKainMasukSupabase_(env, { warna: pm.warna, kg: pm.kg, kodeRoll: pm.kodeRoll, supplier: pm.supplier });
+        berhasilItems.push(pm);
+      } catch (e) {
+        galat.push(pm.warna + ' (' + pm.kg + 'kg): ' + e.message);
+      }
+    }
+    await env.TIM_POTONG_KV.delete(kvKey);
+    let teksHasil = berhasilItems.length > 0 ? bangunTeksSuksesMasukKain_(berhasilItems) : '';
+    if (galat.length > 0) {
+      teksHasil += (teksHasil ? '\n\n' : '') + '⚠️ ' + galat.length + ' baris gagal disimpan:\n' + galat.join('\n');
+    }
+    await ubahTeksPesanTelegramPolos_(env, chatId, messageId, teksHasil);
+    console.log('Kain masuk (teks) disimpan via Worker:', berhasilItems.length, 'berhasil,', galat.length, 'gagal.');
+    return jsonResponse({ ok: true, jumlahBerhasil: berhasilItems.length, jumlahGagal: galat.length });
+  } catch (err) {
+    await ubahTeksPesanTelegramPolos_(env, chatId, messageId, '⚠️ Gagal menyimpan: ' + err.message);
+    return jsonResponse({ ok: false, error: err.message });
+  }
+}
+
 async function handleTelegramWebhook_(request, env) {
   const rawBodyText = await request.text();
   let update;
@@ -4012,6 +4105,9 @@ async function handleTelegramWebhook_(request, env) {
     const dataCb = String(update.callback_query.data || '');
     if (dataCb.indexOf('simpanNota:') === 0 || dataCb.indexOf('batalNota:') === 0) {
       return await handleCallbackQueryNota_(env, update.callback_query);
+    }
+    if (dataCb.indexOf('simpanKainTeks:') === 0 || dataCb.indexOf('batalKainTeks:') === 0) {
+      return await handleCallbackQueryKainTeks_(env, update.callback_query);
     }
     return await proxyKeAppsScript_(rawBodyText, env);
   }
