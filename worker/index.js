@@ -1,9 +1,10 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.88
+// CODE WORKER PRODUKSI ver.89
 // ============================================================
-// PERUBAHAN ver.88 (request Denny): teks peringatan roll >30kg di preview input kain dipersingkat
-// - buang emoji 🚫, "/roll", dan penjelasan "tombol Simpan gak ditampilkan". Sekarang: "<warna>
-// (<kg> kg) di atas 30kg (biasanya 25-30kg) kemungkinan salah baca angka. Batalkan & cek ulang".
+// PERUBAHAN ver.89 (request Denny): teks peringatan roll >30kg sekarang bold + 3 tanda seru
+// (⚠️⚠️⚠️) sebelum teksnya, sesuai contoh Denny. Alur teks "Masuk ..." dipindah ke parse_mode
+// HTML (sebelumnya plain text) biar bold-nya kerender - semua teks user (warna, supplier)
+// sekarang di-escape lewat htmlEscape_ konsisten sama alur foto nota.
 //
 // Riwayat versi lengkap: git log.
 //
@@ -1628,12 +1629,15 @@ function bangunTeksSuksesMasukKain_(items) {
 // v.84 (request Denny): preview + tombol konfirmasi SEBELUM masuk ke Supabase, pola sama kayak
 // bangunTeksSuksesMasukKain_ di atas tapi buat tahap PREVIEW (belum tersimpan) - dipakai bareng
 // inline_keyboard "Simpan"/"Batal" di tanganiPesanMasuk_.
+// v.89 (request Denny): pindah ke HTML escaping (sebelumnya plain, lihat catatan lama di
+// bangunDaftarRollTeks_) - perlu buat nampilin bold di teksInfoRollDitolak_. Pemanggil
+// (tanganiPesanMasuk_) WAJIB kirim dengan parse_mode: 'HTML' sekarang.
 function bangunTeksPreviewKainTeks_(items) {
   const supplierUtama = items.find(function (it) { return it.supplier; });
   let teks = '📋 Konfirmasi Stok Kain Masuk';
-  if (supplierUtama) teks += ' - ' + supplierUtama.supplier;
-  teks += '\n\n' + bangunDaftarRollTeks_(items) + '\nTOTAL ' + items.length + ' ROL';
-  teks += teksInfoRollDitolak_(items);
+  if (supplierUtama) teks += ' - ' + htmlEscape_(supplierUtama.supplier);
+  teks += '\n\n' + bangunDaftarRollTeks_(items, htmlEscape_) + '\nTOTAL ' + items.length + ' ROL';
+  teks += teksInfoRollDitolak_(items, htmlEscape_);
   teks += '\n\nSudah benar?';
   return teks;
 }
@@ -1693,6 +1697,7 @@ async function tanganiPesanMasuk_(env, message) {
     // Simpan/Batal (sebelumnya admin-only, sama kayak nota foto).
     await env.TIM_POTONG_KV.put('kainMasukTeks_' + token, JSON.stringify({ items: semuaItemMasuk, pengirimId: senderId }), { expirationTtl: 1800 });
     await kirimPesanTelegramLengkap_(env, chatId, bangunTeksPreviewKainTeks_(semuaItemMasuk), {
+      parse_mode: 'HTML',
       reply_markup: {
         inline_keyboard: tombolKonfirmasiKain_(
           semuaItemMasuk, '✅ Simpan', 'simpanKainTeks:' + token, '❌ Batal', 'batalKainTeks:' + token
@@ -3854,17 +3859,18 @@ function tombolKonfirmasiKain_(items, simpanText, simpanCallback, batalText, bat
   return [[{ text: simpanText, callback_data: simpanCallback }, tombolBatal]];
 }
 
-// v.88 (request Denny): dipersingkat - buang emoji, "/roll", dan penjelasan tombol; format:
-// "<warna> (<kg> kg) di atas <ambang>kg (biasanya 25-30kg) kemungkinan salah baca angka.
-// Batalkan & cek ulang".
+// v.89 (request Denny): tambah bold di info roll + 3 tanda seru sebelum teks peringatan (contoh
+// dari Denny: "⚠️⚠️⚠️" lalu "<b>MERAH (2185 kg)</b> di atas..."). Fungsi ini dipakai bareng alur
+// teks "Masuk..." & foto nota - keduanya sekarang HARUS parse_mode HTML (lihat perubahan di
+// bangunTeksPreviewKainTeks_ & pemanggilnya di tanganiPesanMasuk_, sebelumnya plain text).
 function teksInfoRollDitolak_(items, escapeFn) {
   const esc = escapeFn || function (s) { return s; };
   const ditolak = items.filter(function (r) {
     return parseFloat(String(r.kg).replace(',', '.')) > AMBANG_SEMBUNYI_TOMBOL_SIMPAN;
   });
   if (ditolak.length === 0) return '';
-  const daftar = ditolak.map(function (r) { return esc(r.warna) + ' (' + r.kg + ' kg)'; }).join(', ');
-  return '\n' + daftar + ' di atas ' + AMBANG_SEMBUNYI_TOMBOL_SIMPAN + 'kg (biasanya 25-30kg) kemungkinan salah baca angka. Batalkan & cek ulang.\n';
+  const daftar = ditolak.map(function (r) { return '<b>' + esc(r.warna) + ' (' + r.kg + ' kg)</b>'; }).join(', ');
+  return '\n⚠️⚠️⚠️\n' + daftar + ' di atas ' + AMBANG_SEMBUNYI_TOMBOL_SIMPAN + 'kg (biasanya 25-30kg) kemungkinan salah baca angka. Batalkan & cek ulang.\n';
 }
 
 // v.69 (request Denny): daftar roll bernomor (tanpa header/total) - dipakai bareng alur teks
