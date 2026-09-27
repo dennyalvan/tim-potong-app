@@ -1,11 +1,9 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.87
+// CODE WORKER PRODUKSI ver.88
 // ============================================================
-// PERUBAHAN ver.87 (request Denny): tombol "Simpan" di preview input kain masuk (alur teks
-// "Masuk ..." & foto nota) DIHILANGKAN SAMA SEKALI (cuma "Batal" yang muncul) kalau ada roll
-// >30kg dalam batch - operator gak bisa nekat tap Simpan dari UI. Ambang ini beda & lebih ketat
-// dari ambang hard-block backend (35kg, ver.86) - 30kg nutup jalur UI lebih awal, 35kg tetap jadi
-// safety-net backend buat jalur lain (mis. endpoint internal legacy).
+// PERUBAHAN ver.88 (request Denny): teks peringatan roll >30kg di preview input kain dipersingkat
+// - buang emoji 🚫, "/roll", dan penjelasan "tombol Simpan gak ditampilkan". Sekarang: "<warna>
+// (<kg> kg) di atas 30kg (biasanya 25-30kg) kemungkinan salah baca angka. Batalkan & cek ulang".
 //
 // Riwayat versi lengkap: git log.
 //
@@ -3856,8 +3854,9 @@ function tombolKonfirmasiKain_(items, simpanText, simpanCallback, batalText, bat
   return [[{ text: simpanText, callback_data: simpanCallback }, tombolBatal]];
 }
 
-// v.87 (request Denny): dipindah ke ambang yang sama kayak tombol Simpan (30kg, bukan 35kg
-// backend) - biar teks di preview nyambung sama kenapa tombolnya ilang.
+// v.88 (request Denny): dipersingkat - buang emoji, "/roll", dan penjelasan tombol; format:
+// "<warna> (<kg> kg) di atas <ambang>kg (biasanya 25-30kg) kemungkinan salah baca angka.
+// Batalkan & cek ulang".
 function teksInfoRollDitolak_(items, escapeFn) {
   const esc = escapeFn || function (s) { return s; };
   const ditolak = items.filter(function (r) {
@@ -3865,7 +3864,7 @@ function teksInfoRollDitolak_(items, escapeFn) {
   });
   if (ditolak.length === 0) return '';
   const daftar = ditolak.map(function (r) { return esc(r.warna) + ' (' + r.kg + ' kg)'; }).join(', ');
-  return '\n🚫 ' + daftar + ' di atas ' + AMBANG_SEMBUNYI_TOMBOL_SIMPAN + 'kg/roll (roll biasanya ~25-30kg) - tombol Simpan gak ditampilkan, kemungkinan salah baca angka. Batalkan & cek ulang.\n';
+  return '\n' + daftar + ' di atas ' + AMBANG_SEMBUNYI_TOMBOL_SIMPAN + 'kg (biasanya 25-30kg) kemungkinan salah baca angka. Batalkan & cek ulang.\n';
 }
 
 // v.69 (request Denny): daftar roll bernomor (tanpa header/total) - dipakai bareng alur teks
