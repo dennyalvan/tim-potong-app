@@ -1,12 +1,10 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.85
+// CODE WORKER PRODUKSI ver.86
 // ============================================================
-// PERUBAHAN ver.85 (request Denny): 2 lanjutan dari ver.84 buat alur teks "Masuk ..." (stok kain).
-// (1) Izin tap tombol Simpan/Batal diubah dari admin-only jadi PENGIRIM LAPORAN ASLINYA sendiri -
-// id pengirim disimpan bareng item di KV, dicek pas callback (bukan ALLOWED_USER_ID lagi).
-// (2) Perbaikan akar masalah parsing: baris lanjutan yang TANPA tanda "/" dan isinya angka semua
-// (bukan nama warna, mis. "25.40 0177" - kelupaan "/") sekarang bikin blok GAGAL parsing dengan
-// jelas, bukan diam-diam ketuker dianggap nama warna baru (root cause bug 3 rol ketulis jadi 2).
+// PERUBAHAN ver.86 (request Denny): roll >35kg DIBLOKIR, gak bisa kesimpen ke Stok Kain (alur
+// teks "Masuk ..." & foto nota) - kepicu dari kasus roll 1653 yang kg awalnya salah baca
+// (2.470kg, harusnya 24,70kg, notasi desimal koma kebaca ribuan). Preview kasih tau baris mana
+// yang bakal ditolak SEBELUM tap Simpan; item lain dalam batch yang sama tetap kesimpen normal.
 //
 // Riwayat versi lengkap: git log.
 //
@@ -1327,6 +1325,14 @@ function normalisasiKodeRollTeks_(teks) {
 // tanganiPesanMasuk_() (dipanggil langsung dari Worker sendiri, tanpa HTTP round-trip).
 // ============================================================
 async function tambahStokKainMasukSupabase_(env, data) {
+  // v.86 (request Denny): BLOCKING - roll >35kg gak boleh kesimpen sama sekali (upgrade dari
+  // versi awal yang cuma warning). Taruh di sini karena SATU titik ini nutup SEMUA jalur insert
+  // stok_kain (teks "Masuk...", foto nota Claude Vision, endpoint internal legacy) sekaligus.
+  const kgNum = parseFloat(String(data.kg).replace(',', '.'));
+  if (kgNum > AMBANG_MAKS_KG_ROLL) {
+    throw new Error('Roll ' + data.kg + 'kg di atas ' + AMBANG_MAKS_KG_ROLL + 'kg/roll (roll biasanya ~25-30kg) - kemungkinan salah baca angka, TIDAK disimpan.');
+  }
+
   const payload = {
     tgl_beli: data.tglBeli || new Date().toISOString().slice(0, 10),
     supplier: data.supplier || null,
@@ -1627,7 +1633,9 @@ function bangunTeksPreviewKainTeks_(items) {
   const supplierUtama = items.find(function (it) { return it.supplier; });
   let teks = '📋 Konfirmasi Stok Kain Masuk';
   if (supplierUtama) teks += ' - ' + supplierUtama.supplier;
-  teks += '\n\n' + bangunDaftarRollTeks_(items) + '\nTOTAL ' + items.length + ' ROL' + '\n\nSudah benar?';
+  teks += '\n\n' + bangunDaftarRollTeks_(items) + '\nTOTAL ' + items.length + ' ROL';
+  teks += teksInfoRollDitolak_(items);
+  teks += '\n\nSudah benar?';
   return teks;
 }
 
@@ -3825,6 +3833,21 @@ function formatRupiah_(n) {
   return Number(n).toLocaleString('id-ID');
 }
 
+// v.86 (request Denny): info di teks preview kalau ada roll yang bakal DIBLOKIR (>35kg) pas tap
+// Simpan nanti - blocking sesungguhnya ada di tambahStokKainMasukSupabase_ (satu titik nutup
+// semua jalur insert), ini cuma kasih tau operator DULUAN sebelum tap tombol.
+const AMBANG_MAKS_KG_ROLL = 35;
+
+function teksInfoRollDitolak_(items, escapeFn) {
+  const esc = escapeFn || function (s) { return s; };
+  const ditolak = items.filter(function (r) {
+    return parseFloat(String(r.kg).replace(',', '.')) > AMBANG_MAKS_KG_ROLL;
+  });
+  if (ditolak.length === 0) return '';
+  const daftar = ditolak.map(function (r) { return esc(r.warna) + ' (' + r.kg + ' kg)'; }).join(', ');
+  return '\n🚫 ' + daftar + ' di atas ' + AMBANG_MAKS_KG_ROLL + 'kg/roll (roll biasanya ~25-30kg) - TIDAK akan disimpan kalau lanjut, kemungkinan salah baca angka.\n';
+}
+
 // v.69 (request Denny): daftar roll bernomor (tanpa header/total) - dipakai bareng alur teks
 // "Masuk ..." & alur foto nota buat pesan konfirmasi SUKSES (beda dari bangunTeksPreviewNota_ di
 // bawah yang buat PREVIEW sebelum tap "Simpan", masih nampilin harga/diskon). escapeFn: htmlEscape_
@@ -3850,6 +3873,7 @@ function bangunTeksPreviewNota_(hasil) {
     const hargaTeks = r.harga ? formatRupiah_(r.harga) + '/kg' : '(harga gak kebaca)';
     teks += '    ' + hargaTeks + (r.diskon ? ' - diskon ' + formatRupiah_(r.diskon) + '/kg' : '') + '\n';
   });
+  teks += teksInfoRollDitolak_(hasil.rows, htmlEscape_);
   teks += (jumlah > 1 ? '\n' : '') + '\nTOTAL ' + jumlah + ' ROL';
   return teks;
 }
@@ -4015,20 +4039,35 @@ async function handleCallbackQueryNota_(env, callbackQuery) {
 
   try {
     const hasil = JSON.parse(rawKv);
+    const berhasilItems = [];
+    const galat = [];
     for (const r of hasil.rows) {
-      await tambahStokKainMasukSupabase_(env, {
-        warna: r.warna, kg: r.kg, kodeRoll: r.kodeRoll, supplier: hasil.supplier,
-        tglBeli: hasil.tglBeliIso, harga: r.harga, diskon: r.diskon
-      });
+      try {
+        await tambahStokKainMasukSupabase_(env, {
+          warna: r.warna, kg: r.kg, kodeRoll: r.kodeRoll, supplier: hasil.supplier,
+          tglBeli: hasil.tglBeliIso, harga: r.harga, diskon: r.diskon
+        });
+        berhasilItems.push(r);
+      } catch (e) {
+        galat.push(r.warna + ' (' + r.kg + 'kg): ' + e.message);
+      }
     }
     await env.TIM_POTONG_KV.delete(kvKey);
     // v.69 (request Denny): sebelumnya cuma jumlah baris - sekarang detail per roll (warna, kg,
     // kode roll) senada sama preview sebelum tap "Simpan", tapi tanpa harga/diskon.
-    const teksSukses = '✅ <b>Tersimpan</b> - ' + htmlEscape_(hasil.supplier) + ' (' + htmlEscape_(hasil.tglBeli) + ')\n\n'
-      + bangunDaftarRollTeks_(hasil.rows, htmlEscape_) + '\nTOTAL ' + hasil.rows.length + ' ROL';
-    await ubahTeksPesanTelegram_(env, chatId, messageId, teksSukses);
-    console.log('Nota disimpan ke Stok Kain via Worker:', hasil.rows.length, 'baris, supplier', hasil.supplier);
-    return jsonResponse({ ok: true, jumlahBaris: hasil.rows.length });
+    // v.86 (request Denny): per-item try/catch (bukan satu try/catch buat seluruh loop) - biar
+    // roll yang DIBLOKIR (>35kg) gak bikin roll lain di batch yang sama ikut gagal kesimpen.
+    let teksHasil = '';
+    if (berhasilItems.length > 0) {
+      teksHasil = '✅ <b>Tersimpan</b> - ' + htmlEscape_(hasil.supplier) + ' (' + htmlEscape_(hasil.tglBeli) + ')\n\n'
+        + bangunDaftarRollTeks_(berhasilItems, htmlEscape_) + '\nTOTAL ' + berhasilItems.length + ' ROL';
+    }
+    if (galat.length > 0) {
+      teksHasil += (teksHasil ? '\n\n' : '') + '🚫 ' + galat.length + ' baris DITOLAK (tidak disimpan):\n' + htmlEscape_(galat.join('\n'));
+    }
+    await ubahTeksPesanTelegram_(env, chatId, messageId, teksHasil);
+    console.log('Nota disimpan ke Stok Kain via Worker:', berhasilItems.length, 'berhasil,', galat.length, 'ditolak. Supplier', hasil.supplier);
+    return jsonResponse({ ok: true, jumlahBerhasil: berhasilItems.length, jumlahGagal: galat.length });
   } catch (err) {
     await ubahTeksPesanTelegram_(env, chatId, messageId, '⚠️ <b>Gagal menyimpan</b>: ' + htmlEscape_(err.message));
     return jsonResponse({ ok: false, error: err.message });
