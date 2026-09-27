@@ -1,10 +1,11 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.86
+// CODE WORKER PRODUKSI ver.87
 // ============================================================
-// PERUBAHAN ver.86 (request Denny): roll >35kg DIBLOKIR, gak bisa kesimpen ke Stok Kain (alur
-// teks "Masuk ..." & foto nota) - kepicu dari kasus roll 1653 yang kg awalnya salah baca
-// (2.470kg, harusnya 24,70kg, notasi desimal koma kebaca ribuan). Preview kasih tau baris mana
-// yang bakal ditolak SEBELUM tap Simpan; item lain dalam batch yang sama tetap kesimpen normal.
+// PERUBAHAN ver.87 (request Denny): tombol "Simpan" di preview input kain masuk (alur teks
+// "Masuk ..." & foto nota) DIHILANGKAN SAMA SEKALI (cuma "Batal" yang muncul) kalau ada roll
+// >30kg dalam batch - operator gak bisa nekat tap Simpan dari UI. Ambang ini beda & lebih ketat
+// dari ambang hard-block backend (35kg, ver.86) - 30kg nutup jalur UI lebih awal, 35kg tetap jadi
+// safety-net backend buat jalur lain (mis. endpoint internal legacy).
 //
 // Riwayat versi lengkap: git log.
 //
@@ -1695,10 +1696,9 @@ async function tanganiPesanMasuk_(env, message) {
     await env.TIM_POTONG_KV.put('kainMasukTeks_' + token, JSON.stringify({ items: semuaItemMasuk, pengirimId: senderId }), { expirationTtl: 1800 });
     await kirimPesanTelegramLengkap_(env, chatId, bangunTeksPreviewKainTeks_(semuaItemMasuk), {
       reply_markup: {
-        inline_keyboard: [[
-          { text: '✅ Simpan', callback_data: 'simpanKainTeks:' + token },
-          { text: '❌ Batal', callback_data: 'batalKainTeks:' + token }
-        ]]
+        inline_keyboard: tombolKonfirmasiKain_(
+          semuaItemMasuk, '✅ Simpan', 'simpanKainTeks:' + token, '❌ Batal', 'batalKainTeks:' + token
+        )
       }
     });
   }
@@ -3838,14 +3838,34 @@ function formatRupiah_(n) {
 // semua jalur insert), ini cuma kasih tau operator DULUAN sebelum tap tombol.
 const AMBANG_MAKS_KG_ROLL = 35;
 
+// v.87 (request Denny): ambang TERPISAH dari AMBANG_MAKS_KG_ROLL di atas - lebih ketat (30kg vs
+// 35kg). Di atas ini, tombol "Simpan" gak ditampilkan sama sekali (cuma "Batal"), jadi operator
+// gak bisa nekat nyimpen dari preview walau belum nyampe ambang block backend. Kalau ada roll
+// 30-35kg: gak bisa disimpan lewat UI ini (tombolnya gak ada), TAPI belum kena hard-error backend
+// (itu baru kejadian kalau >35kg, mis. lewat endpoint internal legacy yang gak lewat preview ini).
+const AMBANG_SEMBUNYI_TOMBOL_SIMPAN = 30;
+
+// v.87 (request Denny): bangun inline_keyboard konfirmasi - tombol Simpan DIHILANGKAN (cuma
+// Batal yang tersisa) kalau ada roll di batch yang di atas AMBANG_SEMBUNYI_TOMBOL_SIMPAN.
+function tombolKonfirmasiKain_(items, simpanText, simpanCallback, batalText, batalCallback) {
+  const adaBerat = items.some(function (r) {
+    return parseFloat(String(r.kg).replace(',', '.')) > AMBANG_SEMBUNYI_TOMBOL_SIMPAN;
+  });
+  const tombolBatal = { text: batalText, callback_data: batalCallback };
+  if (adaBerat) return [[tombolBatal]];
+  return [[{ text: simpanText, callback_data: simpanCallback }, tombolBatal]];
+}
+
+// v.87 (request Denny): dipindah ke ambang yang sama kayak tombol Simpan (30kg, bukan 35kg
+// backend) - biar teks di preview nyambung sama kenapa tombolnya ilang.
 function teksInfoRollDitolak_(items, escapeFn) {
   const esc = escapeFn || function (s) { return s; };
   const ditolak = items.filter(function (r) {
-    return parseFloat(String(r.kg).replace(',', '.')) > AMBANG_MAKS_KG_ROLL;
+    return parseFloat(String(r.kg).replace(',', '.')) > AMBANG_SEMBUNYI_TOMBOL_SIMPAN;
   });
   if (ditolak.length === 0) return '';
   const daftar = ditolak.map(function (r) { return esc(r.warna) + ' (' + r.kg + ' kg)'; }).join(', ');
-  return '\n🚫 ' + daftar + ' di atas ' + AMBANG_MAKS_KG_ROLL + 'kg/roll (roll biasanya ~25-30kg) - TIDAK akan disimpan kalau lanjut, kemungkinan salah baca angka.\n';
+  return '\n🚫 ' + daftar + ' di atas ' + AMBANG_SEMBUNYI_TOMBOL_SIMPAN + 'kg/roll (roll biasanya ~25-30kg) - tombol Simpan gak ditampilkan, kemungkinan salah baca angka. Batalkan & cek ulang.\n';
 }
 
 // v.69 (request Denny): daftar roll bernomor (tanpa header/total) - dipakai bareng alur teks
@@ -3976,10 +3996,9 @@ async function handleFotoNota_(env, message) {
     await kirimPesanTelegramLengkap_(env, chatId, teksPreview, {
       parse_mode: 'HTML',
       reply_markup: {
-        inline_keyboard: [[
-          { text: '✅ Simpan stok', callback_data: 'simpanNota:' + token },
-          { text: '❌ Batal', callback_data: 'batalNota:' + token }
-        ]]
+        inline_keyboard: tombolKonfirmasiKain_(
+          hasil.rows, '✅ Simpan stok', 'simpanNota:' + token, '❌ Batal', 'batalNota:' + token
+        )
       }
     });
     await hapusPesanTelegram_(env, chatId, notifMsgId);
