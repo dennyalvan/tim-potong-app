@@ -1,10 +1,9 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.89
+// CODE WORKER PRODUKSI ver.90
 // ============================================================
-// PERUBAHAN ver.89 (request Denny): teks peringatan roll >30kg sekarang bold + 3 tanda seru
-// (⚠️⚠️⚠️) sebelum teksnya, sesuai contoh Denny. Alur teks "Masuk ..." dipindah ke parse_mode
-// HTML (sebelumnya plain text) biar bold-nya kerender - semua teks user (warna, supplier)
-// sekarang di-escape lewat htmlEscape_ konsisten sama alur foto nota.
+// PERUBAHAN ver.90 (fix bug QC dobel, 15/10/26): submit QC dobel bikin "Selesai" melebihi hasil
+// cutting. Penjaga utamanya di database (trigger guard_log_qc_insert + unique arsip_selesai);
+// worker cuma menerjemahkan penolakannya jadi pesan Indonesia yang jelas (HTTP 409).
 //
 // Riwayat versi lengkap: git log.
 //
@@ -2540,7 +2539,14 @@ async function handleSubmitQC_(body, env, ctx) {
       headers: { 'Content-Type': 'application/json', apikey: env.SUPABASE_SECRET_KEY, Authorization: 'Bearer ' + env.SUPABASE_SECRET_KEY, Prefer: 'return=minimal' },
       body: JSON.stringify([barisLogBaru])
     });
-    if (resLog.status >= 300) return jsonResponse({ ok: false, error: 'Gagal simpan log_qc: HTTP ' + resLog.status + ' ' + (await resLog.text()).substring(0, 300) }, 500);
+    if (resLog.status >= 300) {
+      const teksGagal = (await resLog.text()).substring(0, 300);
+      // v.90: penjaga anti-dobel di database (trigger guard_log_qc_insert) menolak submit identik
+      // / total QC melebihi jumlah dipotong - balas pesan jelas, bukan error teknis HTTP.
+      if (teksGagal.indexOf('QC_DUPLIKAT') >= 0) return jsonResponse({ ok: false, error: 'Submit ini sama persis dengan yang barusan tercatat - diabaikan biar tidak dobel. Cek tab Rekap QC.' }, 409);
+      if (teksGagal.indexOf('QC_MELEBIHI_JUMLAH') >= 0) return jsonResponse({ ok: false, error: 'Total QC akan melebihi jumlah yang dipotong - ditolak. Refresh halaman lalu cek sisa terbaru.' }, 409);
+      return jsonResponse({ ok: false, error: 'Gagal simpan log_qc: HTTP ' + resLog.status + ' ' + teksGagal }, 500);
+    }
 
     // Hitung ulang total & tentukan status baru
     const totalSelesaiBaru = perUkuran.reduce(function (s, u) { return s + u.selesai + (deltaSelesai[u.ukuran] || 0); }, 0);

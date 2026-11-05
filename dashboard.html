@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <!--
 ============================================================
-DASHBOARD ver.90
+DASHBOARD ver.91
 ============================================================
-PERUBAHAN ver.90 (request Denny): border/shadow dropdown (varian-filter-list) digelapin lagi
-0.5x dari ver.89 - biar batasnya makin jelas kelihatan.
+PERUBAHAN ver.91 (fix bug QC dobel, 15/10/26): tombol "Kirim Rekap" sekarang dikunci selama proses
+kirim berjalan (sebelumnya bisa aktif lagi di tengah proses lalu ke-tap 2x -> QC masuk dobel).
 Riwayat lengkap: git log.
 ============================================================
 
@@ -796,6 +796,7 @@ if (tg && tg.initData) {
 }
 
 let daftarLaporanData = [];
+let sedangKirimQC = false; // v.91: kunci kirim - cegah Kirim Rekap jalan 2x barengan
 let antrianQC = []; // [{timPotongId, mode, ringkas, rincian, preview}]
 let antrianPreviewTerbuka = false; // v.75: kotak preview di dock sekarang collapsed by default, tap caption utk expand
 let filterKategori = 'semua';
@@ -1549,8 +1550,8 @@ function renderAntrian() {
   document.body.classList.add('antrian-aktif');
   caption.textContent = antrianQC.length + ' laporan menunggu dikirim' + (antrianPreviewTerbuka ? ' ▾' : ' ▸');
 
-  btnKirim.textContent = '🚀 Kirim Rekap (' + antrianQC.length + ')';
-  btnKirim.disabled = false;
+  btnKirim.textContent = sedangKirimQC ? 'Mengirim...' : ('🚀 Kirim Rekap (' + antrianQC.length + ')');
+  btnKirim.disabled = sedangKirimQC;
 
   // v.75: preview cuma dirender/ditampilkan kalau lagi di-expand (tap caption) - dock-nya sendiri
   // (bar caption + tombol kirim) tetap selalu kelihatan nempel di bawah layar.
@@ -1581,7 +1582,8 @@ document.getElementById('antrianCaption').addEventListener('click', function () 
 
 document.getElementById('btnKirimRekap').addEventListener('click', function () {
   if (!tg || !tg.initData) { tampilkanToast('Harus dibuka lewat Telegram.'); return; }
-  if (antrianQC.length === 0) return;
+  if (antrianQC.length === 0 || sedangKirimQC) return;
+  sedangKirimQC = true;
   const btn = this;
   btn.disabled = true;
   btn.textContent = 'Mengirim...';
@@ -1591,6 +1593,7 @@ document.getElementById('btnKirimRekap').addEventListener('click', function () {
 
   function prosesSatuPersatu(i) {
     if (i >= antrianSalinan.length) {
+      sedangKirimQC = false;
       antrianQC = [];
       renderAntrian();
       muatDaftarLaporan();
