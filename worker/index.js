@@ -1,9 +1,10 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.90
+// CODE WORKER PRODUKSI ver.91
 // ============================================================
-// PERUBAHAN ver.90 (fix bug QC dobel, 15/10/26): submit QC dobel bikin "Selesai" melebihi hasil
-// cutting. Penjaga utamanya di database (trigger guard_log_qc_insert + unique arsip_selesai);
-// worker cuma menerjemahkan penolakannya jadi pesan Indonesia yang jelas (HTTP 409).
+// PERUBAHAN ver.91 (request Denny, 17/11/26): (1) nama warna di alur teks "Masuk ..." sekarang
+// diterjemahkan ke nama baku lewat kamus_sinonim_warna (STELBLU -> STEEL BLUE, NAVI -> NAVY);
+// (2) tiap stok masuk tersimpan (teks/foto nota), bot hapus balasan per-input + rangkuman lama,
+// lalu kirim 1 rangkuman stok masuk hari itu (dihitung dari database, WIB).
 //
 // Riwayat versi lengkap: git log.
 //
@@ -1681,6 +1682,18 @@ async function tanganiPesanMasuk_(env, message) {
       continue;
     }
     for (const pm of daftarMasuk) semuaItemMasuk.push(pm);
+  }
+
+  // v.91 (request Denny): terjemahkan nama warna ke nama baku (kamus_sinonim_warna) SEBELUM
+  // preview/simpan - sama seperti alur foto nota. Nama yang tidak ada di kamus dibiarkan apa adanya.
+  if (semuaItemMasuk.length > 0) {
+    try {
+      const petaKanonik = await ambilPetaWarnaKanonik_(env);
+      semuaItemMasuk.forEach(function (it) {
+        const k = petaKanonik[String(it.warna || '').toUpperCase()];
+        if (k) it.warna = k;
+      });
+    } catch (e) { /* kamus gagal dibaca: lanjut pakai nama apa adanya */ }
   }
 
   console.log('Kain masuk diparsing via Worker (menunggu konfirmasi):', semuaItemMasuk.length, 'baris,', galat.length, 'blok gagal. Chat:', chatId);
@@ -3963,6 +3976,56 @@ async function jawabCallbackQueryTelegram_(env, callbackQueryId, teks, showAlert
   } catch (e) { /* gak fatal */ }
 }
 
+// v.91 (request Denny): 1 rangkuman stok kain masuk per hari per chat. Dihitung dari tabel
+// stok_kain (semua yang DICATAT hari ini WIB, dari teks "Masuk" maupun foto nota), jadi tetap
+// akurat walau pesan lain dihapus. Rangkuman lama dihapus setelah yang baru terkirim; id pesannya
+// disimpan di KV per chat+tanggal (Telegram cuma bisa hapus pesan <48 jam).
+async function kirimRangkumanStokMasukHarian_(env, chatId) {
+  try {
+    const sekarangWib = new Date(Date.now() + 7 * 60 * 60 * 1000);
+    const tgl = sekarangWib.toISOString().slice(0, 10);
+    const awalHari = tgl + 'T00:00:00+07:00';
+    const rows = await ambilDariSupabase_(env, '/rest/v1/stok_kain?select=id,supplier,warna,kg,kode_roll&created_at=gte.' + encodeURIComponent(awalHari) + '&order=id.asc');
+    if (!rows || rows.length === 0) return;
+
+    const namaHari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+    const [yy, mm, dd] = tgl.split('-');
+    let teks = '📦 STOK KAIN MASUK - ' + namaHari[sekarangWib.getUTCDay()] + ', ' + dd + '/' + mm + '/' + yy.slice(2) + '\n';
+
+    const urutSupplier = [];
+    const perSupplier = {};
+    rows.forEach(function (r) {
+      const sup = r.supplier || '(tanpa supplier)';
+      if (!perSupplier[sup]) { perSupplier[sup] = []; urutSupplier.push(sup); }
+      perSupplier[sup].push(r);
+    });
+
+    let totalKg = 0;
+    urutSupplier.forEach(function (sup) {
+      const daftar = perSupplier[sup];
+      teks += '\n' + sup + ' - ' + daftar.length + ' ROL\n';
+      daftar.forEach(function (r, i) {
+        const kg = parseFloat(r.kg) || 0;
+        totalKg += kg;
+        teks += (i + 1) + '. ' + r.warna + ' (' + kg + ' / ' + (r.kode_roll || '-') + ')\n';
+      });
+    });
+    teks += '\nTOTAL ' + rows.length + ' ROL - ' + (Math.round(totalKg * 100) / 100) + ' kg';
+
+    const kvKey = 'rangkumanMasuk_' + chatId + '_' + tgl;
+    let idLama = null;
+    try { idLama = await env.TIM_POTONG_KV.get(kvKey); } catch (e) { idLama = null; }
+
+    const idBaru = await kirimPesanTelegramLengkap_(env, chatId, teks);
+    if (idBaru) {
+      try { await env.TIM_POTONG_KV.put(kvKey, String(idBaru), { expirationTtl: 172800 }); } catch (e) { /* gak fatal */ }
+      if (idLama) await hapusPesanTelegram_(env, chatId, parseInt(idLama, 10));
+    }
+  } catch (e) {
+    console.log('Rangkuman stok masuk gagal:', e.message);
+  }
+}
+
 // HANDLER UTAMA foto nota - dipanggil dari handleTelegramWebhook_ kalau ada foto dengan caption
 // mengandung kata "nota" (gak peduli besar/kecil huruf).
 async function handleFotoNota_(env, message) {
@@ -4095,7 +4158,10 @@ async function handleCallbackQueryNota_(env, callbackQuery) {
     if (galat.length > 0) {
       teksHasil += (teksHasil ? '\n\n' : '') + '🚫 ' + galat.length + ' baris DITOLAK (tidak disimpan):\n' + htmlEscape_(galat.join('\n'));
     }
-    await ubahTeksPesanTelegram_(env, chatId, messageId, teksHasil);
+    // v.91: sama seperti alur teks - sukses penuh = balasan dihapus, diganti rangkuman harian.
+    if (galat.length === 0) await hapusPesanTelegram_(env, chatId, messageId);
+    else await ubahTeksPesanTelegram_(env, chatId, messageId, teksHasil);
+    if (berhasilItems.length > 0) await kirimRangkumanStokMasukHarian_(env, chatId);
     console.log('Nota disimpan ke Stok Kain via Worker:', berhasilItems.length, 'berhasil,', galat.length, 'ditolak. Supplier', hasil.supplier);
     return jsonResponse({ ok: true, jumlahBerhasil: berhasilItems.length, jumlahGagal: galat.length });
   } catch (err) {
@@ -4167,7 +4233,11 @@ async function handleCallbackQueryKainTeks_(env, callbackQuery) {
     if (galat.length > 0) {
       teksHasil += (teksHasil ? '\n\n' : '') + '⚠️ ' + galat.length + ' baris gagal disimpan:\n' + galat.join('\n');
     }
-    await ubahTeksPesanTelegramPolos_(env, chatId, messageId, teksHasil);
+    // v.91: kalau semua sukses, balasan per-input dihapus (diganti rangkuman harian); kalau ada
+    // baris ditolak, pesan tetap ada supaya error-nya kebaca.
+    if (galat.length === 0) await hapusPesanTelegram_(env, chatId, messageId);
+    else await ubahTeksPesanTelegramPolos_(env, chatId, messageId, teksHasil);
+    if (berhasilItems.length > 0) await kirimRangkumanStokMasukHarian_(env, chatId);
     console.log('Kain masuk (teks) disimpan via Worker:', berhasilItems.length, 'berhasil,', galat.length, 'gagal.');
     return jsonResponse({ ok: true, jumlahBerhasil: berhasilItems.length, jumlahGagal: galat.length });
   } catch (err) {
