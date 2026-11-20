@@ -1,10 +1,10 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.91
+// CODE WORKER PRODUKSI ver.92
 // ============================================================
-// PERUBAHAN ver.91 (request Denny, 17/11/26): (1) nama warna di alur teks "Masuk ..." sekarang
-// diterjemahkan ke nama baku lewat kamus_sinonim_warna (STELBLU -> STEEL BLUE, NAVI -> NAVY);
-// (2) tiap stok masuk tersimpan (teks/foto nota), bot hapus balasan per-input + rangkuman lama,
-// lalu kirim 1 rangkuman stok masuk hari itu (dihitung dari database, WIB).
+// PERUBAHAN ver.92 (request Denny, 20/11/26): (1) FIX akar masalah rangkuman stok masuk harian tidak
+// pernah muncul: filter memakai kolom created_at yang tidak ada di stok_kain (HTTP 400), sekarang
+// memakai created_at_wib; (2) balasan per-input hanya dihapus kalau rangkuman benar-benar terkirim;
+// (3) cegah dobel: roll dengan supplier+warna+kode roll+kg sama persis dilewati dan dilaporkan.
 //
 // Riwayat versi lengkap: git log.
 //
@@ -1341,6 +1341,17 @@ async function tambahStokKainMasukSupabase_(env, data) {
     kode_roll: normalisasiKodeRollTeks_(data.kodeRoll),
     kg_terpakai: 0
   };
+
+  // v.92: cegah dobel - roll dengan supplier, warna, kode roll, dan kg yang sama persis sudah ada
+  // = input ganda (mis. foto nota dikirim ulang). Dilewati dan dilaporkan, bukan disimpan lagi.
+  // Roll tanpa kode roll tidak dicek (tidak ada tanda pengenal).
+  if (payload.kode_roll) {
+    let q = '/rest/v1/stok_kain?select=id&limit=1&kode_roll=eq.' + encodeURIComponent(payload.kode_roll)
+      + '&warna=eq.' + encodeURIComponent(payload.warna) + '&kg=eq.' + kgNum;
+    if (payload.supplier) q += '&supplier=eq.' + encodeURIComponent(payload.supplier);
+    const ada = await ambilDariSupabase_(env, q);
+    if (ada.length > 0) throw new Error('sudah ada di stok (supplier, warna, kode roll, kg sama) - dilewati');
+  }
   if (data.harga !== undefined && data.harga !== null && data.harga !== '') payload.harga_rp_kg = data.harga;
   if (data.diskon) payload.diskon_rp_kg = data.diskon;
 
@@ -3984,12 +3995,14 @@ async function kirimRangkumanStokMasukHarian_(env, chatId) {
   try {
     const sekarangWib = new Date(Date.now() + 7 * 60 * 60 * 1000);
     const tgl = sekarangWib.toISOString().slice(0, 10);
-    const awalHari = tgl + 'T00:00:00+07:00';
-    const rows = await ambilDariSupabase_(env, '/rest/v1/stok_kain?select=id,supplier,warna,kg,kode_roll&created_at=gte.' + encodeURIComponent(awalHari) + '&order=id.asc');
-    if (!rows || rows.length === 0) return;
+    const [yy, mm, dd] = tgl.split('-');
+    // v.92: stok_kain tidak punya kolom created_at (cuma created_at_wib bertipe teks, mis.
+    // "Jumat, 20/11/26 16:16:44") - filter hari ini lewat pola tanggalnya. Sebelumnya filter
+    // created_at bikin HTTP 400, rangkuman tidak pernah terkirim padahal balasan per-input sudah dihapus.
+    const rows = await ambilDariSupabase_(env, '/rest/v1/stok_kain?select=id,supplier,warna,kg,kode_roll&created_at_wib=like.' + encodeURIComponent('*, ' + dd + '/' + mm + '/' + yy.slice(2) + ' *') + '&order=id.asc');
+    if (!rows || rows.length === 0) return false;
 
     const namaHari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-    const [yy, mm, dd] = tgl.split('-');
     let teks = '📦 STOK KAIN MASUK - ' + namaHari[sekarangWib.getUTCDay()] + ', ' + dd + '/' + mm + '/' + yy.slice(2) + '\n';
 
     const urutSupplier = [];
@@ -4021,8 +4034,10 @@ async function kirimRangkumanStokMasukHarian_(env, chatId) {
       try { await env.TIM_POTONG_KV.put(kvKey, String(idBaru), { expirationTtl: 172800 }); } catch (e) { /* gak fatal */ }
       if (idLama) await hapusPesanTelegram_(env, chatId, parseInt(idLama, 10));
     }
+    return !!idBaru;
   } catch (e) {
     console.log('Rangkuman stok masuk gagal:', e.message);
+    return false;
   }
 }
 
@@ -4159,9 +4174,11 @@ async function handleCallbackQueryNota_(env, callbackQuery) {
       teksHasil += (teksHasil ? '\n\n' : '') + '🚫 ' + galat.length + ' baris DITOLAK (tidak disimpan):\n' + htmlEscape_(galat.join('\n'));
     }
     // v.91: sama seperti alur teks - sukses penuh = balasan dihapus, diganti rangkuman harian.
-    if (galat.length === 0) await hapusPesanTelegram_(env, chatId, messageId);
+    // v.92: balasan per-input hanya dihapus kalau rangkuman harian BENAR-BENAR terkirim; kalau
+    // gagal, balasan tetap tampil supaya user tidak mengira input gagal.
+    const rangkumanOk = berhasilItems.length > 0 ? await kirimRangkumanStokMasukHarian_(env, chatId) : false;
+    if (galat.length === 0 && rangkumanOk) await hapusPesanTelegram_(env, chatId, messageId);
     else await ubahTeksPesanTelegram_(env, chatId, messageId, teksHasil);
-    if (berhasilItems.length > 0) await kirimRangkumanStokMasukHarian_(env, chatId);
     console.log('Nota disimpan ke Stok Kain via Worker:', berhasilItems.length, 'berhasil,', galat.length, 'ditolak. Supplier', hasil.supplier);
     return jsonResponse({ ok: true, jumlahBerhasil: berhasilItems.length, jumlahGagal: galat.length });
   } catch (err) {
@@ -4235,9 +4252,9 @@ async function handleCallbackQueryKainTeks_(env, callbackQuery) {
     }
     // v.91: kalau semua sukses, balasan per-input dihapus (diganti rangkuman harian); kalau ada
     // baris ditolak, pesan tetap ada supaya error-nya kebaca.
-    if (galat.length === 0) await hapusPesanTelegram_(env, chatId, messageId);
+    const rangkumanOk = berhasilItems.length > 0 ? await kirimRangkumanStokMasukHarian_(env, chatId) : false;
+    if (galat.length === 0 && rangkumanOk) await hapusPesanTelegram_(env, chatId, messageId);
     else await ubahTeksPesanTelegramPolos_(env, chatId, messageId, teksHasil);
-    if (berhasilItems.length > 0) await kirimRangkumanStokMasukHarian_(env, chatId);
     console.log('Kain masuk (teks) disimpan via Worker:', berhasilItems.length, 'berhasil,', galat.length, 'gagal.');
     return jsonResponse({ ok: true, jumlahBerhasil: berhasilItems.length, jumlahGagal: galat.length });
   } catch (err) {
