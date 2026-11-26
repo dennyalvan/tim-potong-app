@@ -1,7 +1,8 @@
 // ============================================================
-// CODE WORKER PRODUKSI ver.92
+// CODE WORKER PRODUKSI ver.93
 // ============================================================
-// PERUBAHAN ver.92 (request Denny, 20/11/26): (1) FIX akar masalah rangkuman stok masuk harian tidak
+// PERUBAHAN ver.93 (request Denny, 20/11/26): rangkuman stok masuk pakai bold + underline.
+// Sebelumnya ver.92: (1) FIX akar masalah rangkuman stok masuk harian tidak
 // pernah muncul: filter memakai kolom created_at yang tidak ada di stok_kain (HTTP 400), sekarang
 // memakai created_at_wib; (2) balasan per-input hanya dihapus kalau rangkuman benar-benar terkirim;
 // (3) cegah dobel: roll dengan supplier+warna+kode roll+kg sama persis dilewati dan dilaporkan.
@@ -4003,7 +4004,7 @@ async function kirimRangkumanStokMasukHarian_(env, chatId) {
     if (!rows || rows.length === 0) return false;
 
     const namaHari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-    let teks = '📦 STOK KAIN MASUK - ' + namaHari[sekarangWib.getUTCDay()] + ', ' + dd + '/' + mm + '/' + yy.slice(2) + '\n';
+    let teks = '📦 <b>STOK KAIN MASUK - ' + namaHari[sekarangWib.getUTCDay()] + ', ' + dd + '/' + mm + '/' + yy.slice(2) + '</b>\n';
 
     const urutSupplier = [];
     const perSupplier = {};
@@ -4016,20 +4017,20 @@ async function kirimRangkumanStokMasukHarian_(env, chatId) {
     let totalKg = 0;
     urutSupplier.forEach(function (sup) {
       const daftar = perSupplier[sup];
-      teks += '\n' + sup + ' - ' + daftar.length + ' ROL\n';
+      teks += '\n<b><u>' + htmlEscape_(sup) + ' - ' + daftar.length + ' ROL</u></b>\n';
       daftar.forEach(function (r, i) {
         const kg = parseFloat(r.kg) || 0;
         totalKg += kg;
-        teks += (i + 1) + '. ' + r.warna + ' (' + kg + ' / ' + (r.kode_roll || '-') + ')\n';
+        teks += (i + 1) + '. ' + htmlEscape_(r.warna) + ' (' + kg + ' / ' + htmlEscape_(r.kode_roll || '-') + ')\n';
       });
     });
-    teks += '\nTOTAL ' + rows.length + ' ROL - ' + (Math.round(totalKg * 100) / 100) + ' kg';
+    teks += '\n<b>TOTAL ' + rows.length + ' ROL - ' + (Math.round(totalKg * 100) / 100) + ' kg</b>';
 
     const kvKey = 'rangkumanMasuk_' + chatId + '_' + tgl;
     let idLama = null;
     try { idLama = await env.TIM_POTONG_KV.get(kvKey); } catch (e) { idLama = null; }
 
-    const idBaru = await kirimPesanTelegramLengkap_(env, chatId, teks);
+    const idBaru = await kirimPesanTelegramLengkap_(env, chatId, teks, { parse_mode: 'HTML' });
     if (idBaru) {
       try { await env.TIM_POTONG_KV.put(kvKey, String(idBaru), { expirationTtl: 172800 }); } catch (e) { /* gak fatal */ }
       if (idLama) await hapusPesanTelegram_(env, chatId, parseInt(idLama, 10));
